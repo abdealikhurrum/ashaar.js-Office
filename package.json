@@ -1,0 +1,10 @@
+{
+  "name": "ashaar-office",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Microsoft Word task pane add-in for entering and justifying poetry with Ashaar.js.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node tests/word-html.test.js"
+  }
+}
