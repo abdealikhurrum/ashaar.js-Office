@@ -8,6 +8,8 @@
     "stop": "office-addin-debugging stop manifest.xml desktop",
     "dev-server": "node server.mjs",
     "serve": "node server.mjs",
+    "sync:ashaar": "node scripts/sync-ashaar-vendor.mjs",
+    "update:ashaar": "node scripts/update-ashaar-vendor.mjs",
     "certs": "office-addin-dev-certs install --days 365",
     "certs:verify": "office-addin-dev-certs verify",
     "test": "node tests/word-html.test.js"

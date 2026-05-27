@@ -1,0 +1,7 @@
+repo=https://github.com/abdealikhurrum/ashaar-js.git
+branch=master
+commit=5a8fde0f1bb53dfe95ba5eed42ae08c41b6cff2a
+date=2026-05-25T20:07:19-05:00
+package=ashaar-js
+version=0.1.0
+subject=added a bunch of tests and features
