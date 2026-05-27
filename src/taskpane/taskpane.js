@@ -29,7 +29,7 @@
       bandhCount: Number(bandhCount.value || 1),
       misraCount: Number(misraCount.value || 4),
       misraPattern: layoutPreset.value,
-      layoutSpec: layoutSpec.value,
+      layoutSpec: (!tablePanel.hidden) ? layoutSpec.value : "",
       fontMode: fontMode.value,
       tatweelCount: Number(tatweelCount.value || 0),
       gapWidth: Number(gapWidth.value || 4)
