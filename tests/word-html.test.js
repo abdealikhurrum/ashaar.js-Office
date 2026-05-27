@@ -183,7 +183,40 @@ assert.deepEqual(marsiyaTables[0].rows.map((row) => row.map((cell) => cell.text)
 ]);
 assert.deepEqual(marsiyaTables[0].rows[0].map((cell) => cell.align), ["right", "center", "left"]);
 
-// Test: 3-misra rows (marsiya-style) are auto-detected in renderForWord
+// Test: multi-misra rows are auto-detected in renderForWord with dynamic column count
+
+function multiMisraTest(lineCount, misraCount) {
+  var line = [];
+  for (var i = 0; i < misraCount; i++) line.push("م" + (i + 1));
+  var source = line.join(" \\ ");
+  // Stanza: one multi-misra line + one solo refrain
+  var fullSource = source + "\nنعرہ \\";
+
+  var html = AshaarWord.renderForWord(fullSource, { justifyMode: "none", layoutMode: "balanced" }, Ashaar);
+
+  // All misras must appear
+  for (var j = 0; j < misraCount; j++) {
+    assert.match(html, new RegExp("م" + (j + 1)), "misra " + (j + 1) + " missing for " + misraCount + "-misra line");
+  }
+
+  // Colgroup has exactly misraCount columns
+  var cols = (html.match(/<col style=/g) || []).length;
+  assert.equal(cols, misraCount, "Expected " + misraCount + " columns for " + misraCount + "-misra stanza");
+
+  // Multi-misra row has exactly misraCount cells
+  var rowCells = html.match(/<tr>(<td[^>]*>[\s\S]*?<\/td>){1,}<\/tr>/g) || [];
+  var firstRowCellCount = (rowCells[0].match(/<td/g) || []).length;
+  assert.equal(firstRowCellCount, misraCount, "Expected " + misraCount + " cells in full row");
+
+  // Solo misra row uses colspan=misraCount
+  assert.match(html, new RegExp('colspan="' + misraCount + '"'), "Solo row should span all " + misraCount + " columns");
+}
+
+multiMisraTest(1, 3);
+multiMisraTest(1, 4);
+multiMisraTest(1, 5);
+
+// Marsiya stanza with 3-misra lines + solo + maqta pair
 const marsiyaSource = [
   "شاه كے اصحاب تھے \\ خلق ميں الباب تھے \\ صدق كے ارباب تھے \\",
   "هو گئے شہ پر فدا \\",
@@ -195,26 +228,11 @@ const marsiyaWordHtml = AshaarWord.renderForWord(marsiyaSource, {
   layoutMode: "balanced"
 }, Ashaar);
 
-// All three misras of the triple row must appear
 assert.match(marsiyaWordHtml, /شاه كے اصحاب تھے/);
 assert.match(marsiyaWordHtml, /خلق ميں الباب تھے/);
 assert.match(marsiyaWordHtml, /صدق كے ارباب تھے/);
-
-// Table uses four-column mode (colgroup has 4 <col style=...> elements)
-const colMatches = marsiyaWordHtml.match(/<col style=/g) || [];
-assert.equal(colMatches.length, 4, "Expected 4 colgroup columns for four-col mode");
-
-// Triple row: spacer(padding:0) + 3 content cells
-// In four-col LTR order: spacer | misras[2] | misras[1] | misras[0]
-// misras[0] (first/rightmost) gets text-align:left, misras[2] (third/leftmost) gets text-align:right
-const tripleRowMatch = marsiyaWordHtml.match(/<tr>(<td[^>]*>.*?<\/td>){4}<\/tr>/);
-assert.ok(tripleRowMatch, "Triple row should have exactly 4 cells");
-assert.match(marsiyaWordHtml, /<td style="padding:0"><\/td>/);
-
-// maqta (2-misra bayt) in four-col mode: also spacer + 3 cells
 assert.match(marsiyaWordHtml, /هائے كربلاء والو/);
-
-// Solo misra in four-col mode: colspan=4
-assert.match(marsiyaWordHtml, /colspan="4"/);
+assert.equal((marsiyaWordHtml.match(/<col style=/g) || []).length, 3);
+assert.match(marsiyaWordHtml, /colspan="3"/);
 
 console.log("word-html tests passed");
