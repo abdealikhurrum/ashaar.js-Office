@@ -10,6 +10,7 @@ A Microsoft Word task pane add-in for entering Arabic, Urdu, and Persian poetry 
 - Table layout presets: balanced, equal, compact, and stacked.
 - Ashaar content controls around inserted poem blocks, tagged with layout settings and a source hash.
 - A table-first workflow that draws blank Ashaar grids from ordered misras, so users can type into Word and then justify the finished table.
+- A separate Ashaar.js conversion workflow for pasting marked-up poetry and inserting a converted Word table.
 - Font mode defaults to the document font; Nastaliq is available as an explicit option, not the default.
 - Selection tools for replacing selected text with a formatted poetry block or applying plain-text kashida justification.
 

@@ -17,31 +17,12 @@
         </div>
       </header>
 
-      <section class="editor">
-        <label for="poem-input">Poetry text</label>
-        <textarea id="poem-input" spellcheck="false" dir="rtl">دل ناداں تجھے ہوا کیا ہے \ آخر اس درد کی دوا کیا ہے</textarea>
-      </section>
+      <div class="mode-switch" role="tablist" aria-label="Workflow">
+        <button id="mode-table" class="mode-button is-active" type="button" role="tab" aria-selected="true" aria-controls="table-mode-panel">Table Input</button>
+        <button id="mode-convert" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="convert-mode-panel">Ashaar.js Convert</button>
+      </div>
 
-      <section class="controls" aria-label="Formatting controls">
-        <div class="field">
-          <label for="bandh-count">Bandhs</label>
-          <input id="bandh-count" type="number" min="1" max="20" value="1">
-        </div>
-        <div class="field">
-          <label for="misra-count">Misras per bandh</label>
-          <input id="misra-count" type="number" min="1" max="80" value="4">
-        </div>
-        <div class="field">
-          <label for="misra-pattern">Misra grid</label>
-          <select id="misra-pattern">
-            <option value="paired" selected>Paired side-by-side</option>
-            <option value="centered-stack">Stacked centered</option>
-            <option value="alternate-right">Stacked alternate right</option>
-            <option value="alternate-left">Stacked alternate left</option>
-            <option value="indented-stack">Stacked indented</option>
-            <option value="four-plus-centered">4 paired + centered</option>
-          </select>
-        </div>
+      <section class="controls shared-controls" aria-label="Shared formatting controls">
         <div class="field">
           <label for="font-mode">Font</label>
           <select id="font-mode">
@@ -60,7 +41,63 @@
           </select>
         </div>
         <div class="field">
-          <label for="layout-mode">Layout</label>
+          <label for="tatweel-count">Kashida strength <span id="tatweel-value">6</span></label>
+          <input id="tatweel-count" type="range" min="0" max="24" value="6">
+        </div>
+        <div class="field">
+          <label for="gap-width">Middle gap</label>
+          <input id="gap-width" type="number" min="0" max="20" value="4">
+        </div>
+      </section>
+
+      <section id="table-mode-panel" class="mode-panel is-active" role="tabpanel" aria-labelledby="mode-table">
+        <div class="section-title">
+          <h2>Table Input Mode</h2>
+          <p>Draw an editable Word table first, then type poetry directly into the cells.</p>
+        </div>
+
+        <section class="controls" aria-label="Table input controls">
+        <div class="field">
+          <label for="bandh-count">Bandhs</label>
+          <input id="bandh-count" type="number" min="1" max="20" value="1">
+        </div>
+        <div class="field">
+          <label for="misra-count">Misras per bandh</label>
+          <input id="misra-count" type="number" min="1" max="80" value="4">
+        </div>
+        <div class="field">
+          <label for="misra-pattern">Misra grid</label>
+          <select id="misra-pattern">
+            <option value="paired" selected>Paired side-by-side</option>
+            <option value="centered-stack">Stacked centered</option>
+            <option value="alternate-right">Stacked alternate right</option>
+            <option value="alternate-left">Stacked alternate left</option>
+            <option value="indented-stack">Stacked indented</option>
+            <option value="four-plus-centered">4 paired + centered</option>
+            <option value="three-plus-center-refrain">3 up + center + refrain</option>
+          </select>
+        </div>
+        </section>
+
+        <section class="actions single-action" aria-label="Table input actions">
+          <button id="insert-structure" type="button">Draw Table</button>
+        </section>
+      </section>
+
+      <section id="convert-mode-panel" class="mode-panel" role="tabpanel" aria-labelledby="mode-convert" hidden>
+        <div class="section-title">
+          <h2>Ashaar.js Conversion Mode</h2>
+          <p>Paste Ashaar.js source text and convert it into a Word table block.</p>
+        </div>
+
+        <section class="editor">
+          <label for="poem-input">Ashaar.js poetry text</label>
+          <textarea id="poem-input" spellcheck="false" dir="rtl">دل ناداں تجھے ہوا کیا ہے \ آخر اس درد کی دوا کیا ہے</textarea>
+        </section>
+
+        <section class="controls" aria-label="Conversion controls">
+          <div class="field">
+          <label for="layout-mode">Conversion layout</label>
           <select id="layout-mode">
             <option value="balanced" selected>Balanced table</option>
             <option value="equal">Equal table</option>
@@ -76,29 +113,24 @@
             <option value="fixed">Fixed</option>
           </select>
         </div>
-        <div class="field">
-          <label for="tatweel-count">Kashida strength <span id="tatweel-value">6</span></label>
-          <input id="tatweel-count" type="range" min="0" max="24" value="6">
-        </div>
-        <div class="field">
-          <label for="gap-width">Hemistich gap</label>
-          <input id="gap-width" type="number" min="0" max="20" value="4">
-        </div>
-      </section>
+        </section>
 
-      <section class="actions" aria-label="Document actions">
-        <button id="insert-structure" type="button">Draw Table</button>
-        <button id="insert-poem" type="button">Insert Block</button>
-        <button id="replace-selection" type="button">Replace Selection</button>
-        <button id="justify-selection" type="button">Justify Selection</button>
-      </section>
-
-      <section class="preview-shell">
-        <div class="preview-header">
-          <h2>Preview</h2>
+        <section class="actions" aria-label="Conversion actions">
+          <button id="insert-poem" type="button">Insert Converted Block</button>
+          <button id="replace-selection" type="button">Replace Selection</button>
           <button id="load-selection" type="button">Load Selection</button>
-        </div>
-        <div id="preview" class="ashaar preview" data-ashaar></div>
+        </section>
+
+        <section class="preview-shell">
+          <div class="preview-header">
+            <h2>Conversion Preview</h2>
+          </div>
+          <div id="preview" class="ashaar preview" data-ashaar></div>
+        </section>
+      </section>
+
+      <section class="actions single-action" aria-label="Justification actions">
+        <button id="justify-selection" type="button">Justify Selected Text</button>
       </section>
 
       <div id="message" role="status" aria-live="polite"></div>
