@@ -183,4 +183,38 @@ assert.deepEqual(marsiyaTables[0].rows.map((row) => row.map((cell) => cell.text)
 ]);
 assert.deepEqual(marsiyaTables[0].rows[0].map((cell) => cell.align), ["right", "center", "left"]);
 
+// Test: 3-misra rows (marsiya-style) are auto-detected in renderForWord
+const marsiyaSource = [
+  "شاه كے اصحاب تھے \\ خلق ميں الباب تھے \\ صدق كے ارباب تھے \\",
+  "هو گئے شہ پر فدا \\",
+  "هائے كربلاء والو \\ هائے كربلاء والو"
+].join("\n");
+
+const marsiyaWordHtml = AshaarWord.renderForWord(marsiyaSource, {
+  justifyMode: "none",
+  layoutMode: "balanced"
+}, Ashaar);
+
+// All three misras of the triple row must appear
+assert.match(marsiyaWordHtml, /شاه كے اصحاب تھے/);
+assert.match(marsiyaWordHtml, /خلق ميں الباب تھے/);
+assert.match(marsiyaWordHtml, /صدق كے ارباب تھے/);
+
+// Table uses four-column mode (colgroup has 4 <col style=...> elements)
+const colMatches = marsiyaWordHtml.match(/<col style=/g) || [];
+assert.equal(colMatches.length, 4, "Expected 4 colgroup columns for four-col mode");
+
+// Triple row: spacer(padding:0) + 3 content cells
+// In four-col LTR order: spacer | misras[2] | misras[1] | misras[0]
+// misras[0] (first/rightmost) gets text-align:left, misras[2] (third/leftmost) gets text-align:right
+const tripleRowMatch = marsiyaWordHtml.match(/<tr>(<td[^>]*>.*?<\/td>){4}<\/tr>/);
+assert.ok(tripleRowMatch, "Triple row should have exactly 4 cells");
+assert.match(marsiyaWordHtml, /<td style="padding:0"><\/td>/);
+
+// maqta (2-misra bayt) in four-col mode: also spacer + 3 cells
+assert.match(marsiyaWordHtml, /هائے كربلاء والو/);
+
+// Solo misra in four-col mode: colspan=4
+assert.match(marsiyaWordHtml, /colspan="4"/);
+
 console.log("word-html tests passed");

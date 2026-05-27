@@ -55,6 +55,13 @@
       return { outer: 8, sadr: 40, gap: gap, ajuz: 40, mode: "compact" };
     }
 
+    var hasMultiMisraRow = stanza.bayts.some(function (b) {
+      return b.type === "row" && b.misras && b.misras.length >= 3;
+    });
+    if (hasMultiMisraRow) {
+      return { c1: 30, c2: 30, c3: 30, c4: 10, mode: "four" };
+    }
+
     if (layout === "equal" || opts.widthMode === "fixed") {
       var equalText = (100 - gap) / 2;
       return { sadr: equalText, gap: gap, ajuz: equalText, mode: "three" };
@@ -63,6 +70,11 @@
     var maxSadr = 1;
     var maxAjuz = 1;
     stanza.bayts.forEach(function (bayt) {
+      if (bayt.type === "row" && bayt.misras && bayt.misras.length >= 2) {
+        maxSadr = Math.max(maxSadr, visibleWeight(bayt.misras[0].text));
+        maxAjuz = Math.max(maxAjuz, visibleWeight(bayt.misras[bayt.misras.length - 1].text));
+        return;
+      }
       if (!bayt.ajuz) return;
       maxSadr = Math.max(maxSadr, visibleWeight(bayt.sadr));
       maxAjuz = Math.max(maxAjuz, visibleWeight(bayt.ajuz));
@@ -393,6 +405,77 @@
   }
 
   function renderBaytRow(bayt, opts, cols) {
+    if (bayt.type === "row") {
+      var misras = bayt.misras || [];
+      var count = misras.length;
+      if (count === 0) return "";
+
+      if (count === 1 || opts.layoutMode === "stacked") {
+        var spanCount = cols.mode === "compact" ? 5 : cols.mode === "four" ? 4 : 3;
+        return "<tr><td colspan=\"" + spanCount + "\" style=\"text-align:center;direction:rtl;padding:0 0 5pt 0;\">" +
+          misras.map(function (m) {
+            var mc = m.isRefrain ? "color:#a7352a;" : "";
+            return "<span style=\"padding-right:32pt;" + mc + "\">" + escapeHtml(justifyText(m.text, opts)) + "</span>";
+          }).join("<br>") + "</td></tr>";
+      }
+
+      if (count === 2) {
+        var sadr2 = escapeHtml(justifyText(misras[0].text, opts));
+        var ajuz2 = escapeHtml(justifyText(misras[1].text, opts));
+        var sadrColor2 = misras[0].isRefrain ? "color:#a7352a;" : "";
+        var ajuzColor2 = misras[1].isRefrain ? "color:#a7352a;" : "";
+        if (cols.mode === "compact") {
+          return "<tr>" +
+            "<td style=\"padding:0\"></td>" +
+            "<td style=\"" + leftSideCellStyle(opts) + ajuzColor2 + "\">" + ajuz2 + "</td>" +
+            "<td style=\"" + gapStyle() + "\"></td>" +
+            "<td style=\"" + rightSideCellStyle(opts) + sadrColor2 + "\">" + sadr2 + "</td>" +
+            "<td style=\"padding:0\"></td>" +
+            "</tr>";
+        }
+        if (cols.mode === "four") {
+          return "<tr>" +
+            "<td style=\"padding:0\"></td>" +
+            "<td style=\"" + leftSideCellStyle(opts) + ajuzColor2 + "\">" + ajuz2 + "</td>" +
+            "<td style=\"" + gapStyle() + "\"></td>" +
+            "<td style=\"" + rightSideCellStyle(opts) + sadrColor2 + "\">" + sadr2 + "</td>" +
+            "</tr>";
+        }
+        return "<tr>" +
+          "<td style=\"" + leftSideCellStyle(opts) + ajuzColor2 + "\">" + ajuz2 + "</td>" +
+          "<td style=\"" + gapStyle() + "\"></td>" +
+          "<td style=\"" + rightSideCellStyle(opts) + sadrColor2 + "\">" + sadr2 + "</td>" +
+          "</tr>";
+      }
+
+      // 3+ misras: render in four-column layout (spacer | m[n-1] | ... | m[0])
+      if (cols.mode === "four") {
+        if (count === 3) {
+          return "<tr>" +
+            "<td style=\"padding:0\"></td>" +
+            "<td style=\"" + misraCellStyle({ align: "right" }, opts) + (misras[2].isRefrain ? "color:#a7352a;" : "") + "\">" + escapeHtml(justifyText(misras[2].text, opts)) + "</td>" +
+            "<td style=\"" + misraCellStyle({ align: "center" }, opts) + (misras[1].isRefrain ? "color:#a7352a;" : "") + "\">" + escapeHtml(justifyText(misras[1].text, opts)) + "</td>" +
+            "<td style=\"" + misraCellStyle({ align: "left" }, opts) + (misras[0].isRefrain ? "color:#a7352a;" : "") + "\">" + escapeHtml(justifyText(misras[0].text, opts)) + "</td>" +
+            "</tr>";
+        }
+        // 4+ misras: truncate to 4, reverse into column order
+        var cells4 = misras.slice(0, 4);
+        return "<tr>" + [cells4[3], cells4[2], cells4[1], cells4[0]].map(function (m, i) {
+          var align = i === 0 ? "right" : i === 3 ? "left" : "center";
+          var mc = m && m.isRefrain ? "color:#a7352a;" : "";
+          return "<td style=\"" + misraCellStyle({ align: align }, opts) + mc + "\">" + escapeHtml(justifyText(m.text, opts)) + "</td>";
+        }).join("") + "</tr>";
+      }
+
+      // Fallback for non-four-col: stacked
+      var fallbackSpan = cols.mode === "compact" ? 5 : 3;
+      return "<tr><td colspan=\"" + fallbackSpan + "\" style=\"text-align:center;direction:rtl;padding:0 0 5pt 0;\">" +
+        misras.map(function (m) {
+          var mc = m.isRefrain ? "color:#a7352a;" : "";
+          return "<span style=\"padding-right:32pt;" + mc + "\">" + escapeHtml(justifyText(m.text, opts)) + "</span>";
+        }).join("<br>") + "</td></tr>";
+    }
+
     var sadr = escapeHtml(justifyText(bayt.sadr, opts));
     var ajuz = bayt.ajuz ? escapeHtml(justifyText(bayt.ajuz, opts)) : "";
     var sadrColor = bayt.sadrRefrain ? "color:#a7352a;" : "";
@@ -400,7 +483,7 @@
 
     if (!bayt.ajuz || opts.layoutMode === "stacked") {
       var second = bayt.ajuz ? "<br><span style=\"padding-right:32pt;" + ajuzColor + "\">" + ajuz + "</span>" : "";
-      var spanCount = cols.mode === "compact" ? 5 : 3;
+      var spanCount = cols.mode === "compact" ? 5 : cols.mode === "four" ? 4 : 3;
       return "<tr><td colspan=\"" + spanCount + "\" style=\"text-align:center;direction:rtl;padding:0 0 5pt 0;" + sadrColor + "\">" + sadr + second + "</td></tr>";
     }
 
@@ -411,6 +494,15 @@
         "<td style=\"" + gapStyle() + "\"></td>" +
         "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
         "<td style=\"padding:0\"></td>" +
+        "</tr>";
+    }
+
+    if (cols.mode === "four") {
+      return "<tr>" +
+        "<td style=\"padding:0\"></td>" +
+        "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+        "<td style=\"" + gapStyle() + "\"></td>" +
+        "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
         "</tr>";
     }
 
