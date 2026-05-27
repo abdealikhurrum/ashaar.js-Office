@@ -43,6 +43,20 @@ Use `manifest.xml` as the Office add-in manifest. The add-in requests `ReadWrite
 
 The preview pane uses Ashaar.js native HTML/CSS. Word insertion uses generated table HTML because Word's HTML importer preserves table layout more reliably than browser flex layout.
 
+Ashaar.js upstream is tracked as a git submodule at `vendor/ashaar-js`. To refresh the vendored browser files from the pinned submodule commit:
+
+```sh
+npm run sync:ashaar
+```
+
+To fetch the latest upstream `master`, update the submodule checkout, sync the files, and run tests:
+
+```sh
+npm run update:ashaar
+```
+
+The currently synced upstream commit is recorded in `src/vendor/ASHAAR_UPSTREAM_VERSION`.
+
 The test fixtures in `test-documents/` are generated with:
 
 ```sh
