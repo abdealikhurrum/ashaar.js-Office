@@ -101,6 +101,11 @@
   }
 
   function colGroup(cols) {
+    if (cols.mode === "normalized") {
+      return "<colgroup>" + cols.widths.map(function (width) {
+        return "<col style=\"" + widthStyle(width) + "\">";
+      }).join("") + "</colgroup>";
+    }
     if (cols.mode === "four") {
       return "<colgroup>" +
         "<col style=\"" + widthStyle(cols.c4) + "\">" +
@@ -169,7 +174,8 @@
     return pieces.join(";");
   }
 
-  function renderGridRow(row, opts) {
+  function renderGridRow(row, opts, cols) {
+    cols = cols || {};
     if (row.type === "triple") {
       return "<tr>" +
         "<td style=\"padding:0\"></td>" +
@@ -177,6 +183,14 @@
         "<td style=\"" + misraCellStyle({ align: "center" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.middle)) + "</td>" +
         "<td style=\"" + misraCellStyle({ align: "left" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.right)) + "</td>" +
         "</tr>";
+    }
+    if (row.type === "multi") {
+      var cells = row.cells.slice(0, 4);
+      while (cells.length < 4) cells.unshift("\u00a0");
+      return "<tr>" + cells.map(function (cell, index) {
+        var align = index === cells.length - 1 ? "left" : index === 0 ? "right" : "center";
+        return "<td style=\"" + misraCellStyle({ align: align }, opts) + "\">" + escapeHtml(blankMisraLabel(cell)) + "</td>";
+      }).join("") + "</tr>";
     }
     if (row.type === "refrain") {
       return "<tr>" +
@@ -189,6 +203,14 @@
       return "<tr><td colspan=\"" + (row.colspan || 3) + "\" style=\"" + misraCellStyle(row, opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td></tr>";
     }
     if (row.type === "right") {
+      if (cols.mode === "four") {
+        return "<tr>" +
+          "<td style=\"padding:0\"></td>" +
+          "<td style=\"padding:0\"></td>" +
+          "<td style=\"padding:0\"></td>" +
+          "<td style=\"" + misraCellStyle(Object.assign({ align: "left" }, row), opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td>" +
+          "</tr>";
+      }
       return "<tr>" +
         "<td style=\"padding:0\"></td>" +
         "<td style=\"" + gapStyle() + "\"></td>" +
@@ -196,10 +218,25 @@
         "</tr>";
     }
     if (row.type === "left") {
+      if (cols.mode === "four") {
+        return "<tr>" +
+          "<td style=\"" + misraCellStyle(Object.assign({ align: "right" }, row), opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td>" +
+          "<td style=\"padding:0\"></td>" +
+          "<td style=\"padding:0\"></td>" +
+          "<td style=\"padding:0\"></td>" +
+          "</tr>";
+      }
       return "<tr>" +
         "<td style=\"" + misraCellStyle(Object.assign({ align: "right" }, row), opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td>" +
         "<td style=\"" + gapStyle() + "\"></td>" +
         "<td style=\"padding:0\"></td>" +
+        "</tr>";
+    }
+    if (cols.mode === "four") {
+      return "<tr>" +
+        "<td style=\"" + misraCellStyle({ align: "right" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.left)) + "</td>" +
+        "<td colspan=\"2\" style=\"" + gapStyle() + "\"></td>" +
+        "<td style=\"" + misraCellStyle({ align: "left" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.right)) + "</td>" +
         "</tr>";
     }
     return "<tr>" +
@@ -207,6 +244,152 @@
       "<td style=\"" + gapStyle() + "\"></td>" +
       "<td style=\"" + misraCellStyle({ align: "left" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.right)) + "</td>" +
       "</tr>";
+  }
+
+  function replaceMisraRefs(row, misras) {
+    function resolve(value) {
+      var index = Number(value);
+      if (Number.isFinite(index) && index > 0) return misras[index - 1] || "\u00a0";
+      return value;
+    }
+
+    if (row.type === "multi") return Object.assign({}, row, { cells: row.cells.map(resolve) });
+    if (row.type === "pair") return Object.assign({}, row, { left: resolve(row.left), right: resolve(row.right) });
+    if (row.type === "center") return Object.assign({}, row, { misra: resolve(row.misra) });
+    if (row.type === "right" || row.type === "left") return Object.assign({}, row, { misra: resolve(row.misra) });
+    if (row.type === "triple") return Object.assign({}, row, {
+      right: resolve(row.right),
+      middle: resolve(row.middle),
+      left: resolve(row.left)
+    });
+    if (row.type === "refrain") return Object.assign({}, row, { right: resolve(row.right), left: resolve(row.left) });
+    return row;
+  }
+
+  function alignmentForColumn(index, columnCount) {
+    if (columnCount <= 1) return "center";
+    if (index === 0) return "right";
+    if (index === columnCount - 1) return "left";
+    return "center";
+  }
+
+  function rowColumnCount(row) {
+    if (row.type === "multi") return row.cells.length;
+    if (row.type === "triple") return 3;
+    if (row.type === "pair" || row.type === "refrain") return 3;
+    return 1;
+  }
+
+  function layoutColumnCount(rows) {
+    var count = rows.reduce(function (max, row) {
+      return Math.max(max, rowColumnCount(row));
+    }, 1);
+    return clamp(count, 1, 12);
+  }
+
+  function emptyCells(columnCount) {
+    var cells = [];
+    for (var i = 0; i < columnCount; i++) {
+      cells.push({ text: "", align: alignmentForColumn(i, columnCount), role: "empty" });
+    }
+    return cells;
+  }
+
+  function normalizeLayoutRow(row, columnCount) {
+    var cells = emptyCells(columnCount);
+    var center = Math.floor(columnCount / 2);
+
+    function put(index, text, align, role) {
+      if (index < 0 || index >= columnCount) return;
+      cells[index] = {
+        text: String(text || ""),
+        align: align || alignmentForColumn(index, columnCount),
+        role: role || "misra"
+      };
+    }
+
+    if (row.type === "multi") {
+      var start = Math.max(0, columnCount - row.cells.length);
+      row.cells.forEach(function (cell, index) {
+        var target = start + index;
+        put(target, cell, alignmentForColumn(target, columnCount), "misra");
+      });
+      return cells;
+    }
+
+    if (row.type === "triple") {
+      put(0, row.left, "right", "left");
+      put(center, row.middle, "center", "center");
+      put(columnCount - 1, row.right, "left", "right");
+      return cells;
+    }
+
+    if (row.type === "pair" || row.type === "refrain") {
+      put(0, row.left, "right", "left");
+      put(columnCount - 1, row.right, "left", "right");
+      return cells;
+    }
+
+    if (row.type === "right") {
+      put(columnCount - 1, row.misra, "left", "right");
+      return cells;
+    }
+
+    if (row.type === "left") {
+      put(0, row.misra, "right", "left");
+      return cells;
+    }
+
+    put(center, row.misra, row.align || "center", "center");
+    return cells;
+  }
+
+  function normalizedLayoutRows(rows) {
+    var columnCount = layoutColumnCount(rows);
+    return {
+      columnCount: columnCount,
+      rows: rows.map(function (row) {
+        return normalizeLayoutRow(row, columnCount);
+      })
+    };
+  }
+
+  function layoutColumnWidths(columnCount, opts) {
+    if (columnCount <= 1) return [100];
+    if (columnCount === 2) return [50, 50];
+    var gap = clamp(Number((opts || {}).gapWidth || 4), 0, 20);
+    var outer = (100 - gap) / 2;
+    if (columnCount === 3) return [outer, gap, outer];
+    var each = 100 / columnCount;
+    var widths = [];
+    for (var i = 0; i < columnCount; i++) widths.push(each);
+    return widths;
+  }
+
+  function layoutTablesForText(text, opts) {
+    opts = Object.assign({}, opts || {});
+    var baseRows = templateGrid(opts);
+    var bandhs = splitBandhs(text);
+    if (!bandhs.length) return [];
+    return bandhs.map(function (bandh) {
+      var misras = extractMisras(bandh);
+      var resolvedRows = baseRows.map(function (row) { return replaceMisraRefs(row, misras); });
+      var table = normalizedLayoutRows(resolvedRows);
+      table.widths = layoutColumnWidths(table.columnCount, opts);
+      return table;
+    });
+  }
+
+  function layoutTablesForTemplate(opts) {
+    opts = Object.assign({}, opts || {});
+    var bandhCount = clamp(Number(opts.bandhCount || 1), 1, 20);
+    var tables = [];
+    for (var i = 0; i < bandhCount; i++) {
+      var table = normalizedLayoutRows(templateGrid(opts));
+      table.widths = layoutColumnWidths(table.columnCount, opts);
+      tables.push(table);
+    }
+    return tables;
   }
 
   function renderBaytRow(bayt, opts, cols) {
@@ -240,7 +423,7 @@
 
   function renderForWord(text, opts, Ashaar) {
     opts = opts || {};
-    var poems = parsePoetry(text, Ashaar);
+    var poems = parsePoetry(String(text || ""), Ashaar);
     if (!poems.length) return "";
     return poems.map(function (poem) {
       return poem.stanzas.map(function (stanza) {
@@ -254,10 +437,54 @@
     }).join("<p style=\"margin:18pt 0\"></p>");
   }
 
+  function splitBandhs(text) {
+    return String(text || "").split(/\n\s*(?:---|—|–)\s*\n/g).map(function (chunk) {
+      return chunk.trim();
+    }).filter(Boolean);
+  }
+
+  function extractMisras(text) {
+    var misras = [];
+    String(text || "").split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line || /^(?:---|—|–)$/.test(line)) return;
+      line.split(/\s*[\\*|]\s*/).forEach(function (part) {
+        var clean = part.replace(/\s*%\s*$/, "").trim();
+        if (clean) misras.push(clean);
+      });
+    });
+    return misras;
+  }
+
+  function renderTextWithLayoutForWord(text, opts) {
+    opts = Object.assign({}, opts || {});
+    var tables = layoutTablesForText(text, opts);
+    if (!tables.length) return "";
+
+    return tables.map(function (table) {
+      var cols = { mode: "normalized", widths: table.widths };
+      return "<table dir=\"rtl\" data-ashaar-layout=\"custom-spec\" data-ashaar-template=\"false\" style=\"" + tableStyle(opts) + "\">" +
+        colGroup(cols) +
+        "<tbody>" +
+        table.rows.map(function (row) {
+          return "<tr>" + row.map(function (cell) {
+            return "<td style=\"" + misraCellStyle({ align: cell.align }, opts) + "\">" + escapeHtml(cell.text || "\u00a0") + "</td>";
+          }).join("") + "</tr>";
+        }).join("") +
+        "</tbody></table>";
+    }).join("<p style=\"margin:10pt 0\"></p>");
+  }
+
   function templateGrid(opts) {
     opts = opts || {};
     var count = clamp(Number(opts.misraCount || 4), 1, 80);
+    if (opts.layoutSpec && String(opts.layoutSpec).trim()) {
+      return parseLayoutSpec(opts.layoutSpec);
+    }
     var pattern = opts.misraPattern || "paired";
+    if (pattern === "multi-misra-row" || pattern === "karbala-refrain") {
+      pattern = "three-plus-center-refrain";
+    }
     var rows = [];
     var i;
 
@@ -301,9 +528,40 @@
     return rows;
   }
 
+  function misraToken(value) {
+    var token = String(value || "").trim();
+    return token || "\u00a0";
+  }
+
+  function parseLayoutSpec(spec) {
+    return String(spec || "").split(/\r?\n/).map(function (raw) {
+      var line = raw.trim();
+      if (!line) return null;
+
+      var centered = line.match(/^<\s*([^>]+?)\s*>$/);
+      if (centered) return { type: "center", misra: misraToken(centered[1]), align: "center", colspan: 4 };
+
+      if (/\|/.test(line)) {
+        var parts = line.split("|").map(misraToken);
+        return { type: "multi", cells: parts };
+      }
+
+      var pair = line.split(/\s*-\s*/);
+      if (pair.length === 2) return { type: "pair", left: misraToken(pair[0]), right: misraToken(pair[1]) };
+
+      if (/>\s*$/.test(line)) return { type: "right", misra: misraToken(line.replace(/>\s*$/, "")) };
+      if (/^<\s*/.test(line)) return { type: "left", misra: misraToken(line.replace(/^<\s*/, "")) };
+
+      var indent = raw.match(/^\s*/)[0].length;
+      return { type: "center", misra: misraToken(line), align: indent ? "right" : "center", indent: indent * 4, colspan: 4 };
+    }).filter(Boolean);
+  }
+
   function templateColumns(opts) {
     var gap = clamp(Number((opts || {}).gapWidth || 4), 2, 10);
-    if ((opts || {}).misraPattern === "three-plus-center-refrain") {
+    var pattern = (opts || {}).misraPattern;
+    var spec = (opts || {}).layoutSpec || "";
+    if (/\|/.test(spec) || pattern === "three-plus-center-refrain" || pattern === "multi-misra-row" || pattern === "karbala-refrain") {
       return { c1: 30, c2: 30, c3: 30, c4: 10, mode: "four" };
     }
     var side = (100 - gap) / 2;
@@ -312,22 +570,22 @@
 
   function renderTemplateForWord(opts) {
     opts = Object.assign({}, opts || {});
-    var bandhCount = clamp(Number(opts.bandhCount || 1), 1, 20);
     var layout = opts.layoutMode || "equal";
     opts.layoutMode = layout;
     opts.widthMode = opts.widthMode || "fixed";
 
-    var chunks = [];
-    for (var i = 0; i < bandhCount; i++) {
-      var rows = templateGrid(opts);
-      var cols = templateColumns(opts);
-      chunks.push("<table dir=\"rtl\" data-ashaar-layout=\"" + escapeHtml(layout) + "\" data-ashaar-template=\"true\" style=\"" + tableStyle(opts) + "\">" +
+    return layoutTablesForTemplate(opts).map(function (table) {
+      var cols = { mode: "normalized", widths: table.widths };
+      return "<table dir=\"rtl\" data-ashaar-layout=\"" + escapeHtml(layout) + "\" data-ashaar-template=\"true\" style=\"" + tableStyle(opts) + "\">" +
         colGroup(cols) +
         "<tbody>" +
-        rows.map(function (row) { return renderGridRow(row, opts); }).join("") +
-        "</tbody></table>");
-    }
-    return chunks.join("<p style=\"margin:10pt 0\"></p>");
+        table.rows.map(function (row) {
+          return "<tr>" + row.map(function (cell) {
+            return "<td style=\"" + misraCellStyle({ align: cell.align }, opts) + "\">" + escapeHtml(cell.text || "\u00a0") + "</td>";
+          }).join("") + "</tr>";
+        }).join("") +
+        "</tbody></table>";
+    }).join("<p style=\"margin:10pt 0\"></p>");
   }
 
   function contentControlTag(text, opts) {
@@ -361,9 +619,14 @@
 
   return {
     renderForWord: renderForWord,
+    renderTextWithLayoutForWord: renderTextWithLayoutForWord,
     renderTemplateForWord: renderTemplateForWord,
+    layoutTablesForText: layoutTablesForText,
+    layoutTablesForTemplate: layoutTablesForTemplate,
+    extractMisras: extractMisras,
     templateGrid: templateGrid,
     templateColumns: templateColumns,
+    parseLayoutSpec: parseLayoutSpec,
     tableColumns: tableColumns,
     contentControlTag: contentControlTag,
     justifyPlainTextBlock: justifyPlainTextBlock

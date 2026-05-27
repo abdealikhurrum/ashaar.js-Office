@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css">
-    <link rel="stylesheet" href="./taskpane.css">
+    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260527-native-layout">
+    <link rel="stylesheet" href="./taskpane.css?v=20260527-native-layout">
   </head>
   <body>
     <main class="pane">
@@ -66,17 +66,21 @@
           <input id="misra-count" type="number" min="1" max="80" value="4">
         </div>
         <div class="field">
-          <label for="misra-pattern">Misra grid</label>
-          <select id="misra-pattern">
-            <option value="paired" selected>Paired side-by-side</option>
-            <option value="centered-stack">Stacked centered</option>
-            <option value="alternate-right">Stacked alternate right</option>
-            <option value="alternate-left">Stacked alternate left</option>
-            <option value="indented-stack">Stacked indented</option>
-            <option value="four-plus-centered">4 paired + centered</option>
-            <option value="three-plus-center-refrain">3 up + center + refrain</option>
+          <label for="layout-preset">Layout preset</label>
+          <select id="layout-preset">
+            <option value="paired" selected>Paired rows</option>
+            <option value="centered-stack">Centered stack</option>
+            <option value="alternate-right">Alternating sides</option>
+            <option value="indented-stack">Indented stack</option>
+            <option value="karbala-refrain">3 + center + refrain</option>
           </select>
         </div>
+        </section>
+
+        <section class="editor">
+          <label for="layout-spec">Layout spec</label>
+          <textarea id="layout-spec" class="layout-spec" spellcheck="false" dir="ltr">2 - 1
+4 - 3</textarea>
         </section>
 
         <section class="actions single-action" aria-label="Table input actions">
@@ -136,9 +140,9 @@
       <div id="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="../vendor/ashaar-justify.js"></script>
-    <script src="../vendor/ashaar.js"></script>
-    <script src="./word-html.js"></script>
-    <script src="./taskpane.js"></script>
+    <script src="../vendor/ashaar-justify.js?v=20260527-native-layout"></script>
+    <script src="../vendor/ashaar.js?v=20260527-native-layout"></script>
+    <script src="./word-html.js?v=20260527-native-layout"></script>
+    <script src="./taskpane.js?v=20260527-native-layout"></script>
   </body>
 </html>
