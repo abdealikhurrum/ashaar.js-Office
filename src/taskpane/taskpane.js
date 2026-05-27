@@ -180,23 +180,50 @@
       var opts = options();
       var source = String(input.value || "");
       var html;
+      var diagLines = [];
+
+      function diag(msg) {
+        console.log("[Ashaar]", msg);
+        diagLines.push(msg);
+      }
+
+      diag("layoutTablesForPoem? " + (typeof AshaarWord.layoutTablesForPoem));
+      diag("source chars: " + source.length);
+
       if (opts.layoutSpec && opts.layoutSpec.trim()) {
+        diag("path: layoutSpec");
         var tables = AshaarWord.layoutTablesForText(source, opts);
         if (await insertNativeLayoutTables(context, tables, opts, source, replaceSelection)) return;
         html = "";
       } else {
-        var poemTables = AshaarWord.layoutTablesForPoem(source, opts, Ashaar);
-        if (poemTables) {
-          if (await insertNativeLayoutTables(context, poemTables, opts, source, replaceSelection)) return;
+        var poemTables = null;
+        try {
+          poemTables = AshaarWord.layoutTablesForPoem(source, opts, Ashaar);
+        } catch (e) {
+          diag("layoutTablesForPoem threw: " + e.message);
         }
+
+        if (poemTables) {
+          diag("path: native (" + poemTables.length + " tables, cols: " + poemTables.map(function(t){return t.columnCount;}).join(",") + ")");
+          if (await insertNativeLayoutTables(context, poemTables, opts, source, replaceSelection)) return;
+          diag("insertNativeLayoutTables returned false");
+        } else {
+          diag("path: html (poemTables was null)");
+        }
+
         try {
           html = AshaarWord.renderForWord(source, opts, Ashaar);
+          diag("renderForWord ok, html length: " + html.length);
         } catch (error) {
+          diag("renderForWord threw: " + error.message);
           html = "";
         }
       }
+
+      setMessage(diagLines.join(" | "));
+
       if (!html) {
-        setMessage("Enter poetry text first.");
+        setMessage(diagLines.join(" | ") + " | no html");
         return;
       }
       var selection = context.document.getSelection();
