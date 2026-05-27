@@ -24,6 +24,33 @@
 
       <section class="controls" aria-label="Formatting controls">
         <div class="field">
+          <label for="bandh-count">Bandhs</label>
+          <input id="bandh-count" type="number" min="1" max="20" value="1">
+        </div>
+        <div class="field">
+          <label for="misra-count">Misras per bandh</label>
+          <input id="misra-count" type="number" min="1" max="80" value="4">
+        </div>
+        <div class="field">
+          <label for="misra-pattern">Misra grid</label>
+          <select id="misra-pattern">
+            <option value="paired" selected>Paired side-by-side</option>
+            <option value="centered-stack">Stacked centered</option>
+            <option value="alternate-right">Stacked alternate right</option>
+            <option value="alternate-left">Stacked alternate left</option>
+            <option value="indented-stack">Stacked indented</option>
+            <option value="four-plus-centered">4 paired + centered</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="font-mode">Font</label>
+          <select id="font-mode">
+            <option value="document" selected>Document default</option>
+            <option value="arabic-serif">Arabic serif</option>
+            <option value="nastaliq">Nastaliq</option>
+          </select>
+        </div>
+        <div class="field">
           <label for="justify-mode">Justification</label>
           <select id="justify-mode">
             <option value="kashida" selected>Kashida</option>
@@ -35,9 +62,18 @@
         <div class="field">
           <label for="layout-mode">Layout</label>
           <select id="layout-mode">
-            <option value="columns" selected>Columns</option>
+            <option value="balanced" selected>Balanced table</option>
+            <option value="equal">Equal table</option>
+            <option value="compact">Compact table</option>
             <option value="stacked">Stacked</option>
             <option value="auto">Auto preview</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="width-mode">Column widths</label>
+          <select id="width-mode">
+            <option value="optimized" selected>Optimized</option>
+            <option value="fixed">Fixed</option>
           </select>
         </div>
         <div class="field">
@@ -51,6 +87,7 @@
       </section>
 
       <section class="actions" aria-label="Document actions">
+        <button id="insert-structure" type="button">Draw Table</button>
         <button id="insert-poem" type="button">Insert Block</button>
         <button id="replace-selection" type="button">Replace Selection</button>
         <button id="justify-selection" type="button">Justify Selection</button>

@@ -7,6 +7,10 @@ A Microsoft Word task pane add-in for entering Arabic, Urdu, and Persian poetry 
 - Vendored Ashaar.js browser renderer in `src/vendor`.
 - A Word task pane UI in `src/taskpane`.
 - Word-friendly HTML insertion that turns Ashaar parsed bayts into RTL tables.
+- Table layout presets: balanced, equal, compact, and stacked.
+- Ashaar content controls around inserted poem blocks, tagged with layout settings and a source hash.
+- A table-first workflow that draws blank Ashaar grids from ordered misras, so users can type into Word and then justify the finished table.
+- Font mode defaults to the document font; Nastaliq is available as an explicit option, not the default.
 - Selection tools for replacing selected text with a formatted poetry block or applying plain-text kashida justification.
 
 ## Poetry input
@@ -37,3 +41,11 @@ Use `manifest.xml` as the Office add-in manifest. The add-in requests `ReadWrite
 ## Development Notes
 
 The preview pane uses Ashaar.js native HTML/CSS. Word insertion uses generated table HTML because Word's HTML importer preserves table layout more reliably than browser flex layout.
+
+The test fixtures in `test-documents/` are generated with:
+
+```sh
+/Users/abdealikhurrum/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 scripts/generate_test_docs.py
+```
+
+Each fixture uses fixed Word table grids and wraps each Ashaar block in a rich text content control tagged with `ashaar:` metadata.

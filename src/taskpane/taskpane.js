@@ -5,6 +5,11 @@
   var hostStatus = document.getElementById("host-status");
   var justifyMode = document.getElementById("justify-mode");
   var layoutMode = document.getElementById("layout-mode");
+  var widthMode = document.getElementById("width-mode");
+  var bandhCount = document.getElementById("bandh-count");
+  var misraCount = document.getElementById("misra-count");
+  var misraPattern = document.getElementById("misra-pattern");
+  var fontMode = document.getElementById("font-mode");
   var tatweelCount = document.getElementById("tatweel-count");
   var tatweelValue = document.getElementById("tatweel-value");
   var gapWidth = document.getElementById("gap-width");
@@ -15,9 +20,20 @@
       justify: justifyMode.value === "none" ? false : justifyMode.value,
       layoutMode: layoutMode.value,
       layout: layoutMode.value,
+      widthMode: widthMode.value,
+      bandhCount: Number(bandhCount.value || 1),
+      misraCount: Number(misraCount.value || 4),
+      misraPattern: misraPattern.value,
+      fontMode: fontMode.value,
       tatweelCount: Number(tatweelCount.value || 0),
       gapWidth: Number(gapWidth.value || 4)
     };
+  }
+
+  function previewFontFamily(font) {
+    if (font === "nastaliq") return "\"Noto Nastaliq Urdu\", \"Jameel Noori Nastaleeq\", serif";
+    if (font === "arabic-serif") return "\"Scheherazade New\", \"Amiri\", \"Times New Roman\", serif";
+    return "\"Times New Roman\", serif";
   }
 
   function setMessage(text) {
@@ -28,10 +44,11 @@
     var opts = options();
     tatweelValue.textContent = String(opts.tatweelCount);
     preview.className = "ashaar preview";
+    preview.style.setProperty("--ashaar-font-family", previewFontFamily(opts.fontMode));
     preview.innerHTML = Ashaar.renderText(input.value, { gapWidth: opts.gapWidth + "%" });
     Ashaar.applyRenderOptions(preview, { gapWidth: opts.gapWidth + "%" });
     if (opts.layout === "stacked") preview.classList.add("ashaar--stacked");
-    if (opts.layout === "auto") Ashaar.applyAutoLayout(preview, { layout: "auto" });
+    if (opts.layout === "auto" || opts.layout === "compact") Ashaar.applyAutoLayout(preview, { layout: "auto" });
     if (opts.justify === "css") {
       preview.classList.add("ashaar--justify");
     } else if (opts.justify === "spacing") {
@@ -62,7 +79,25 @@
         return;
       }
       var selection = context.document.getSelection();
-      selection.insertHtml(html, replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
+      var inserted = selection.insertHtml(html, replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
+      var control = inserted.insertContentControl();
+      control.title = "Ashaar Poem";
+      control.tag = AshaarWord.contentControlTag(input.value, options());
+      control.appearance = "BoundingBox";
+      await context.sync();
+    });
+  }
+
+  async function insertStructure() {
+    await withWord(async function (context) {
+      var opts = options();
+      var html = AshaarWord.renderTemplateForWord(opts);
+      var selection = context.document.getSelection();
+      var inserted = selection.insertHtml(html, Word.InsertLocation.end);
+      var control = inserted.insertContentControl();
+      control.title = "Ashaar Poem";
+      control.tag = AshaarWord.contentControlTag("template", opts);
+      control.appearance = "BoundingBox";
       await context.sync();
     });
   }
@@ -88,11 +123,16 @@
     });
   }
 
+  var isBound = false;
+
   function bind() {
-    [input, justifyMode, layoutMode, tatweelCount, gapWidth].forEach(function (el) {
+    if (isBound) return;
+    isBound = true;
+    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, misraPattern, fontMode, tatweelCount, gapWidth].forEach(function (el) {
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });
+    document.getElementById("insert-structure").addEventListener("click", insertStructure);
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
@@ -105,6 +145,12 @@
       hostStatus.textContent = info.host === Office.HostType.Word ? "Connected to Word" : "Preview mode";
       bind();
     });
+    window.setTimeout(function () {
+      if (!isBound) {
+        hostStatus.textContent = "Browser preview mode";
+        bind();
+      }
+    }, 1200);
   } else {
     hostStatus.textContent = "Browser preview mode";
     bind();
