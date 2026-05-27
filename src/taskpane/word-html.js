@@ -530,6 +530,71 @@
     return misras;
   }
 
+  function layoutTablesForPoem(text, opts, Ashaar) {
+    var poems = parsePoetry(String(text || ""), Ashaar);
+    if (!poems.length) return null;
+
+    var hasMultiMisra = false;
+    var tables = [];
+
+    poems.forEach(function (poem) {
+      poem.stanzas.forEach(function (stanza) {
+        var N = 0;
+        stanza.bayts.forEach(function (b) {
+          if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
+        });
+        if (N >= 3) {
+          hasMultiMisra = true;
+        } else {
+          N = 3; // use 3-col for regular stanzas within a multi-misra poem
+        }
+
+        var colWidth = 100 / N;
+        var widths = [];
+        for (var i = 0; i < N; i++) widths.push(colWidth);
+
+        var rows = stanza.bayts.map(function (bayt) {
+          var row = [];
+          if (bayt.type === "row") {
+            var K = bayt.misras.length;
+            if (K === N) {
+              for (var i = 0; i < N; i++) {
+                var align = i === 0 ? "right" : i === N - 1 ? "left" : "center";
+                row.push({ text: bayt.misras[N - 1 - i].text, align: align });
+              }
+            } else {
+              // K < N: fill rightmost K columns, empty on left
+              for (var i = 0; i < N; i++) {
+                if (i < N - K) {
+                  row.push({ text: "", align: "center" });
+                } else {
+                  var mIdx = N - 1 - i;
+                  var align = i === N - K ? "right" : i === N - 1 ? "left" : "center";
+                  row.push({ text: bayt.misras[mIdx].text, align: align });
+                }
+              }
+            }
+          } else if (!bayt.ajuz) {
+            for (var i = 0; i < N; i++) {
+              row.push({ text: i === Math.floor(N / 2) ? bayt.sadr : "", align: "center" });
+            }
+          } else {
+            for (var i = 0; i < N; i++) {
+              if (i === 0) row.push({ text: bayt.ajuz, align: "right" });
+              else if (i === N - 1) row.push({ text: bayt.sadr, align: "left" });
+              else row.push({ text: "", align: "center" });
+            }
+          }
+          return row;
+        });
+
+        tables.push({ columnCount: N, rows: rows, widths: widths });
+      });
+    });
+
+    return hasMultiMisra ? tables : null;
+  }
+
   function renderTextWithLayoutForWord(text, opts) {
     opts = Object.assign({}, opts || {});
     var tables = layoutTablesForText(text, opts);
@@ -697,6 +762,7 @@
     renderTemplateForWord: renderTemplateForWord,
     layoutTablesForText: layoutTablesForText,
     layoutTablesForTemplate: layoutTablesForTemplate,
+    layoutTablesForPoem: layoutTablesForPoem,
     extractMisras: extractMisras,
     templateGrid: templateGrid,
     templateColumns: templateColumns,
