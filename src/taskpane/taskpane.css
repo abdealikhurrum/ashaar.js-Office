@@ -64,10 +64,50 @@ h2 {
 }
 
 .editor,
-.preview-shell {
+.preview-shell,
+.mode-panel {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.mode-button {
+  min-height: 34px;
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.mode-button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.mode-panel[hidden] {
+  display: none;
+}
+
+.mode-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.section-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.section-title p {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 label {
@@ -124,6 +164,14 @@ input[type="range"] {
 
 .actions button:first-child {
   grid-column: 1 / -1;
+}
+
+.single-action {
+  grid-template-columns: 1fr;
+}
+
+.single-action button:first-child {
+  grid-column: auto;
 }
 
 button {

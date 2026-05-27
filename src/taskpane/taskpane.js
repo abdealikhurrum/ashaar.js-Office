@@ -3,6 +3,10 @@
   var preview = document.getElementById("preview");
   var message = document.getElementById("message");
   var hostStatus = document.getElementById("host-status");
+  var modeTable = document.getElementById("mode-table");
+  var modeConvert = document.getElementById("mode-convert");
+  var tablePanel = document.getElementById("table-mode-panel");
+  var convertPanel = document.getElementById("convert-mode-panel");
   var justifyMode = document.getElementById("justify-mode");
   var layoutMode = document.getElementById("layout-mode");
   var widthMode = document.getElementById("width-mode");
@@ -38,6 +42,19 @@
 
   function setMessage(text) {
     message.textContent = text || "";
+  }
+
+  function setMode(mode) {
+    var isTable = mode === "table";
+    modeTable.classList.toggle("is-active", isTable);
+    modeConvert.classList.toggle("is-active", !isTable);
+    modeTable.setAttribute("aria-selected", String(isTable));
+    modeConvert.setAttribute("aria-selected", String(!isTable));
+    tablePanel.classList.toggle("is-active", isTable);
+    convertPanel.classList.toggle("is-active", !isTable);
+    tablePanel.hidden = !isTable;
+    convertPanel.hidden = isTable;
+    setMessage(isTable ? "Table input mode: draw a blank grid, then type in Word." : "Ashaar.js conversion mode: paste source text, then insert a converted table.");
   }
 
   function renderPreview() {
@@ -132,12 +149,15 @@
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });
+    modeTable.addEventListener("click", function () { setMode("table"); });
+    modeConvert.addEventListener("click", function () { setMode("convert"); });
     document.getElementById("insert-structure").addEventListener("click", insertStructure);
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
     renderPreview();
+    setMode("table");
   }
 
   if (window.Office && Office.onReady) {

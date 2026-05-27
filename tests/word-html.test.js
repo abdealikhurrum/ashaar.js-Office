@@ -21,9 +21,9 @@ assert.match(html, /ـ/);
 
 const firstRow = html.match(/<tr>(.*?)<\/tr>/)[1];
 const cells = firstRow.match(/<td style="[^"]*"/g);
-assert.match(cells[0], /text-align:left/);
+assert.match(cells[0], /text-align:right/);
 assert.match(cells[1], /text-align:center/);
-assert.match(cells[2], /text-align:right/);
+assert.match(cells[2], /text-align:left/);
 
 const stacked = AshaarWord.renderForWord(source, {
   justifyMode: "none",
@@ -69,9 +69,9 @@ assert.equal((template.match(/data-ashaar-template="true"/g) || []).length, 2);
 assert.equal((template.match(/<tr>/g) || []).length, 4);
 assert.doesNotMatch(template, /font-family/);
 const templateCells = template.match(/<td style="[^"]*"/g);
-assert.match(templateCells[0], /text-align:left/);
+assert.match(templateCells[0], /text-align:right/);
 assert.match(templateCells[1], /text-align:center/);
-assert.match(templateCells[2], /text-align:right/);
+assert.match(templateCells[2], /text-align:left/);
 assert.match(template, />1<\/td>/);
 assert.match(template, />2<\/td>/);
 
@@ -88,6 +88,26 @@ assert.deepEqual(AshaarWord.templateGrid({ misraCount: 4, misraPattern: "alterna
   { type: "right", misra: 3 },
   { type: "left", misra: 4 }
 ]);
+
+assert.deepEqual(AshaarWord.templateGrid({ misraCount: 6, misraPattern: "three-plus-center-refrain" }), [
+  { type: "triple", right: 1, middle: 2, left: 3 },
+  { type: "center", misra: 4, align: "center", colspan: 4 },
+  { type: "refrain", right: 5, left: 6 }
+]);
+
+const karbalaTemplate = AshaarWord.renderTemplateForWord({
+  bandhCount: 3,
+  misraCount: 6,
+  misraPattern: "three-plus-center-refrain",
+  fontMode: "document"
+});
+
+assert.equal((karbalaTemplate.match(/data-ashaar-template="true"/g) || []).length, 3);
+assert.equal((karbalaTemplate.match(/<tr>/g) || []).length, 9);
+assert.match(karbalaTemplate, /<colgroup><col style="width:10%">/);
+assert.match(karbalaTemplate, /<td style="padding:0"><\/td><td style="[^"]*text-align:right[^"]*">3<\/td><td style="[^"]*text-align:center[^"]*">2<\/td><td style="[^"]*text-align:left[^"]*">1<\/td>/);
+assert.match(karbalaTemplate, /colspan="4"[^>]*>4<\/td>/);
+assert.match(karbalaTemplate, />6<\/td><td colspan="2"[^>]*><\/td><td style="[^"]*text-align:left[^"]*">5<\/td>/);
 
 const nastaliq = AshaarWord.renderTemplateForWord({
   bandhCount: 1,

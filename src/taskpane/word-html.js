@@ -101,6 +101,14 @@
   }
 
   function colGroup(cols) {
+    if (cols.mode === "four") {
+      return "<colgroup>" +
+        "<col style=\"" + widthStyle(cols.c4) + "\">" +
+        "<col style=\"" + widthStyle(cols.c3) + "\">" +
+        "<col style=\"" + widthStyle(cols.c2) + "\">" +
+        "<col style=\"" + widthStyle(cols.c1) + "\">" +
+        "</colgroup>";
+    }
     if (cols.mode === "compact") {
       return "<colgroup>" +
         "<col style=\"" + widthStyle(cols.outer) + "\">" +
@@ -111,9 +119,9 @@
         "</colgroup>";
     }
     return "<colgroup>" +
-      "<col style=\"" + widthStyle(cols.sadr) + "\">" +
-      "<col style=\"" + widthStyle(cols.gap) + "\">" +
       "<col style=\"" + widthStyle(cols.ajuz) + "\">" +
+      "<col style=\"" + widthStyle(cols.gap) + "\">" +
+      "<col style=\"" + widthStyle(cols.sadr) + "\">" +
       "</colgroup>";
   }
 
@@ -162,27 +170,42 @@
   }
 
   function renderGridRow(row, opts) {
+    if (row.type === "triple") {
+      return "<tr>" +
+        "<td style=\"padding:0\"></td>" +
+        "<td style=\"" + misraCellStyle({ align: "right" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.left)) + "</td>" +
+        "<td style=\"" + misraCellStyle({ align: "center" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.middle)) + "</td>" +
+        "<td style=\"" + misraCellStyle({ align: "left" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.right)) + "</td>" +
+        "</tr>";
+    }
+    if (row.type === "refrain") {
+      return "<tr>" +
+        "<td style=\"" + misraCellStyle({ align: "right" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.left)) + "</td>" +
+        "<td colspan=\"2\" style=\"" + gapStyle() + "\"></td>" +
+        "<td style=\"" + misraCellStyle({ align: "left" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.right)) + "</td>" +
+        "</tr>";
+    }
     if (row.type === "center") {
-      return "<tr><td colspan=\"3\" style=\"" + misraCellStyle(row, opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td></tr>";
+      return "<tr><td colspan=\"" + (row.colspan || 3) + "\" style=\"" + misraCellStyle(row, opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td></tr>";
     }
     if (row.type === "right") {
       return "<tr>" +
-        "<td style=\"" + misraCellStyle(Object.assign({ align: "left" }, row), opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td>" +
-        "<td style=\"" + gapStyle() + "\"></td>" +
         "<td style=\"padding:0\"></td>" +
+        "<td style=\"" + gapStyle() + "\"></td>" +
+        "<td style=\"" + misraCellStyle(Object.assign({ align: "left" }, row), opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td>" +
         "</tr>";
     }
     if (row.type === "left") {
       return "<tr>" +
-        "<td style=\"padding:0\"></td>" +
-        "<td style=\"" + gapStyle() + "\"></td>" +
         "<td style=\"" + misraCellStyle(Object.assign({ align: "right" }, row), opts) + "\">" + escapeHtml(blankMisraLabel(row.misra)) + "</td>" +
+        "<td style=\"" + gapStyle() + "\"></td>" +
+        "<td style=\"padding:0\"></td>" +
         "</tr>";
     }
     return "<tr>" +
-      "<td style=\"" + misraCellStyle({ align: "left" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.right)) + "</td>" +
-      "<td style=\"" + gapStyle() + "\"></td>" +
       "<td style=\"" + misraCellStyle({ align: "right" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.left)) + "</td>" +
+      "<td style=\"" + gapStyle() + "\"></td>" +
+      "<td style=\"" + misraCellStyle({ align: "left" }, opts) + "\">" + escapeHtml(blankMisraLabel(row.right)) + "</td>" +
       "</tr>";
   }
 
@@ -201,17 +224,17 @@
     if (cols.mode === "compact") {
       return "<tr>" +
         "<td style=\"padding:0\"></td>" +
-        "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
-        "<td style=\"" + gapStyle() + "\"></td>" +
         "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+        "<td style=\"" + gapStyle() + "\"></td>" +
+        "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
         "<td style=\"padding:0\"></td>" +
         "</tr>";
     }
 
     return "<tr>" +
-      "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
-      "<td style=\"" + gapStyle() + "\"></td>" +
       "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+      "<td style=\"" + gapStyle() + "\"></td>" +
+      "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
       "</tr>";
   }
 
@@ -264,6 +287,14 @@
       return rows;
     }
 
+    if (pattern === "three-plus-center-refrain") {
+      rows.push({ type: "triple", right: 1, middle: 2, left: 3 });
+      if (count >= 4) rows.push({ type: "center", misra: 4, align: "center", colspan: 4 });
+      if (count >= 6) rows.push({ type: "refrain", right: 5, left: 6 });
+      for (i = 7; i <= count; i++) rows.push({ type: "center", misra: i, align: "center", colspan: 4 });
+      return rows;
+    }
+
     for (i = 1; i <= count; i += 2) {
       rows.push({ type: "pair", right: i, left: i + 1 <= count ? i + 1 : "\u00a0" });
     }
@@ -272,6 +303,9 @@
 
   function templateColumns(opts) {
     var gap = clamp(Number((opts || {}).gapWidth || 4), 2, 10);
+    if ((opts || {}).misraPattern === "three-plus-center-refrain") {
+      return { c1: 30, c2: 30, c3: 30, c4: 10, mode: "four" };
+    }
     var side = (100 - gap) / 2;
     return { sadr: side, gap: gap, ajuz: side, mode: "three" };
   }
