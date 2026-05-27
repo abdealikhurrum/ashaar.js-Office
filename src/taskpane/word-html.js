@@ -531,6 +531,7 @@
   }
 
   function layoutTablesForPoem(text, opts, Ashaar) {
+    opts = opts || {};
     var poems = parsePoetry(String(text || ""), Ashaar);
     if (!poems.length) return null;
 
@@ -546,49 +547,59 @@
         if (N >= 3) {
           hasMultiMisra = true;
         } else {
-          N = 3; // use 3-col for regular stanzas within a multi-misra poem
+          N = 3;
         }
 
-        var colWidth = 100 / N;
+        // 2N-1 interleaved columns: content at even indices, gap at odd indices.
+        // This gives each gap its own fixed-width column so maqta spacing
+        // doesn't depend on middle-content column width.
+        var M = 2 * N - 1;
+        var gap = clamp(Number(opts.gapWidth || 4), 1, 10);
+        var cw = (100 - (N - 1) * gap) / N;
         var widths = [];
-        for (var i = 0; i < N; i++) widths.push(colWidth);
+        for (var i = 0; i < M; i++) widths.push(i % 2 === 0 ? cw : gap);
+
+        // Center content column in M-col grid (always an even index)
+        var centerMCol = 2 * Math.floor(N / 2);
 
         var rows = stanza.bayts.map(function (bayt) {
           var row = [];
+          for (var i = 0; i < M; i++) row.push({ text: "", align: "center" });
+
           if (bayt.type === "row") {
-            var K = bayt.misras.length;
-            if (K === N) {
+            var K = bayt.misras ? bayt.misras.length : 0;
+            if (K === 0) return row;
+            if (K === 1) {
+              row[centerMCol] = { text: bayt.misras[0].text, align: "center" };
+            } else if (K >= N) {
+              // Full N-misra row: content col i → M col 2i, misras reversed
               for (var i = 0; i < N; i++) {
                 var align = i === 0 ? "right" : i === N - 1 ? "left" : "center";
-                row.push({ text: bayt.misras[N - 1 - i].text, align: align });
+                row[2 * i] = { text: bayt.misras[N - 1 - i].text, align: align };
               }
+            } else if (K === 2) {
+              // Pair within multi-misra stanza: span full width
+              row[0] = { text: bayt.misras[1].text, align: "right" };
+              row[M - 1] = { text: bayt.misras[0].text, align: "left" };
             } else {
-              // K < N: fill rightmost K columns, empty on left
-              for (var i = 0; i < N; i++) {
-                if (i < N - K) {
-                  row.push({ text: "", align: "center" });
-                } else {
-                  var mIdx = N - 1 - i;
-                  var align = i === N - K ? "right" : i === N - 1 ? "left" : "center";
-                  row.push({ text: bayt.misras[mIdx].text, align: align });
-                }
+              // Partial K-misra row (3 <= K < N): occupy rightmost K content cols
+              for (var j = 0; j < K; j++) {
+                var contentCol = N - 1 - j;
+                var align = j === 0 ? "left" : j === K - 1 ? "right" : "center";
+                row[2 * contentCol] = { text: bayt.misras[j].text, align: align };
               }
             }
           } else if (!bayt.ajuz) {
-            for (var i = 0; i < N; i++) {
-              row.push({ text: i === Math.floor(N / 2) ? bayt.sadr : "", align: "center" });
-            }
+            row[centerMCol] = { text: bayt.sadr, align: "center" };
           } else {
-            for (var i = 0; i < N; i++) {
-              if (i === 0) row.push({ text: bayt.ajuz, align: "right" });
-              else if (i === N - 1) row.push({ text: bayt.sadr, align: "left" });
-              else row.push({ text: "", align: "center" });
-            }
+            row[0] = { text: bayt.ajuz, align: "right" };
+            row[M - 1] = { text: bayt.sadr, align: "left" };
           }
+
           return row;
         });
 
-        tables.push({ columnCount: N, rows: rows, widths: widths });
+        tables.push({ columnCount: M, rows: rows, widths: widths });
       });
     });
 
