@@ -235,4 +235,36 @@ assert.match(marsiyaWordHtml, /هائے كربلاء والو/);
 assert.equal((marsiyaWordHtml.match(/<col style=/g) || []).length, 3);
 assert.match(marsiyaWordHtml, /colspan="3"/);
 
+// Test: layoutTablesForPoem — native table path for multi-misra poems
+const poemTables3 = AshaarWord.layoutTablesForPoem(marsiyaSource, { justifyMode: "none" }, Ashaar);
+assert.ok(poemTables3, "Should return tables for multi-misra poem");
+assert.equal(poemTables3.length, 1);
+assert.equal(poemTables3[0].columnCount, 3);
+assert.equal(poemTables3[0].rows.length, 3);
+// Triple row: [ajuz-side, middle, sadr-side] — misras reversed into LTR column order
+assert.equal(poemTables3[0].rows[0][0].text, "صدق كے ارباب تھے"); // col 0 = misras[2]
+assert.equal(poemTables3[0].rows[0][1].text, "خلق ميں الباب تھے"); // col 1 = misras[1]
+assert.equal(poemTables3[0].rows[0][2].text, "شاه كے اصحاب تھے"); // col 2 = misras[0]
+assert.equal(poemTables3[0].rows[0][0].align, "right");
+assert.equal(poemTables3[0].rows[0][2].align, "left");
+// Solo row: text in middle cell, others empty
+assert.equal(poemTables3[0].rows[1][1].text, "هو گئے شہ پر فدا");
+assert.equal(poemTables3[0].rows[1][0].text, "");
+// Maqta row: ajuz in col 0, sadr in col 2
+assert.equal(poemTables3[0].rows[2][0].text, "هائے كربلاء والو");
+assert.equal(poemTables3[0].rows[2][2].text, "هائے كربلاء والو");
+
+// Regular 2-misra poem returns null (falls through to renderForWord)
+const regularPoem = "دل ناداں تجھے ہوا کیا ہے \\ آخر اس درد کی دوا کیا ہے";
+const poemTablesRegular = AshaarWord.layoutTablesForPoem(regularPoem, {}, Ashaar);
+assert.equal(poemTablesRegular, null, "Regular couplet poem should return null");
+
+// 5-misra poem
+const fiveMisraSource = "م1 \\ م2 \\ م3 \\ م4 \\ م5\nنعرہ \\";
+const poemTables5 = AshaarWord.layoutTablesForPoem(fiveMisraSource, {}, Ashaar);
+assert.ok(poemTables5);
+assert.equal(poemTables5[0].columnCount, 5);
+assert.equal(poemTables5[0].rows[0].length, 5);
+assert.equal(poemTables5[0].rows[0][4].text, "م1"); // misras[0] → rightmost col
+
 console.log("word-html tests passed");

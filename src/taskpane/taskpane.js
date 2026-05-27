@@ -185,6 +185,10 @@
         if (await insertNativeLayoutTables(context, tables, opts, source, replaceSelection)) return;
         html = "";
       } else {
+        var poemTables = AshaarWord.layoutTablesForPoem(source, opts, Ashaar);
+        if (poemTables) {
+          if (await insertNativeLayoutTables(context, poemTables, opts, source, replaceSelection)) return;
+        }
         try {
           html = AshaarWord.renderForWord(source, opts, Ashaar);
         } catch (error) {
