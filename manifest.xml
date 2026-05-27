@@ -20,7 +20,7 @@
     <Host Name="Document"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3000/src/taskpane/taskpane.html"/>
+    <SourceLocation DefaultValue="https://localhost:3000/src/taskpane/taskpane.html?v=20260527-native-layout"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -71,7 +71,7 @@
         <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/src/taskpane/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/src/taskpane/taskpane.html?v=20260527-native-layout"/>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://localhost:3000/"/>
       </bt:Urls>
       <bt:ShortStrings>

@@ -95,19 +95,31 @@ assert.deepEqual(AshaarWord.templateGrid({ misraCount: 6, misraPattern: "three-p
   { type: "refrain", right: 5, left: 6 }
 ]);
 
+assert.deepEqual(AshaarWord.templateGrid({ misraCount: 6, misraPattern: "multi-misra-row" }), [
+  { type: "triple", right: 1, middle: 2, left: 3 },
+  { type: "center", misra: 4, align: "center", colspan: 4 },
+  { type: "refrain", right: 5, left: 6 }
+]);
+
+assert.deepEqual(AshaarWord.parseLayoutSpec("3 | 2 | 1\n<4>\n6 - 5"), [
+  { type: "multi", cells: ["3", "2", "1"] },
+  { type: "center", misra: "4", align: "center", colspan: 4 },
+  { type: "pair", left: "6", right: "5" }
+]);
+
 const karbalaTemplate = AshaarWord.renderTemplateForWord({
   bandhCount: 3,
   misraCount: 6,
-  misraPattern: "three-plus-center-refrain",
+  layoutSpec: "3 | 2 | 1\n<4>\n6 - 5",
   fontMode: "document"
 });
 
 assert.equal((karbalaTemplate.match(/data-ashaar-template="true"/g) || []).length, 3);
 assert.equal((karbalaTemplate.match(/<tr>/g) || []).length, 9);
-assert.match(karbalaTemplate, /<colgroup><col style="width:10%">/);
-assert.match(karbalaTemplate, /<td style="padding:0"><\/td><td style="[^"]*text-align:right[^"]*">3<\/td><td style="[^"]*text-align:center[^"]*">2<\/td><td style="[^"]*text-align:left[^"]*">1<\/td>/);
-assert.match(karbalaTemplate, /colspan="4"[^>]*>4<\/td>/);
-assert.match(karbalaTemplate, />6<\/td><td colspan="2"[^>]*><\/td><td style="[^"]*text-align:left[^"]*">5<\/td>/);
+assert.match(karbalaTemplate, /<colgroup><col style="width:48%">/);
+assert.match(karbalaTemplate, /<td style="[^"]*text-align:right[^"]*">3<\/td><td style="[^"]*text-align:center[^"]*">2<\/td><td style="[^"]*text-align:left[^"]*">1<\/td>/);
+assert.match(karbalaTemplate, /<td style="[^"]*text-align:right[^"]*"> <\/td><td style="[^"]*text-align:center[^"]*">4<\/td><td style="[^"]*text-align:left[^"]*"> <\/td>/);
+assert.match(karbalaTemplate, />6<\/td><td style="[^"]*text-align:center[^"]*"> <\/td><td style="[^"]*text-align:left[^"]*">5<\/td>/);
 
 const nastaliq = AshaarWord.renderTemplateForWord({
   bandhCount: 1,
@@ -124,5 +136,51 @@ const plain = AshaarWord.justifyPlainTextBlock("سلام دنیا", {
 });
 
 assert.match(plain, /ـ/);
+
+const marsiya = [
+  "شاه كے اصحاب تھے \\ خلق ميں الباب تھے \\ صدق كے ارباب تھے \\",
+  "هو گئے شہ پر فدا \\",
+  "هائے كربلاء والو \\ هائے كربلاء والو",
+  "—",
+  "اهلِ بيت تھے عجب \\ اٗفقِ دعوت كے شٗہٗب \\ هو گئے قربان سب \\",
+  "خالي لشكر هو گيا \\",
+  "هائے كربلاء والو \\ هائے كربلاء والو"
+].join("\n");
+
+assert.deepEqual(AshaarWord.extractMisras(marsiya.split("\n—\n")[0]), [
+  "شاه كے اصحاب تھے",
+  "خلق ميں الباب تھے",
+  "صدق كے ارباب تھے",
+  "هو گئے شہ پر فدا",
+  "هائے كربلاء والو",
+  "هائے كربلاء والو"
+]);
+
+const marsiyaHtml = AshaarWord.renderTextWithLayoutForWord(marsiya, {
+  layoutSpec: "3 | 2 | 1\n<4>\n6 - 5",
+  fontMode: "document"
+});
+
+assert.equal((marsiyaHtml.match(/<table dir="rtl"/g) || []).length, 2);
+assert.match(marsiyaHtml, /صدق كے ارباب تھے/);
+assert.match(marsiyaHtml, /خلق ميں الباب تھے/);
+assert.match(marsiyaHtml, /شاه كے اصحاب تھے/);
+assert.match(marsiyaHtml, /هو گئے شہ پر فدا/);
+assert.match(marsiyaHtml, /هائے كربلاء والو/);
+assert.doesNotMatch(marsiyaHtml, /colspan=/);
+
+const marsiyaTables = AshaarWord.layoutTablesForText(marsiya, {
+  layoutSpec: "3 | 2 | 1\n<4>\n6 - 5",
+  fontMode: "document"
+});
+
+assert.equal(marsiyaTables.length, 2);
+assert.equal(marsiyaTables[0].columnCount, 3);
+assert.deepEqual(marsiyaTables[0].rows.map((row) => row.map((cell) => cell.text)), [
+  ["صدق كے ارباب تھے", "خلق ميں الباب تھے", "شاه كے اصحاب تھے"],
+  ["", "هو گئے شہ پر فدا", ""],
+  ["هائے كربلاء والو", "", "هائے كربلاء والو"]
+]);
+assert.deepEqual(marsiyaTables[0].rows[0].map((cell) => cell.align), ["right", "center", "left"]);
 
 console.log("word-html tests passed");

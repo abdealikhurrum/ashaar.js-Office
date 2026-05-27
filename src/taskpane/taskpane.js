@@ -12,7 +12,8 @@
   var widthMode = document.getElementById("width-mode");
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
-  var misraPattern = document.getElementById("misra-pattern");
+  var layoutPreset = document.getElementById("layout-preset");
+  var layoutSpec = document.getElementById("layout-spec");
   var fontMode = document.getElementById("font-mode");
   var tatweelCount = document.getElementById("tatweel-count");
   var tatweelValue = document.getElementById("tatweel-value");
@@ -27,7 +28,8 @@
       widthMode: widthMode.value,
       bandhCount: Number(bandhCount.value || 1),
       misraCount: Number(misraCount.value || 4),
-      misraPattern: misraPattern.value,
+      misraPattern: layoutPreset.value,
+      layoutSpec: layoutSpec.value,
       fontMode: fontMode.value,
       tatweelCount: Number(tatweelCount.value || 0),
       gapWidth: Number(gapWidth.value || 4)
@@ -62,7 +64,7 @@
     tatweelValue.textContent = String(opts.tatweelCount);
     preview.className = "ashaar preview";
     preview.style.setProperty("--ashaar-font-family", previewFontFamily(opts.fontMode));
-    preview.innerHTML = Ashaar.renderText(input.value, { gapWidth: opts.gapWidth + "%" });
+    preview.innerHTML = Ashaar.renderText(String(input.value || ""), { gapWidth: opts.gapWidth + "%" });
     Ashaar.applyRenderOptions(preview, { gapWidth: opts.gapWidth + "%" });
     if (opts.layout === "stacked") preview.classList.add("ashaar--stacked");
     if (opts.layout === "auto" || opts.layout === "compact") Ashaar.applyAutoLayout(preview, { layout: "auto" });
@@ -73,6 +75,33 @@
     } else if (opts.justify === "kashida") {
       Ashaar.justifyEl(preview, {});
     }
+  }
+
+  function layoutSpecForPreset(preset, count) {
+    count = Math.max(1, Number(count || 4));
+    var rows = [];
+    var i;
+    if (preset === "centered-stack") {
+      for (i = 1; i <= count; i++) rows.push("<" + i + ">");
+      return rows.join("\n");
+    }
+    if (preset === "alternate-right") {
+      for (i = 1; i <= count; i++) rows.push(i % 2 ? i + " >" : "< " + i);
+      return rows.join("\n");
+    }
+    if (preset === "indented-stack") {
+      for (i = 1; i <= count; i++) rows.push(new Array(Math.max(0, count - i) + 1).join("  ") + i);
+      return rows.join("\n");
+    }
+    if (preset === "karbala-refrain") {
+      return "3 | 2 | 1\n<4>\n6 - 5";
+    }
+    for (i = 1; i <= count; i += 2) rows.push((i + 1 <= count ? i + 1 : "") + " - " + i);
+    return rows.join("\n");
+  }
+
+  function applyLayoutPreset() {
+    layoutSpec.value = layoutSpecForPreset(layoutPreset.value, misraCount.value);
   }
 
   async function withWord(callback) {
@@ -88,9 +117,80 @@
     }
   }
 
+  function wordAlignment(align) {
+    if (align === "left") return "Left";
+    if (align === "right") return "Right";
+    return "Centered";
+  }
+
+  function formatNativeLayoutTable(table, layoutTable, source, opts) {
+    table.alignment = "Centered";
+    table.horizontalAlignment = "Centered";
+    table.styleFirstColumn = false;
+    table.styleLastColumn = false;
+    table.styleBandedColumns = false;
+    table.styleBandedRows = false;
+
+    layoutTable.widths.forEach(function (width, columnIndex) {
+      var cell = table.getCell(0, columnIndex);
+      cell.columnWidth = Math.max(8, 468 * width / 100);
+    });
+
+    layoutTable.rows.forEach(function (row, rowIndex) {
+      row.forEach(function (layoutCell, columnIndex) {
+        var cell = table.getCell(rowIndex, columnIndex);
+        cell.horizontalAlignment = wordAlignment(layoutCell.align);
+      });
+    });
+
+    var control = table.insertContentControl();
+    control.title = "Ashaar Poem";
+    control.tag = AshaarWord.contentControlTag(source, opts);
+    control.appearance = "BoundingBox";
+  }
+
+  async function insertNativeLayoutTables(context, tables, opts, source, replaceSelection) {
+    if (!tables.length) return false;
+
+    var selection = context.document.getSelection();
+    if (replaceSelection) {
+      selection.insertText("", Word.InsertLocation.replace);
+      await context.sync();
+      selection = context.document.getSelection();
+    }
+
+    var anchor = selection;
+    tables.forEach(function (layoutTable, index) {
+      var values = layoutTable.rows.map(function (row) {
+        return row.map(function (cell) {
+          return AshaarWord.justifyPlainTextBlock(cell.text || "", opts);
+        });
+      });
+      var insertLocation = index === 0 ? Word.InsertLocation.after : Word.InsertLocation.after;
+      var table = anchor.insertTable(layoutTable.rows.length, layoutTable.columnCount, insertLocation, values);
+      formatNativeLayoutTable(table, layoutTable, source, opts);
+      anchor = table.insertParagraph("", Word.InsertLocation.after);
+    });
+    await context.sync();
+    return true;
+  }
+
   async function insertPoem(replaceSelection) {
     await withWord(async function (context) {
-      var html = AshaarWord.renderForWord(input.value, options(), Ashaar);
+      var opts = options();
+      var source = String(input.value || "");
+      var html;
+      if (opts.layoutSpec && opts.layoutSpec.trim()) {
+        var tables = AshaarWord.layoutTablesForText(source, opts);
+        if (await insertNativeLayoutTables(context, tables, opts, source, replaceSelection)) return;
+        html = "";
+      } else {
+        try {
+          html = AshaarWord.renderForWord(source, opts, Ashaar);
+        } catch (error) {
+          html = "";
+        }
+      }
       if (!html) {
         setMessage("Enter poetry text first.");
         return;
@@ -99,7 +199,7 @@
       var inserted = selection.insertHtml(html, replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
       var control = inserted.insertContentControl();
       control.title = "Ashaar Poem";
-      control.tag = AshaarWord.contentControlTag(input.value, options());
+      control.tag = AshaarWord.contentControlTag(source, opts);
       control.appearance = "BoundingBox";
       await context.sync();
     });
@@ -108,6 +208,10 @@
   async function insertStructure() {
     await withWord(async function (context) {
       var opts = options();
+      if (opts.layoutSpec && opts.layoutSpec.trim()) {
+        var tables = AshaarWord.layoutTablesForTemplate(opts);
+        if (await insertNativeLayoutTables(context, tables, opts, "template", false)) return;
+      }
       var html = AshaarWord.renderTemplateForWord(opts);
       var selection = context.document.getSelection();
       var inserted = selection.insertHtml(html, Word.InsertLocation.end);
@@ -145,10 +249,12 @@
   function bind() {
     if (isBound) return;
     isBound = true;
-    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, misraPattern, fontMode, tatweelCount, gapWidth].forEach(function (el) {
+    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, layoutPreset, layoutSpec, fontMode, tatweelCount, gapWidth].forEach(function (el) {
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });
+    layoutPreset.addEventListener("change", applyLayoutPreset);
+    misraCount.addEventListener("change", applyLayoutPreset);
     modeTable.addEventListener("click", function () { setMode("table"); });
     modeConvert.addEventListener("click", function () { setMode("convert"); });
     document.getElementById("insert-structure").addEventListener("click", insertStructure);
@@ -156,6 +262,7 @@
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
+    applyLayoutPreset();
     renderPreview();
     setMode("table");
   }

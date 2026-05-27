@@ -129,6 +129,14 @@ textarea {
   line-height: 2.1;
 }
 
+.layout-spec {
+  min-height: 92px;
+  direction: ltr;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
