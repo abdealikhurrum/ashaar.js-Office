@@ -273,4 +273,39 @@ assert.equal(poemTables5[0].columnCount, 9); // M = 2*5-1 = 9
 assert.equal(poemTables5[0].rows[0].length, 9);
 assert.equal(poemTables5[0].rows[0][0].text, "م1"); // misras[0] (sadr) → col 0 = visual right in RTL
 
+// ── renderForWordOoxml ─────────────────────────────────────────────────────
+
+// 2-misra poem: N=2, gapCols=1 → GRID=7 (2*3+1*1=7)
+const ooxml2misra = AshaarWord.renderForWordOoxml(
+  "دل ناداں تجھے ہوا کیا ہے \\ آخر اس درد کی دوا کیا ہے",
+  { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360
+);
+assert.match(ooxml2misra, /<w:tbl>/);
+assert.match(ooxml2misra, /<w:bidiVisual\/>/);
+assert.match(ooxml2misra, /<w:gridSpan w:val="/);
+// GRID=7 columns: 7 gridCol elements
+assert.equal((ooxml2misra.match(/<w:gridCol /g) || []).length, 7);
+// Two misra cells + one gap cell = 3 tc elements in the row (gridSpan sums to 7)
+const tc2 = (ooxml2misra.match(/<w:tc>/g) || []).length;
+assert.equal(tc2, 3, "N=2: 2 misra cells + 1 gap cell");
+assert.match(ooxml2misra, /دل ناداں تجھے ہوا کیا ہے/);
+assert.match(ooxml2misra, /آخر اس درد کی دوا کیا ہے/);
+
+// 3-misra marsiya stanza: N=3, gapCols=1 → GRID=11
+const ooxml3misra = AshaarWord.renderForWordOoxml(marsiyaSource,
+  { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360
+);
+// GRID=11 for N=3 stanza
+assert.equal((ooxml3misra.match(/<w:gridCol /g) || []).length, 11);
+assert.match(ooxml3misra, /<w:bidiVisual\/>/);
+assert.match(ooxml3misra, /شاه كے اصحاب تھے/);
+assert.match(ooxml3misra, /هو گئے شہ پر فدا/); // solo line
+// Solo row: 3 tc elements (leftPad + content + rightPad) with leftPad = floor((11-3)/2)=4
+assert.match(ooxml3misra, /<w:jc w:val="center"\/>/); // solo paragraph centered
+
+// misraSpans: proportional allocation
+const spans = AshaarWord.misraSpans(["abc", "abcdef"], 6); // weights 3:6 → 2:4
+assert.equal(spans[0] + spans[1], 6, "spans must sum to contentCols");
+assert.ok(spans[1] > spans[0], "longer text gets more columns");
+
 console.log("word-html tests passed");

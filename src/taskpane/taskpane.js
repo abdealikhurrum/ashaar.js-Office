@@ -188,13 +188,14 @@
       selFontP.load("font/size,font/name");
       await context.sync();
 
+      // pageLayout requires WordApi 1.5; fall back to US-Letter 6.5" on older builds
+      var plP = sectionP.pageLayout;
+      var textWidthTwips = plP && plP.width
+        ? Math.round((plP.width - (plP.leftMargin || 0) - (plP.rightMargin || 0)) * 20)
+        : 9360;
+
       if (opts.justifyMode === "kashida") {
-        var plP = sectionP.pageLayout;
-        // pageLayout requires WordApi 1.5; fall back to US-Letter 6.5" text width on older builds
-        var textWidthTwipsP = plP && plP.width
-          ? Math.round((plP.width - (plP.leftMargin || 0) - (plP.rightMargin || 0)) * 20)
-          : 9360;
-        opts._textWidthPx = textWidthTwipsP * 96 / 1440;
+        opts._textWidthPx = textWidthTwips * 96 / 1440;
         var fontSizeP = selFontP.font.size || 12;
         var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
                       : opts.fontMode === "arabic-serif" ? "Scheherazade New"
@@ -207,17 +208,19 @@
         }
       }
 
-      var html;
+      var ooxmlBody;
       try {
-        html = AshaarWord.renderForWord(source, opts, Ashaar);
+        ooxmlBody = AshaarWord.renderForWordOoxml(source, opts, Ashaar, textWidthTwips);
       } catch (err) {
         setMessage("Render error: " + (err.message || String(err)));
         return;
       }
-      if (!html) { setMessage("No content generated."); return; }
+      if (!ooxmlBody) { setMessage("No content generated."); return; }
 
+      var ooxml = AshaarWord.wrapOoxml(ooxmlBody);
       var selection = context.document.getSelection();
-      var inserted = selection.insertHtml(html, replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
+      var inserted = selection.insertOoxml(ooxml,
+        replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
       var control = inserted.insertContentControl();
       control.title = "Ashaar Poem";
       control.tag = AshaarWord.contentControlTag(source, opts);

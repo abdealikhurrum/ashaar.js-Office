@@ -801,6 +801,193 @@
     }).join("\n");
   }
 
+  // ── OOXML table rendering ────────────────────────────────────────────────
+
+  var BASE_CPM = 3; // baseline grid columns per misra
+
+  function escapeXml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Compute proportional column spans for misra texts summing to contentCols.
+  function misraSpans(texts, contentCols) {
+    var weights = texts.map(function (t) { return visibleWeight(t); });
+    var total = weights.reduce(function (a, b) { return a + b; }, 0);
+    var spans = weights.map(function (w) {
+      return Math.max(1, Math.round(w / total * contentCols));
+    });
+    var delta = contentCols - spans.reduce(function (a, b) { return a + b; }, 0);
+    spans[spans.length - 1] = Math.max(1, spans[spans.length - 1] + delta);
+    return spans;
+  }
+
+  // Derive grid parameters for a stanza.
+  function stanzaGridInfo(stanza, opts, textWidthTwips) {
+    var gapCols = Math.max(1, Math.round(Number((opts || {}).gapWidth || 1)));
+    var N = 0;
+    stanza.bayts.forEach(function (b) {
+      if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
+      else if (b.ajuz) N = Math.max(N, 2);
+      else N = Math.max(N, 1);
+    });
+    N = Math.max(N, 2);
+    var GRID = N * BASE_CPM + (N - 1) * gapCols;
+    var contentCols = N * BASE_CPM;
+    var colWidthTwips = Math.max(1, Math.round(textWidthTwips / GRID));
+    return { N: N, GRID: GRID, gapCols: gapCols, contentCols: contentCols, cwt: colWidthTwips };
+  }
+
+  function tblBordersXml() {
+    var none = 'w:val="none" w:sz="0" w:space="0" w:color="auto"';
+    return "<w:tblBorders>" +
+      "<w:top " + none + "/><w:left " + none + "/>" +
+      "<w:bottom " + none + "/><w:right " + none + "/>" +
+      "<w:insideH " + none + "/><w:insideV " + none + "/>" +
+      "</w:tblBorders>";
+  }
+
+  function tblGridXml(GRID, cwt) {
+    var col = '<w:gridCol w:w="' + cwt + '"/>';
+    var g = "<w:tblGrid>";
+    for (var i = 0; i < GRID; i++) g += col;
+    return g + "</w:tblGrid>";
+  }
+
+  function tcXml(span, cwt, paraXml) {
+    return "<w:tc>" +
+      "<w:tcPr>" +
+        '<w:gridSpan w:val="' + span + '"/>' +
+        '<w:tcW w:w="' + (span * cwt) + '" w:type="dxa"/>' +
+        (paraXml ? '<w:vAlign w:val="bottom"/>' : "") +
+      "</w:tcPr>" +
+      (paraXml || "<w:p/>") +
+      "</w:tc>";
+  }
+
+  function misraParaXml(text, align, isRefrain, opts) {
+    var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    var rpr = "<w:rPr><w:rtl/>";
+    if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
+    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
+    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    rpr += "</w:rPr>";
+    return "<w:p>" +
+      "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" +
+      "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
+      "</w:p>";
+  }
+
+  function baytRowsOoxml(bayt, si, opts) {
+    var N = si.N, gapCols = si.gapCols, contentCols = si.contentCols, cwt = si.cwt;
+    var textWidthPx = (opts || {})._textWidthPx || 0;
+
+    function justify(text, span) {
+      var px = textWidthPx > 0 ? (span / si.GRID) * textWidthPx : 0;
+      return justifyText(text, opts, px);
+    }
+
+    function gapTc() { return tcXml(gapCols, cwt, null); }
+    function padTc(p) { return p > 0 ? tcXml(p, cwt, null) : ""; }
+
+    function soloRow(text, isRefrain) {
+      var soloSpan = BASE_CPM;
+      var leftPad = Math.floor((si.GRID - soloSpan) / 2);
+      var rightPad = si.GRID - soloSpan - leftPad;
+      var para = misraParaXml(justify(text, soloSpan), "center", isRefrain, opts);
+      return "<w:tr>" + padTc(leftPad) + tcXml(soloSpan, cwt, para) + padTc(rightPad) + "</w:tr>";
+    }
+
+    function misraRow(texts, refrains, needsPad) {
+      var K = texts.length;
+      // Use K*BASE_CPM as content budget so partial rows pad symmetrically
+      var kContentCols = K * BASE_CPM;
+      var spans = misraSpans(texts, kContentCols);
+      var kUsed = spans.reduce(function (a, b) { return a + b; }, 0) + (K - 1) * gapCols;
+      var leftPad = needsPad ? Math.floor((si.GRID - kUsed) / 2) : 0;
+      var rightPad = needsPad ? si.GRID - kUsed - leftPad : 0;
+      var cells = "";
+      for (var i = 0; i < K; i++) {
+        var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
+        cells += tcXml(spans[i], cwt, misraParaXml(justify(texts[i], spans[i]), align, refrains[i], opts));
+        if (i < K - 1) cells += gapTc();
+      }
+      return "<w:tr>" + padTc(leftPad) + cells + padTc(rightPad) + "</w:tr>";
+    }
+
+    if (bayt.type === "row") {
+      var misras = bayt.misras || [];
+      var K = misras.length;
+      if (K === 0) return "";
+      if (K === 1 || ((opts || {}).layoutMode === "stacked")) {
+        return soloRow(misras[0].text, !!misras[0].isRefrain);
+      }
+      var texts = misras.map(function (m) { return m.text; });
+      var refs = misras.map(function (m) { return !!m.isRefrain; });
+      return misraRow(texts, refs, K < N);
+    }
+
+    // Old-format bayt (sadr / ajuz)
+    if (!bayt.ajuz || ((opts || {}).layoutMode === "stacked")) {
+      return soloRow(bayt.sadr || "", !!bayt.sadrRefrain);
+    }
+    return misraRow(
+      [bayt.sadr, bayt.ajuz],
+      [!!bayt.sadrRefrain, !!bayt.ajuzRefrain],
+      N > 2
+    );
+  }
+
+  function stanzaTableOoxml(stanza, opts, textWidthTwips) {
+    var si = stanzaGridInfo(stanza, opts, textWidthTwips);
+    var tblPr = "<w:tblPr>" +
+      '<w:tblW w:w="0" w:type="auto"/>' +
+      '<w:jc w:val="center"/>' +
+      tblBordersXml() +
+      "<w:bidiVisual/>" +
+      "</w:tblPr>";
+    var rows = stanza.bayts.map(function (bayt) {
+      return baytRowsOoxml(bayt, si, opts);
+    }).filter(Boolean).join("");
+    return "<w:tbl>" + tblPr + tblGridXml(si.GRID, si.cwt) + rows + "</w:tbl>";
+  }
+
+  function renderForWordOoxml(text, opts, Ashaar, textWidthTwips) {
+    opts = opts || {};
+    var twips = (textWidthTwips > 0) ? textWidthTwips : 9360;
+    var poems = parsePoetry(String(text || ""), Ashaar);
+    if (!poems.length) return "";
+    var tables = [];
+    poems.forEach(function (poem) {
+      poem.stanzas.forEach(function (stanza) {
+        tables.push(stanzaTableOoxml(stanza, opts, twips));
+      });
+    });
+    return tables.join("<w:p/>");
+  }
+
+  function wrapOoxml(bodyContent) {
+    var wns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+    var pkgns = 'xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"';
+    var rels = '<pkg:part pkg:name="/_rels/.rels"' +
+      ' pkg:contentType="application/vnd.openxmlformats-package.relationships+xml"' +
+      ' pkg:padding="512"><pkg:xmlData>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1"' +
+      ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"' +
+      ' Target="word/document.xml"/>' +
+      '</Relationships></pkg:xmlData></pkg:part>';
+    var docPart = '<pkg:part pkg:name="/word/document.xml"' +
+      ' pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml">' +
+      '<pkg:xmlData><w:document ' + wns + '><w:body>' +
+      bodyContent + '<w:sectPr/></w:body></w:document></pkg:xmlData></pkg:part>';
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<pkg:package ' + pkgns + '>' + rels + docPart + '</pkg:package>';
+  }
+
   return {
     renderForWord: renderForWord,
     renderTextWithLayoutForWord: renderTextWithLayoutForWord,
@@ -814,6 +1001,9 @@
     parseLayoutSpec: parseLayoutSpec,
     tableColumns: tableColumns,
     contentControlTag: contentControlTag,
-    justifyPlainTextBlock: justifyPlainTextBlock
+    justifyPlainTextBlock: justifyPlainTextBlock,
+    renderForWordOoxml: renderForWordOoxml,
+    wrapOoxml: wrapOoxml,
+    misraSpans: misraSpans
   };
 }));
