@@ -6,8 +6,9 @@
   }
 }(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify) {
 
-  // US-Letter page with 1-inch margins: 6.5 inches × 1440 twips/inch = 9360 twips.
-  var TEXT_WIDTH = 9360;
+  // US-Letter with 1-inch margins: 6.5" × 1440 twips/inch = 9360 twips.
+  // Used as the fallback when no measured page width is available (tests, browser preview).
+  var TEXT_WIDTH_DEFAULT = 9360;
 
   function escapeXml(s) {
     return String(s || "")
@@ -30,13 +31,17 @@
   //
   // Col 0: no stop needed — text starts at the left margin automatically.
   // Cols 1..N-2: CENTER stops at each column's midpoint.
-  // Col N-1: RIGHT stop at TEXT_WIDTH (sadr right-aligns to the right margin).
-  function tabStopsForN(N) {
-    var colW = TEXT_WIDTH / N;
+  // Col N-1: RIGHT stop at W (sadr right-aligns to the right margin).
+  //
+  // textWidth: measured text-area width in twips (pageWidth - leftMargin - rightMargin,
+  //            all in points × 20).  Falls back to TEXT_WIDTH_DEFAULT when omitted.
+  function tabStopsForN(N, textWidth) {
+    var W = (textWidth > 0) ? textWidth : TEXT_WIDTH_DEFAULT;
+    var colW = W / N;
     var stops = [];
     for (var i = 1; i < N; i++) {
       if (i === N - 1) {
-        stops.push({ pos: TEXT_WIDTH, val: "right" });
+        stops.push({ pos: W, val: "right" });
       } else {
         // Midpoint of column i: (i + 0.5) × colW = (2i+1) × colW / 2
         stops.push({ pos: Math.round((2 * i + 1) * colW / 2), val: "center" });
@@ -139,7 +144,9 @@
   }
 
   // Convert poetry source text to OOXML paragraph markup (no document wrapper).
-  function poemToOoxml(source, opts, Ashaar) {
+  // textWidth: actual text-area width in twips, read from Word's section page layout.
+  //            Omit (or pass 0) to fall back to the US-Letter default.
+  function poemToOoxml(source, opts, Ashaar, textWidth) {
     opts = opts || {};
     if (!Ashaar || typeof Ashaar.parse !== "function") throw new Error("Ashaar.js not loaded.");
     var poems = Ashaar.parse(String(source || ""));
@@ -155,7 +162,7 @@
           if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
         });
 
-        var stops = tabStopsForN(N);
+        var stops = tabStopsForN(N, textWidth);
         var stopsXml = tabStopsXml(stops);
 
         stanza.bayts.forEach(function (bayt, baytIdx) {

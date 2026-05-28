@@ -18,6 +18,11 @@ assert.equal(stops3[0].pos, 4680); // (2×1+1) × 9360/(2×3) = 3×3120/2 = 4680
 assert.equal(stops3[1].val, "right");
 assert.equal(stops3[1].pos, 9360);
 
+// tabStopsForN respects a custom textWidth (e.g. A4 with narrow margins)
+const stopsCustom = AshaarTabStop.tabStopsForN(3, 8640); // hypothetical 6-inch text width
+assert.equal(stopsCustom[0].pos, 4320); // midpoint of 8640 for N=3
+assert.equal(stopsCustom[1].pos, 8640); // right margin
+
 // N=5: three CENTER stops + one RIGHT stop
 const stops5 = AshaarTabStop.tabStopsForN(5);
 assert.equal(stops5.length, 4);
