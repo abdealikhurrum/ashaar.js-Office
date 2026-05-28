@@ -291,17 +291,15 @@ assert.equal(tc2, 3, "N=2: 2 misra cells + 1 gap cell");
 assert.match(ooxml2misra, /دل ناداں تجھے ہوا کیا ہے/);
 assert.match(ooxml2misra, /آخر اس درد کی دوا کیا ہے/);
 
-// 3-misra marsiya: each bayt gets its own table with its own grid.
-// Row 1 (3-misra): GRID=11 → 11 gridCol elements
-// Row 2 (solo): standalone <w:p>, no table → 0 gridCol elements
-// Row 3 (2-misra maqta): GRID=7 → 7 gridCol elements  Total: 18
+// 3-misra marsiya stanza: one table with GRID=11 for all rows
+// Row 1 (3-misra): spans=[3,1,3,1,3]=11; Row 2 (solo): padded; Row 3 (2-misra): spans=[5,1,5]=11
 const ooxml3misra = AshaarWord.renderForWordOoxml(marsiyaSource,
   { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360
 );
-assert.equal((ooxml3misra.match(/<w:gridCol /g) || []).length, 18); // 11 + 7
+assert.equal((ooxml3misra.match(/<w:gridCol /g) || []).length, 11); // single GRID=11 table
 assert.match(ooxml3misra, /<w:bidiVisual\/>/);
 assert.match(ooxml3misra, /شاه كے اصحاب تھے/);
-assert.match(ooxml3misra, /هو گئے شہ پر فدا/); // solo line as <w:p>
+assert.match(ooxml3misra, /هو گئے شہ پر فدا/); // solo row (padded, centered)
 assert.match(ooxml3misra, /<w:jc w:val="center"\/>/); // solo paragraph centered
 
 // misraSpans: proportional allocation

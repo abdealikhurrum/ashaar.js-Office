@@ -814,8 +814,11 @@
   }
 
   // Compute proportional column spans for misra texts summing to contentCols.
-  function misraSpans(texts, contentCols) {
-    var weights = texts.map(function (t) { return visibleWeight(t); });
+  // Pass a canvas 2D context as ctx for accurate font-metric measurement; falls back to visibleWeight.
+  function misraSpans(texts, contentCols, ctx) {
+    var weights = texts.map(function (t) {
+      return ctx ? Math.max(1, ctx.measureText(String(t || "")).width) : visibleWeight(t);
+    });
     var total = weights.reduce(function (a, b) { return a + b; }, 0);
     var spans = weights.map(function (w) {
       return Math.max(1, Math.round(w / total * contentCols));
@@ -823,6 +826,21 @@
     var delta = contentCols - spans.reduce(function (a, b) { return a + b; }, 0);
     spans[spans.length - 1] = Math.max(1, spans[spans.length - 1] + delta);
     return spans;
+  }
+
+  function stanzaGridInfo(stanza, opts, textWidthTwips) {
+    var gapCols = Math.max(1, Math.round(Number((opts || {}).gapWidth || 1)));
+    var N = 0;
+    stanza.bayts.forEach(function (b) {
+      if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
+      else if (b.ajuz) N = Math.max(N, 2);
+      else N = Math.max(N, 1);
+    });
+    N = Math.max(N, 2);
+    var GRID = N * BASE_CPM + (N - 1) * gapCols;
+    var contentCols = N * BASE_CPM;
+    var colWidthTwips = Math.max(1, Math.round(textWidthTwips / GRID));
+    return { N: N, GRID: GRID, gapCols: gapCols, contentCols: contentCols, cwt: colWidthTwips };
   }
 
   function tblBordersXml() {
@@ -865,55 +883,75 @@
       "</w:p>";
   }
 
-  // Each bayt becomes its own <w:tbl> with a grid sized for that bayt's K misras.
-  // This lets a 2-misra maqta use GRID=7 (each misra 3/7 wide) independently of
-  // a 3-misra row's GRID=11, instead of all rows sharing a single stanza-wide grid.
-  function baytTableOoxml(bayt, opts, textWidthTwips) {
+  function baytRowsOoxml(bayt, si, opts) {
+    var N = si.N, gapCols = si.gapCols, cwt = si.cwt;
     var textWidthPx = (opts || {})._textWidthPx || 0;
-    var gapCols = Math.max(1, Math.round(Number((opts || {}).gapWidth || 1)));
-    var isRow = bayt.type === "row";
-    var misras = isRow ? (bayt.misras || []) : null;
-    var K = isRow ? misras.length : (bayt.ajuz ? 2 : 1);
-
-    // Solo or stacked: centered paragraph (no table overhead)
-    if (K <= 1 || ((opts || {}).layoutMode === "stacked")) {
-      var txt = isRow ? (misras[0] ? misras[0].text : "") : (bayt.sadr || "");
-      var ref = isRow ? !!(misras[0] && misras[0].isRefrain) : !!bayt.sadrRefrain;
-      return misraParaXml(justifyText(txt, opts, 0), "center", ref, opts);
-    }
-
-    // Multi-misra: own table with grid sized for this bayt's K misras
-    var GRID = K * BASE_CPM + (K - 1) * gapCols;
-    var cwt = Math.max(1, Math.round(textWidthTwips / GRID));
 
     function justify(text, span) {
-      var px = textWidthPx > 0 ? (span / GRID) * textWidthPx : 0;
+      var px = textWidthPx > 0 ? (span / si.GRID) * textWidthPx : 0;
       return justifyText(text, opts, px);
     }
 
-    var texts = isRow
-      ? misras.map(function (m) { return m.text; })
-      : [bayt.sadr, bayt.ajuz];
-    var refs = isRow
-      ? misras.map(function (m) { return !!m.isRefrain; })
-      : [!!bayt.sadrRefrain, !!bayt.ajuzRefrain];
+    function gapTc() { return tcXml(gapCols, cwt, null); }
+    function padTc(p) { return p > 0 ? tcXml(p, cwt, null) : ""; }
 
-    var spans = misraSpans(texts, K * BASE_CPM);
-    var cells = "";
-    for (var i = 0; i < K; i++) {
-      var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
-      cells += tcXml(spans[i], cwt, misraParaXml(justify(texts[i], spans[i]), align, refs[i], opts));
-      if (i < K - 1) cells += tcXml(gapCols, cwt, null);
+    function soloRow(text, isRefrain) {
+      var soloSpan = BASE_CPM;
+      var leftPad = Math.floor((si.GRID - soloSpan) / 2);
+      var rightPad = si.GRID - soloSpan - leftPad;
+      var para = misraParaXml(justify(text, soloSpan), "center", isRefrain, opts);
+      return "<w:tr>" + padTc(leftPad) + tcXml(soloSpan, cwt, para) + padTc(rightPad) + "</w:tr>";
     }
 
-    var tblPrXml = "<w:tblPr>" +
+    function misraRow(texts, refrains) {
+      var K = texts.length;
+      // Full available content width (GRID minus gaps) so partial rows fill the table width.
+      // The gap boundary lands on a gridCol boundary, giving Word layout flexibility.
+      var kContentCols = si.GRID - (K - 1) * gapCols;
+      var spans = misraSpans(texts, kContentCols, (opts || {})._justifyCtx || null);
+      var cells = "";
+      for (var i = 0; i < K; i++) {
+        var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
+        cells += tcXml(spans[i], cwt, misraParaXml(justify(texts[i], spans[i]), align, refrains[i], opts));
+        if (i < K - 1) cells += gapTc();
+      }
+      return "<w:tr>" + cells + "</w:tr>";
+    }
+
+    if (bayt.type === "row") {
+      var misras = bayt.misras || [];
+      var K = misras.length;
+      if (K === 0) return "";
+      if (K === 1 || ((opts || {}).layoutMode === "stacked")) {
+        return soloRow(misras[0].text, !!misras[0].isRefrain);
+      }
+      var texts = misras.map(function (m) { return m.text; });
+      var refs = misras.map(function (m) { return !!m.isRefrain; });
+      return misraRow(texts, refs);
+    }
+
+    // Old-format bayt (sadr / ajuz)
+    if (!bayt.ajuz || ((opts || {}).layoutMode === "stacked")) {
+      return soloRow(bayt.sadr || "", !!bayt.sadrRefrain);
+    }
+    return misraRow(
+      [bayt.sadr, bayt.ajuz],
+      [!!bayt.sadrRefrain, !!bayt.ajuzRefrain]
+    );
+  }
+
+  function stanzaTableOoxml(stanza, opts, textWidthTwips) {
+    var si = stanzaGridInfo(stanza, opts, textWidthTwips);
+    var tblPr = "<w:tblPr>" +
       '<w:tblW w:w="0" w:type="auto"/>' +
       '<w:jc w:val="center"/>' +
       tblBordersXml() +
       "<w:bidiVisual/>" +
       "</w:tblPr>";
-
-    return "<w:tbl>" + tblPrXml + tblGridXml(GRID, cwt) + "<w:tr>" + cells + "</w:tr></w:tbl>";
+    var rows = stanza.bayts.map(function (bayt) {
+      return baytRowsOoxml(bayt, si, opts);
+    }).filter(Boolean).join("");
+    return "<w:tbl>" + tblPr + tblGridXml(si.GRID, si.cwt) + rows + "</w:tbl>";
   }
 
   function renderForWordOoxml(text, opts, Ashaar, textWidthTwips) {
@@ -921,18 +959,13 @@
     var twips = (textWidthTwips > 0) ? textWidthTwips : 9360;
     var poems = parsePoetry(String(text || ""), Ashaar);
     if (!poems.length) return "";
-    // Zero-spacing paragraph keeps back-to-back per-bayt tables visually continuous
-    var rowConnector = '<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:bidi/></w:pPr></w:p>';
-    var stanzas = [];
+    var tables = [];
     poems.forEach(function (poem) {
       poem.stanzas.forEach(function (stanza) {
-        var items = stanza.bayts.map(function (bayt) {
-          return baytTableOoxml(bayt, opts, twips);
-        }).filter(Boolean);
-        if (items.length) stanzas.push(items.join(rowConnector));
+        tables.push(stanzaTableOoxml(stanza, opts, twips));
       });
     });
-    return stanzas.join("<w:p/>");
+    return tables.join("<w:p/>");
   }
 
   function wrapOoxml(bodyContent) {
