@@ -184,22 +184,24 @@
 
       var sectionP = context.document.sections.getFirst();
       sectionP.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
-      var normalStyleP = context.document.styles.getByName("Normal");
-      normalStyleP.load("font/size,font/name");
+      var selFontP = context.document.getSelection();
+      selFontP.load("font/size,font/name");
       await context.sync();
 
       if (opts.justifyMode === "kashida") {
         var plP = sectionP.pageLayout;
         var textWidthTwipsP = Math.round((plP.width - plP.leftMargin - plP.rightMargin) * 20);
         opts._textWidthPx = textWidthTwipsP * 96 / 1440;
-        var fontSizeP = normalStyleP.font.size || 12;
+        var fontSizeP = selFontP.font.size || 12;
         var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
                       : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                      : (normalStyleP.font.name || "Times New Roman");
+                      : (selFontP.font.name || "Times New Roman");
         var canvasP = document.createElement("canvas");
         var ctxP = canvasP.getContext("2d");
-        ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
-        opts._justifyCtx = ctxP;
+        if (ctxP) {
+          ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
+          opts._justifyCtx = ctxP;
+        }
       }
 
       var html;
@@ -283,22 +285,24 @@
       // pageLayout properties are in points; multiply by 20 to convert to twips.
       var section = context.document.sections.getFirst();
       section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
-      var normalStyle = context.document.styles.getByName("Normal");
-      normalStyle.load("font/size,font/name");
+      var selFont = context.document.getSelection();
+      selFont.load("font/size,font/name");
       await context.sync();
       var pl = section.pageLayout;
       var textWidthTwips = Math.round((pl.width - pl.leftMargin - pl.rightMargin) * 20);
 
       var opts = options();
       if (opts.justifyMode === "kashida") {
-        var fontSize = normalStyle.font.size || 12;
+        var fontSize = selFont.font.size || 12;
         var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
                      : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                     : (normalStyle.font.name || "Times New Roman");
+                     : (selFont.font.name || "Times New Roman");
         var canvas = document.createElement("canvas");
         var ctx = canvas.getContext("2d");
-        ctx.font = fontSize + "pt \"" + fontName + "\"";
-        opts._justifyCtx = ctx;
+        if (ctx) {
+          ctx.font = fontSize + "pt \"" + fontName + "\"";
+          opts._justifyCtx = ctx;
+        }
       }
       var source = String(input.value || "");
       var content;
