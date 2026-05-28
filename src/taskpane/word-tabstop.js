@@ -188,11 +188,26 @@
     return paras.join("");
   }
 
-  // Wrap paragraph markup in a minimal OOXML document for Range.insertOoxml().
+  // Wrap paragraph markup in a FlatOpc package for Range.insertOoxml().
+  // The bare <w:document> wrapper is rejected by Word for Mac; the full pkg:package
+  // format (same as getOoxml() returns) is required on all platforms.
   function wrapOoxml(bodyContent) {
-    var ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+    var wns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+    var pkgns = 'xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"';
+    var rels = '<pkg:part pkg:name="/_rels/.rels"' +
+      ' pkg:contentType="application/vnd.openxmlformats-package.relationships+xml"' +
+      ' pkg:padding="512"><pkg:xmlData>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1"' +
+      ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"' +
+      ' Target="word/document.xml"/>' +
+      '</Relationships></pkg:xmlData></pkg:part>';
+    var docPart = '<pkg:part pkg:name="/word/document.xml"' +
+      ' pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml">' +
+      '<pkg:xmlData><w:document ' + wns + '><w:body>' +
+      bodyContent + '<w:sectPr/></w:body></w:document></pkg:xmlData></pkg:part>';
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<w:document ' + ns + '><w:body>' + bodyContent + '<w:sectPr/></w:body></w:document>';
+      '<pkg:package ' + pkgns + '>' + rels + docPart + '</pkg:package>';
   }
 
   return {

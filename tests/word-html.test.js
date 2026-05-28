@@ -242,19 +242,19 @@ assert.ok(poemTables3, "Should return tables for multi-misra poem");
 assert.equal(poemTables3.length, 1);
 assert.equal(poemTables3[0].columnCount, 5); // M = 2*3-1 = 5 cols (3 content + 2 gap)
 assert.equal(poemTables3[0].rows.length, 3);
-// Triple row: content at cols 0,2,4 — misras reversed into LTR column order
-assert.equal(poemTables3[0].rows[0][0].text, "صدق كے ارباب تھے"); // col 0 = misras[2]
+// Triple row: col 0 = misras[0] (sadr, visual right in RTL), col 2 = misras[1], col 4 = misras[2] (ajuz, visual left)
+assert.equal(poemTables3[0].rows[0][0].text, "شاه كے اصحاب تھے"); // col 0 = misras[0] = sadr
 assert.equal(poemTables3[0].rows[0][1].text, "");                   // col 1 = gap
 assert.equal(poemTables3[0].rows[0][2].text, "خلق ميں الباب تھے"); // col 2 = misras[1]
 assert.equal(poemTables3[0].rows[0][3].text, "");                   // col 3 = gap
-assert.equal(poemTables3[0].rows[0][4].text, "شاه كے اصحاب تھے"); // col 4 = misras[0]
+assert.equal(poemTables3[0].rows[0][4].text, "صدق كے ارباب تھے"); // col 4 = misras[2] = ajuz
 assert.equal(poemTables3[0].rows[0][0].align, "right");
 assert.equal(poemTables3[0].rows[0][2].align, "center");
 assert.equal(poemTables3[0].rows[0][4].align, "left");
 // Solo row: text in center content col (col 2 for N=3), others empty
 assert.equal(poemTables3[0].rows[1][2].text, "هو گئے شہ پر فدا");
 assert.equal(poemTables3[0].rows[1][0].text, "");
-// Maqta row: ajuz in col 0, sadr in col 4 (M-1) — gap is fixed-width, not content-dependent
+// Maqta row: sadr in col 0 (visual right in RTL), ajuz in col 4 — both are same refrain text here
 assert.equal(poemTables3[0].rows[2][0].text, "هائے كربلاء والو");
 assert.equal(poemTables3[0].rows[2][4].text, "هائے كربلاء والو");
 
@@ -269,6 +269,6 @@ const poemTables5 = AshaarWord.layoutTablesForPoem(fiveMisraSource, {}, Ashaar);
 assert.ok(poemTables5);
 assert.equal(poemTables5[0].columnCount, 9); // M = 2*5-1 = 9
 assert.equal(poemTables5[0].rows[0].length, 9);
-assert.equal(poemTables5[0].rows[0][8].text, "م1"); // misras[0] → rightmost content col = 2*(N-1) = 8
+assert.equal(poemTables5[0].rows[0][0].text, "م1"); // misras[0] (sadr) → col 0 = visual right in RTL
 
 console.log("word-html tests passed");
