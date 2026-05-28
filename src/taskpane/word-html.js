@@ -825,22 +825,6 @@
     return spans;
   }
 
-  // Derive grid parameters for a stanza.
-  function stanzaGridInfo(stanza, opts, textWidthTwips) {
-    var gapCols = Math.max(1, Math.round(Number((opts || {}).gapWidth || 1)));
-    var N = 0;
-    stanza.bayts.forEach(function (b) {
-      if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
-      else if (b.ajuz) N = Math.max(N, 2);
-      else N = Math.max(N, 1);
-    });
-    N = Math.max(N, 2);
-    var GRID = N * BASE_CPM + (N - 1) * gapCols;
-    var contentCols = N * BASE_CPM;
-    var colWidthTwips = Math.max(1, Math.round(textWidthTwips / GRID));
-    return { N: N, GRID: GRID, gapCols: gapCols, contentCols: contentCols, cwt: colWidthTwips };
-  }
-
   function tblBordersXml() {
     var none = 'w:val="none" w:sz="0" w:space="0" w:color="auto"';
     return "<w:tblBorders>" +
@@ -881,78 +865,55 @@
       "</w:p>";
   }
 
-  function baytRowsOoxml(bayt, si, opts) {
-    var N = si.N, gapCols = si.gapCols, contentCols = si.contentCols, cwt = si.cwt;
+  // Each bayt becomes its own <w:tbl> with a grid sized for that bayt's K misras.
+  // This lets a 2-misra maqta use GRID=7 (each misra 3/7 wide) independently of
+  // a 3-misra row's GRID=11, instead of all rows sharing a single stanza-wide grid.
+  function baytTableOoxml(bayt, opts, textWidthTwips) {
     var textWidthPx = (opts || {})._textWidthPx || 0;
+    var gapCols = Math.max(1, Math.round(Number((opts || {}).gapWidth || 1)));
+    var isRow = bayt.type === "row";
+    var misras = isRow ? (bayt.misras || []) : null;
+    var K = isRow ? misras.length : (bayt.ajuz ? 2 : 1);
+
+    // Solo or stacked: centered paragraph (no table overhead)
+    if (K <= 1 || ((opts || {}).layoutMode === "stacked")) {
+      var txt = isRow ? (misras[0] ? misras[0].text : "") : (bayt.sadr || "");
+      var ref = isRow ? !!(misras[0] && misras[0].isRefrain) : !!bayt.sadrRefrain;
+      return misraParaXml(justifyText(txt, opts, 0), "center", ref, opts);
+    }
+
+    // Multi-misra: own table with grid sized for this bayt's K misras
+    var GRID = K * BASE_CPM + (K - 1) * gapCols;
+    var cwt = Math.max(1, Math.round(textWidthTwips / GRID));
 
     function justify(text, span) {
-      var px = textWidthPx > 0 ? (span / si.GRID) * textWidthPx : 0;
+      var px = textWidthPx > 0 ? (span / GRID) * textWidthPx : 0;
       return justifyText(text, opts, px);
     }
 
-    function gapTc() { return tcXml(gapCols, cwt, null); }
-    function padTc(p) { return p > 0 ? tcXml(p, cwt, null) : ""; }
+    var texts = isRow
+      ? misras.map(function (m) { return m.text; })
+      : [bayt.sadr, bayt.ajuz];
+    var refs = isRow
+      ? misras.map(function (m) { return !!m.isRefrain; })
+      : [!!bayt.sadrRefrain, !!bayt.ajuzRefrain];
 
-    function soloRow(text, isRefrain) {
-      var soloSpan = BASE_CPM;
-      var leftPad = Math.floor((si.GRID - soloSpan) / 2);
-      var rightPad = si.GRID - soloSpan - leftPad;
-      var para = misraParaXml(justify(text, soloSpan), "center", isRefrain, opts);
-      return "<w:tr>" + padTc(leftPad) + tcXml(soloSpan, cwt, para) + padTc(rightPad) + "</w:tr>";
+    var spans = misraSpans(texts, K * BASE_CPM);
+    var cells = "";
+    for (var i = 0; i < K; i++) {
+      var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
+      cells += tcXml(spans[i], cwt, misraParaXml(justify(texts[i], spans[i]), align, refs[i], opts));
+      if (i < K - 1) cells += tcXml(gapCols, cwt, null);
     }
 
-    function misraRow(texts, refrains, needsPad) {
-      var K = texts.length;
-      // Use K*BASE_CPM as content budget so partial rows pad symmetrically
-      var kContentCols = K * BASE_CPM;
-      var spans = misraSpans(texts, kContentCols);
-      var kUsed = spans.reduce(function (a, b) { return a + b; }, 0) + (K - 1) * gapCols;
-      var leftPad = needsPad ? Math.floor((si.GRID - kUsed) / 2) : 0;
-      var rightPad = needsPad ? si.GRID - kUsed - leftPad : 0;
-      var cells = "";
-      for (var i = 0; i < K; i++) {
-        var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
-        cells += tcXml(spans[i], cwt, misraParaXml(justify(texts[i], spans[i]), align, refrains[i], opts));
-        if (i < K - 1) cells += gapTc();
-      }
-      return "<w:tr>" + padTc(leftPad) + cells + padTc(rightPad) + "</w:tr>";
-    }
-
-    if (bayt.type === "row") {
-      var misras = bayt.misras || [];
-      var K = misras.length;
-      if (K === 0) return "";
-      if (K === 1 || ((opts || {}).layoutMode === "stacked")) {
-        return soloRow(misras[0].text, !!misras[0].isRefrain);
-      }
-      var texts = misras.map(function (m) { return m.text; });
-      var refs = misras.map(function (m) { return !!m.isRefrain; });
-      return misraRow(texts, refs, K < N);
-    }
-
-    // Old-format bayt (sadr / ajuz)
-    if (!bayt.ajuz || ((opts || {}).layoutMode === "stacked")) {
-      return soloRow(bayt.sadr || "", !!bayt.sadrRefrain);
-    }
-    return misraRow(
-      [bayt.sadr, bayt.ajuz],
-      [!!bayt.sadrRefrain, !!bayt.ajuzRefrain],
-      N > 2
-    );
-  }
-
-  function stanzaTableOoxml(stanza, opts, textWidthTwips) {
-    var si = stanzaGridInfo(stanza, opts, textWidthTwips);
-    var tblPr = "<w:tblPr>" +
+    var tblPrXml = "<w:tblPr>" +
       '<w:tblW w:w="0" w:type="auto"/>' +
       '<w:jc w:val="center"/>' +
       tblBordersXml() +
       "<w:bidiVisual/>" +
       "</w:tblPr>";
-    var rows = stanza.bayts.map(function (bayt) {
-      return baytRowsOoxml(bayt, si, opts);
-    }).filter(Boolean).join("");
-    return "<w:tbl>" + tblPr + tblGridXml(si.GRID, si.cwt) + rows + "</w:tbl>";
+
+    return "<w:tbl>" + tblPrXml + tblGridXml(GRID, cwt) + "<w:tr>" + cells + "</w:tr></w:tbl>";
   }
 
   function renderForWordOoxml(text, opts, Ashaar, textWidthTwips) {
@@ -960,13 +921,18 @@
     var twips = (textWidthTwips > 0) ? textWidthTwips : 9360;
     var poems = parsePoetry(String(text || ""), Ashaar);
     if (!poems.length) return "";
-    var tables = [];
+    // Zero-spacing paragraph keeps back-to-back per-bayt tables visually continuous
+    var rowConnector = '<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:bidi/></w:pPr></w:p>';
+    var stanzas = [];
     poems.forEach(function (poem) {
       poem.stanzas.forEach(function (stanza) {
-        tables.push(stanzaTableOoxml(stanza, opts, twips));
+        var items = stanza.bayts.map(function (bayt) {
+          return baytTableOoxml(bayt, opts, twips);
+        }).filter(Boolean);
+        if (items.length) stanzas.push(items.join(rowConnector));
       });
     });
-    return tables.join("<w:p/>");
+    return stanzas.join("<w:p/>");
   }
 
   function wrapOoxml(bodyContent) {
