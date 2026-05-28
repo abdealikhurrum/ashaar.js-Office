@@ -15,22 +15,24 @@ const html = AshaarWord.renderForWord(source, {
 assert.match(html, /<table dir="rtl"/);
 assert.match(html, /<colgroup>/);
 assert.match(html, /data-ashaar-layout="balanced"/);
-assert.match(html, /<td style="[^"]*text-align:left/);
-assert.match(html, /<td style="[^"]*text-align:right/);
+// 12-column grid: <td> now has colspan before style
+assert.match(html, /text-align:left/);
+assert.match(html, /text-align:right/);
 assert.match(html, /ـ/);
 
+// N=2 → 2 cells (sadr colspan=6, ajuz colspan=6); no gap cell
 const firstRow = html.match(/<tr>(.*?)<\/tr>/)[1];
-const cells = firstRow.match(/<td style="[^"]*"/g);
-assert.match(cells[0], /text-align:right/);
-assert.match(cells[1], /text-align:center/);
-assert.match(cells[2], /text-align:left/);
+const cells = firstRow.match(/<td[^>]*style="[^"]*"/g);
+assert.equal(cells.length, 2);
+assert.match(cells[0], /text-align:right/); // sadr (visual right in RTL)
+assert.match(cells[1], /text-align:left/);  // ajuz (visual left in RTL)
 
 const stacked = AshaarWord.renderForWord(source, {
   justifyMode: "none",
   layoutMode: "stacked"
 }, Ashaar);
 
-assert.match(stacked, /colspan="3"/);
+assert.match(stacked, /colspan="12"/); // stacked mode: single cell spans full 12-col grid
 assert.match(stacked, /<br>/);
 
 const compact = AshaarWord.renderForWord(source, {
@@ -182,5 +184,127 @@ assert.deepEqual(marsiyaTables[0].rows.map((row) => row.map((cell) => cell.text)
   ["هائے كربلاء والو", "", "هائے كربلاء والو"]
 ]);
 assert.deepEqual(marsiyaTables[0].rows[0].map((cell) => cell.align), ["right", "center", "left"]);
+
+// Test: multi-misra rows are auto-detected in renderForWord with dynamic column count
+
+function multiMisraTest(lineCount, misraCount) {
+  var line = [];
+  for (var i = 0; i < misraCount; i++) line.push("م" + (i + 1));
+  var source = line.join(" \\ ");
+  // Stanza: one multi-misra line + one solo refrain
+  var fullSource = source + "\nنعرہ \\";
+
+  var html = AshaarWord.renderForWord(fullSource, { justifyMode: "none", layoutMode: "balanced" }, Ashaar);
+
+  // All misras must appear
+  for (var j = 0; j < misraCount; j++) {
+    assert.match(html, new RegExp("م" + (j + 1)), "misra " + (j + 1) + " missing for " + misraCount + "-misra line");
+  }
+
+  // 12-column grid: always 12 <col> elements
+  var cols = (html.match(/<col style=/g) || []).length;
+  assert.equal(cols, 12, "Expected 12 grid columns for " + misraCount + "-misra stanza");
+
+  // Multi-misra row has exactly misraCount cells (each spanning colsPerMisra cols)
+  var rowCells = html.match(/<tr>(<td[^>]*>[\s\S]*?<\/td>){1,}<\/tr>/g) || [];
+  var firstRowCellCount = (rowCells[0].match(/<td/g) || []).length;
+  assert.equal(firstRowCellCount, misraCount, "Expected " + misraCount + " cells in full row");
+
+  // Solo misra row spans the full 12-column grid
+  assert.match(html, /colspan="12"/, "Solo row should span full 12-col grid");
+}
+
+multiMisraTest(1, 3);
+multiMisraTest(1, 4);
+multiMisraTest(1, 5);
+
+// Marsiya stanza with 3-misra lines + solo + maqta pair
+const marsiyaSource = [
+  "شاه كے اصحاب تھے \\ خلق ميں الباب تھے \\ صدق كے ارباب تھے \\",
+  "هو گئے شہ پر فدا \\",
+  "هائے كربلاء والو \\ هائے كربلاء والو"
+].join("\n");
+
+const marsiyaWordHtml = AshaarWord.renderForWord(marsiyaSource, {
+  justifyMode: "none",
+  layoutMode: "balanced"
+}, Ashaar);
+
+assert.match(marsiyaWordHtml, /شاه كے اصحاب تھے/);
+assert.match(marsiyaWordHtml, /خلق ميں الباب تھے/);
+assert.match(marsiyaWordHtml, /صدق كے ارباب تھے/);
+assert.match(marsiyaWordHtml, /هائے كربلاء والو/);
+assert.equal((marsiyaWordHtml.match(/<col style=/g) || []).length, 12); // 12-column grid
+assert.match(marsiyaWordHtml, /colspan="12"/); // solo misra spans full grid
+
+// Test: layoutTablesForPoem — native table path for multi-misra poems
+// Uses 2N-1 interleaved columns: content at even indices (0,2,4), gap at odd indices (1,3)
+const poemTables3 = AshaarWord.layoutTablesForPoem(marsiyaSource, { justifyMode: "none" }, Ashaar);
+assert.ok(poemTables3, "Should return tables for multi-misra poem");
+assert.equal(poemTables3.length, 1);
+assert.equal(poemTables3[0].columnCount, 5); // M = 2*3-1 = 5 cols (3 content + 2 gap)
+assert.equal(poemTables3[0].rows.length, 3);
+// Triple row: col 0 = misras[0] (sadr, visual right in RTL), col 2 = misras[1], col 4 = misras[2] (ajuz, visual left)
+assert.equal(poemTables3[0].rows[0][0].text, "شاه كے اصحاب تھے"); // col 0 = misras[0] = sadr
+assert.equal(poemTables3[0].rows[0][1].text, "");                   // col 1 = gap
+assert.equal(poemTables3[0].rows[0][2].text, "خلق ميں الباب تھے"); // col 2 = misras[1]
+assert.equal(poemTables3[0].rows[0][3].text, "");                   // col 3 = gap
+assert.equal(poemTables3[0].rows[0][4].text, "صدق كے ارباب تھے"); // col 4 = misras[2] = ajuz
+assert.equal(poemTables3[0].rows[0][0].align, "right");
+assert.equal(poemTables3[0].rows[0][2].align, "center");
+assert.equal(poemTables3[0].rows[0][4].align, "left");
+// Solo row: text in center content col (col 2 for N=3), others empty
+assert.equal(poemTables3[0].rows[1][2].text, "هو گئے شہ پر فدا");
+assert.equal(poemTables3[0].rows[1][0].text, "");
+// Maqta row: sadr in col 0 (visual right in RTL), ajuz in col 4 — both are same refrain text here
+assert.equal(poemTables3[0].rows[2][0].text, "هائے كربلاء والو");
+assert.equal(poemTables3[0].rows[2][4].text, "هائے كربلاء والو");
+
+// Regular 2-misra poem returns null (falls through to renderForWord)
+const regularPoem = "دل ناداں تجھے ہوا کیا ہے \\ آخر اس درد کی دوا کیا ہے";
+const poemTablesRegular = AshaarWord.layoutTablesForPoem(regularPoem, {}, Ashaar);
+assert.equal(poemTablesRegular, null, "Regular couplet poem should return null");
+
+// 5-misra poem: M = 2*5-1 = 9 cols (5 content + 4 gap)
+const fiveMisraSource = "م1 \\ م2 \\ م3 \\ م4 \\ م5\nنعرہ \\";
+const poemTables5 = AshaarWord.layoutTablesForPoem(fiveMisraSource, {}, Ashaar);
+assert.ok(poemTables5);
+assert.equal(poemTables5[0].columnCount, 9); // M = 2*5-1 = 9
+assert.equal(poemTables5[0].rows[0].length, 9);
+assert.equal(poemTables5[0].rows[0][0].text, "م1"); // misras[0] (sadr) → col 0 = visual right in RTL
+
+// ── renderForWordOoxml ─────────────────────────────────────────────────────
+
+// 2-misra poem: N=2, gapCols=1 → GRID=7 (2*3+1*1=7)
+const ooxml2misra = AshaarWord.renderForWordOoxml(
+  "دل ناداں تجھے ہوا کیا ہے \\ آخر اس درد کی دوا کیا ہے",
+  { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360
+);
+assert.match(ooxml2misra, /<w:tbl>/);
+assert.match(ooxml2misra, /<w:bidiVisual\/>/);
+assert.match(ooxml2misra, /<w:gridSpan w:val="/);
+// GRID=7 columns: 7 gridCol elements
+assert.equal((ooxml2misra.match(/<w:gridCol /g) || []).length, 7);
+// Two misra cells + one gap cell = 3 tc elements in the row (gridSpan sums to 7)
+const tc2 = (ooxml2misra.match(/<w:tc>/g) || []).length;
+assert.equal(tc2, 3, "N=2: 2 misra cells + 1 gap cell");
+assert.match(ooxml2misra, /دل ناداں تجھے ہوا کیا ہے/);
+assert.match(ooxml2misra, /آخر اس درد کی دوا کیا ہے/);
+
+// 3-misra marsiya stanza: one table with GRID=11 for all rows
+// Row 1 (3-misra): spans=[3,1,3,1,3]=11; Row 2 (solo): padded; Row 3 (2-misra): spans=[5,1,5]=11
+const ooxml3misra = AshaarWord.renderForWordOoxml(marsiyaSource,
+  { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360
+);
+assert.equal((ooxml3misra.match(/<w:gridCol /g) || []).length, 11); // single GRID=11 table
+assert.match(ooxml3misra, /<w:bidiVisual\/>/);
+assert.match(ooxml3misra, /شاه كے اصحاب تھے/);
+assert.match(ooxml3misra, /هو گئے شہ پر فدا/); // solo row (padded, centered)
+assert.match(ooxml3misra, /<w:jc w:val="center"\/>/); // solo paragraph centered
+
+// misraSpans: proportional allocation
+const spans = AshaarWord.misraSpans(["abc", "abcdef"], 6); // weights 3:6 → 2:4
+assert.equal(spans[0] + spans[1], 6, "spans must sum to contentCols");
+assert.ok(spans[1] > spans[0], "longer text gets more columns");
 
 console.log("word-html tests passed");

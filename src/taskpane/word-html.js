@@ -27,13 +27,18 @@
     var weight = 0;
     for (var i = 0; i < cleaned.length; i++) {
       var cp = cleaned.charCodeAt(i);
+      // Skip Arabic combining diacritics (harakat U+064B–U+065F, superscript alef U+0670)
+      if ((cp >= 0x064B && cp <= 0x065F) || cp === 0x0670) continue;
       weight += cp >= 0x0600 && cp <= 0x06FF ? 1 : 0.72;
     }
     return Math.max(1, weight);
   }
 
-  function justifyText(text, opts) {
+  function justifyText(text, opts, colWidthPx) {
     opts = opts || {};
+    if (AshaarJustify && opts.justifyMode === "kashida" && opts._justifyCtx && colWidthPx > 0) {
+      return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, { targetFill: 0.92 });
+    }
     var count = Number(opts.tatweelCount || 0);
     if (!AshaarJustify || opts.justifyMode !== "kashida" || count <= 0) return text;
     return AshaarJustify.spreadTatweels(text, count);
@@ -49,29 +54,24 @@
   function tableColumns(stanza, opts) {
     opts = opts || {};
     var layout = opts.layoutMode || "balanced";
-    var gap = clamp(Number(opts.gapWidth || 4), 2, layout === "compact" ? 6 : 10);
 
     if (layout === "compact") {
+      var gap = clamp(Number(opts.gapWidth || 4), 2, 6);
       return { outer: 8, sadr: 40, gap: gap, ajuz: 40, mode: "compact" };
     }
 
-    if (layout === "equal" || opts.widthMode === "fixed") {
-      var equalText = (100 - gap) / 2;
-      return { sadr: equalText, gap: gap, ajuz: equalText, mode: "three" };
-    }
-
-    var maxSadr = 1;
-    var maxAjuz = 1;
-    stanza.bayts.forEach(function (bayt) {
-      if (!bayt.ajuz) return;
-      maxSadr = Math.max(maxSadr, visibleWeight(bayt.sadr));
-      maxAjuz = Math.max(maxAjuz, visibleWeight(bayt.ajuz));
+    // 12-column fixed grid: every stanza uses 12 equal columns regardless of N.
+    // Each misra gets floor(12/N) columns; any remainder is absorbed by the last misra.
+    var N = 0;
+    stanza.bayts.forEach(function (b) {
+      if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
+      else if (b.ajuz) N = Math.max(N, 2);
+      else N = Math.max(N, 1);
     });
-
-    var available = 100 - gap;
-    var sadr = available * maxSadr / (maxSadr + maxAjuz);
-    sadr = clamp(sadr, 36, 56);
-    return { sadr: sadr, gap: gap, ajuz: available - sadr, mode: "three" };
+    N = Math.max(N, 2); // minimum 2-column layout
+    var cpm = Math.floor(12 / N); // cols per misra
+    var rem = 12 - cpm * N;      // extra cols absorbed into last misra
+    return { mode: "grid12", N: N, cpm: cpm, rem: rem };
   }
 
   function fontFamilyStyle(opts) {
@@ -101,6 +101,11 @@
   }
 
   function colGroup(cols) {
+    if (cols.mode === "grid12") {
+      var cg = "<colgroup>";
+      for (var i = 0; i < 12; i++) cg += '<col style="width:8.3333%">';
+      return cg + "</colgroup>";
+    }
     if (cols.mode === "normalized") {
       return "<colgroup>" + cols.widths.map(function (width) {
         return "<col style=\"" + widthStyle(width) + "\">";
@@ -392,11 +397,116 @@
     return tables;
   }
 
+  function stackedMisras(misras, spanCount, opts, colWidthPx) {
+    return "<tr><td colspan=\"" + spanCount + "\" style=\"text-align:center;direction:rtl;padding:0 0 5pt 0;\">" +
+      misras.map(function (m) {
+        var mc = m.isRefrain ? "color:#a7352a;" : "";
+        return "<span style=\"padding-right:32pt;" + mc + "\">" + escapeHtml(justifyText(m.text, opts, colWidthPx)) + "</span>";
+      }).join("<br>") + "</td></tr>";
+  }
+
+  function renderBaytRowGrid12(bayt, opts, cols) {
+    var textWidthPx = (opts || {})._textWidthPx || 0;
+    var N = cols.N, cpm = cols.cpm, rem = cols.rem;
+    var halfPx = textWidthPx / 2;
+    var colPx = cpm / 12 * textWidthPx;
+
+    function pairRow(sadrText, ajuzText, sadrColor, ajuzColor) {
+      return "<tr>" +
+        "<td colspan=\"6\" style=\"" + leftSideCellStyle(opts) + sadrColor + "\">" + sadrText + "</td>" +
+        "<td colspan=\"" + (6 + rem) + "\" style=\"" + rightSideCellStyle(opts) + ajuzColor + "\">" + ajuzText + "</td>" +
+        "</tr>";
+    }
+
+    if (bayt.type === "row") {
+      var misras = bayt.misras || [];
+      var K = misras.length;
+      if (K === 0) return "";
+
+      if (K === 1 || opts.layoutMode === "stacked") {
+        return stackedMisras(misras, 12, opts, textWidthPx);
+      }
+
+      if (K === 2) {
+        return pairRow(
+          escapeHtml(justifyText(misras[0].text, opts, halfPx)),
+          escapeHtml(justifyText(misras[1].text, opts, halfPx)),
+          misras[0].isRefrain ? "color:#a7352a;" : "",
+          misras[1].isRefrain ? "color:#a7352a;" : ""
+        );
+      }
+
+      if (K >= N) {
+        return "<tr>" + misras.slice(0, N).map(function (m, i) {
+          var align = i === 0 ? "right" : i === N - 1 ? "left" : "center";
+          var mc = m.isRefrain ? "color:#a7352a;" : "";
+          var span = (i === N - 1) ? cpm + rem : cpm;
+          return "<td colspan=\"" + span + "\" style=\"" + misraCellStyle({ align: align }, opts) + mc + "\">" +
+            escapeHtml(justifyText(m.text, opts, colPx)) + "</td>";
+        }).join("") + "</tr>";
+      }
+
+      // K between 2 and N — stacked fallback
+      return stackedMisras(misras, 12, opts, textWidthPx);
+    }
+
+    // Old-format bayt (sadr / ajuz)
+    var sadr = escapeHtml(justifyText(bayt.sadr, opts, halfPx));
+    var sadrColor = bayt.sadrRefrain ? "color:#a7352a;" : "";
+
+    if (!bayt.ajuz || opts.layoutMode === "stacked") {
+      var ajuzInline = "";
+      if (bayt.ajuz) {
+        var ajuzColor0 = bayt.ajuzRefrain ? "color:#a7352a;" : "";
+        var ajuzEsc = escapeHtml(justifyText(bayt.ajuz, opts, halfPx));
+        ajuzInline = "<br><span style=\"padding-right:32pt;" + ajuzColor0 + "\">" + ajuzEsc + "</span>";
+      }
+      return "<tr><td colspan=\"12\" style=\"text-align:center;direction:rtl;padding:0 0 5pt 0;" + sadrColor + "\">" + sadr + ajuzInline + "</td></tr>";
+    }
+
+    return pairRow(
+      sadr,
+      escapeHtml(justifyText(bayt.ajuz, opts, halfPx)),
+      sadrColor,
+      bayt.ajuzRefrain ? "color:#a7352a;" : ""
+    );
+  }
+
   function renderBaytRow(bayt, opts, cols) {
-    var sadr = escapeHtml(justifyText(bayt.sadr, opts));
-    var ajuz = bayt.ajuz ? escapeHtml(justifyText(bayt.ajuz, opts)) : "";
+    if (cols.mode === "grid12") {
+      return renderBaytRowGrid12(bayt, opts, cols);
+    }
+
+    // Non-grid12 modes: compact layout and template rendering
+    var textWidthPx = (opts || {})._textWidthPx || 0;
+    var sadr = escapeHtml(justifyText(bayt.sadr || "", opts, 0));
+    var ajuz = bayt.ajuz ? escapeHtml(justifyText(bayt.ajuz, opts, 0)) : "";
     var sadrColor = bayt.sadrRefrain ? "color:#a7352a;" : "";
     var ajuzColor = bayt.ajuzRefrain ? "color:#a7352a;" : "";
+
+    if (bayt.type === "row") {
+      var misras = bayt.misras || [];
+      var K = misras.length;
+      if (K === 0) return "";
+      if (K === 1 || opts.layoutMode === "stacked") {
+        return stackedMisras(misras, cols.mode === "compact" ? 5 : 3, opts, textWidthPx);
+      }
+      // Compact 2-misra
+      if (cols.mode === "compact") {
+        var s2 = escapeHtml(justifyText(misras[0].text, opts, 0));
+        var a2 = escapeHtml(justifyText(misras[1].text, opts, 0));
+        var sc2 = misras[0].isRefrain ? "color:#a7352a;" : "";
+        var ac2 = misras[1].isRefrain ? "color:#a7352a;" : "";
+        return "<tr>" +
+          "<td style=\"padding:0\"></td>" +
+          "<td style=\"" + leftSideCellStyle(opts) + sc2 + "\">" + s2 + "</td>" +
+          "<td style=\"" + gapStyle() + "\"></td>" +
+          "<td style=\"" + rightSideCellStyle(opts) + ac2 + "\">" + a2 + "</td>" +
+          "<td style=\"padding:0\"></td>" +
+          "</tr>";
+      }
+      return stackedMisras(misras, 3, opts, textWidthPx);
+    }
 
     if (!bayt.ajuz || opts.layoutMode === "stacked") {
       var second = bayt.ajuz ? "<br><span style=\"padding-right:32pt;" + ajuzColor + "\">" + ajuz + "</span>" : "";
@@ -407,17 +517,17 @@
     if (cols.mode === "compact") {
       return "<tr>" +
         "<td style=\"padding:0\"></td>" +
-        "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+        "<td style=\"" + leftSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
         "<td style=\"" + gapStyle() + "\"></td>" +
-        "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
+        "<td style=\"" + rightSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
         "<td style=\"padding:0\"></td>" +
         "</tr>";
     }
 
     return "<tr>" +
-      "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+      "<td style=\"" + leftSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
       "<td style=\"" + gapStyle() + "\"></td>" +
-      "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
+      "<td style=\"" + rightSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
       "</tr>";
   }
 
@@ -454,6 +564,82 @@
       });
     });
     return misras;
+  }
+
+  function layoutTablesForPoem(text, opts, Ashaar) {
+    opts = opts || {};
+    var poems = parsePoetry(String(text || ""), Ashaar);
+    if (!poems.length) return null;
+
+    var hasMultiMisra = false;
+    var tables = [];
+
+    poems.forEach(function (poem) {
+      poem.stanzas.forEach(function (stanza) {
+        var N = 0;
+        stanza.bayts.forEach(function (b) {
+          if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
+        });
+        if (N >= 3) {
+          hasMultiMisra = true;
+        } else {
+          N = 3;
+        }
+
+        // 2N-1 interleaved columns: content at even indices, gap at odd indices.
+        // This gives each gap its own fixed-width column so maqta spacing
+        // doesn't depend on middle-content column width.
+        var M = 2 * N - 1;
+        var gap = clamp(Number(opts.gapWidth || 4), 1, 10);
+        var cw = (100 - (N - 1) * gap) / N;
+        var widths = [];
+        for (var i = 0; i < M; i++) widths.push(i % 2 === 0 ? cw : gap);
+
+        // Center content column in M-col grid (always an even index)
+        var centerMCol = 2 * Math.floor(N / 2);
+
+        var rows = stanza.bayts.map(function (bayt) {
+          var row = [];
+          for (var i = 0; i < M; i++) row.push({ text: "", align: "center" });
+
+          if (bayt.type === "row") {
+            var K = bayt.misras ? bayt.misras.length : 0;
+            if (K === 0) return row;
+            if (K === 1) {
+              row[centerMCol] = { text: bayt.misras[0].text, align: "center" };
+            } else if (K >= N) {
+              // Full N-misra row: misras[0] (sadr) in col 0 = visual right in RTL table
+              for (var i = 0; i < N; i++) {
+                var align = i === 0 ? "right" : i === N - 1 ? "left" : "center";
+                row[2 * i] = { text: bayt.misras[i].text, align: align };
+              }
+            } else if (K === 2) {
+              // Pair within multi-misra stanza: sadr in col 0 (visual right), ajuz in col M-1
+              row[0] = { text: bayt.misras[0].text, align: "right" };
+              row[M - 1] = { text: bayt.misras[1].text, align: "left" };
+            } else {
+              // Partial K-misra row (3 <= K < N): occupy leftmost K content cols (visual right in RTL)
+              for (var j = 0; j < K; j++) {
+                var align = j === 0 ? "right" : j === K - 1 ? "left" : "center";
+                row[2 * j] = { text: bayt.misras[j].text, align: align };
+              }
+            }
+          } else if (!bayt.ajuz) {
+            row[centerMCol] = { text: bayt.sadr, align: "center" };
+          } else {
+            // sadr in col 0 (visual right in RTL table), ajuz in col M-1 (visual left)
+            row[0] = { text: bayt.sadr, align: "right" };
+            row[M - 1] = { text: bayt.ajuz, align: "left" };
+          }
+
+          return row;
+        });
+
+        tables.push({ columnCount: M, rows: rows, widths: widths });
+      });
+    });
+
+    return hasMultiMisra ? tables : null;
   }
 
   function renderTextWithLayoutForWord(text, opts) {
@@ -611,10 +797,196 @@
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
-  function justifyPlainTextBlock(text, opts) {
+  function justifyPlainTextBlock(text, opts, colWidthPx) {
     return String(text || "").split(/\r?\n/).map(function (line) {
-      return line.trim() ? justifyText(line, opts) : line;
+      return line.trim() ? justifyText(line, opts, colWidthPx) : line;
     }).join("\n");
+  }
+
+  // ── OOXML table rendering ────────────────────────────────────────────────
+
+  var BASE_CPM = 3; // baseline grid columns per misra
+
+  function escapeXml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Compute proportional column spans for misra texts summing to contentCols.
+  // Pass a canvas 2D context as ctx for accurate font-metric measurement; falls back to visibleWeight.
+  function misraSpans(texts, contentCols, ctx) {
+    var weights = texts.map(function (t) {
+      return ctx ? Math.max(1, ctx.measureText(String(t || "")).width) : visibleWeight(t);
+    });
+    var total = weights.reduce(function (a, b) { return a + b; }, 0);
+    var spans = weights.map(function (w) {
+      return Math.max(1, Math.round(w / total * contentCols));
+    });
+    var delta = contentCols - spans.reduce(function (a, b) { return a + b; }, 0);
+    spans[spans.length - 1] = Math.max(1, spans[spans.length - 1] + delta);
+    return spans;
+  }
+
+  function stanzaGridInfo(stanza, opts, textWidthTwips) {
+    var gapCols = Math.max(1, Math.round(Number((opts || {}).gapWidth || 1)));
+    var N = 0;
+    stanza.bayts.forEach(function (b) {
+      if (b.type === "row" && b.misras) N = Math.max(N, b.misras.length);
+      else if (b.ajuz) N = Math.max(N, 2);
+      else N = Math.max(N, 1);
+    });
+    N = Math.max(N, 2);
+    var GRID = N * BASE_CPM + (N - 1) * gapCols;
+    var contentCols = N * BASE_CPM;
+    var colWidthTwips = Math.max(1, Math.round(textWidthTwips / GRID));
+    return { N: N, GRID: GRID, gapCols: gapCols, contentCols: contentCols, cwt: colWidthTwips };
+  }
+
+  function tblBordersXml() {
+    var none = 'w:val="none" w:sz="0" w:space="0" w:color="auto"';
+    return "<w:tblBorders>" +
+      "<w:top " + none + "/><w:left " + none + "/>" +
+      "<w:bottom " + none + "/><w:right " + none + "/>" +
+      "<w:insideH " + none + "/><w:insideV " + none + "/>" +
+      "</w:tblBorders>";
+  }
+
+  function tblGridXml(GRID, cwt) {
+    var col = '<w:gridCol w:w="' + cwt + '"/>';
+    var g = "<w:tblGrid>";
+    for (var i = 0; i < GRID; i++) g += col;
+    return g + "</w:tblGrid>";
+  }
+
+  function tcXml(span, cwt, paraXml) {
+    return "<w:tc>" +
+      "<w:tcPr>" +
+        '<w:gridSpan w:val="' + span + '"/>' +
+        '<w:tcW w:w="' + (span * cwt) + '" w:type="dxa"/>' +
+        (paraXml ? '<w:vAlign w:val="bottom"/>' : "") +
+      "</w:tcPr>" +
+      (paraXml || "<w:p/>") +
+      "</w:tc>";
+  }
+
+  function misraParaXml(text, align, isRefrain, opts) {
+    var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    var rpr = "<w:rPr><w:rtl/>";
+    if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
+    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
+    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    rpr += "</w:rPr>";
+    return "<w:p>" +
+      "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" +
+      "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
+      "</w:p>";
+  }
+
+  function baytRowsOoxml(bayt, si, opts) {
+    var N = si.N, gapCols = si.gapCols, cwt = si.cwt;
+    var textWidthPx = (opts || {})._textWidthPx || 0;
+
+    function justify(text, span) {
+      var px = textWidthPx > 0 ? (span / si.GRID) * textWidthPx : 0;
+      return justifyText(text, opts, px);
+    }
+
+    function gapTc() { return tcXml(gapCols, cwt, null); }
+    function padTc(p) { return p > 0 ? tcXml(p, cwt, null) : ""; }
+
+    function soloRow(text, isRefrain) {
+      var soloSpan = BASE_CPM;
+      var leftPad = Math.floor((si.GRID - soloSpan) / 2);
+      var rightPad = si.GRID - soloSpan - leftPad;
+      var para = misraParaXml(justify(text, soloSpan), "center", isRefrain, opts);
+      return "<w:tr>" + padTc(leftPad) + tcXml(soloSpan, cwt, para) + padTc(rightPad) + "</w:tr>";
+    }
+
+    function misraRow(texts, refrains) {
+      var K = texts.length;
+      // Full available content width (GRID minus gaps) so partial rows fill the table width.
+      // The gap boundary lands on a gridCol boundary, giving Word layout flexibility.
+      var kContentCols = si.GRID - (K - 1) * gapCols;
+      var spans = misraSpans(texts, kContentCols, (opts || {})._justifyCtx || null);
+      var cells = "";
+      for (var i = 0; i < K; i++) {
+        var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
+        cells += tcXml(spans[i], cwt, misraParaXml(justify(texts[i], spans[i]), align, refrains[i], opts));
+        if (i < K - 1) cells += gapTc();
+      }
+      return "<w:tr>" + cells + "</w:tr>";
+    }
+
+    if (bayt.type === "row") {
+      var misras = bayt.misras || [];
+      var K = misras.length;
+      if (K === 0) return "";
+      if (K === 1 || ((opts || {}).layoutMode === "stacked")) {
+        return soloRow(misras[0].text, !!misras[0].isRefrain);
+      }
+      var texts = misras.map(function (m) { return m.text; });
+      var refs = misras.map(function (m) { return !!m.isRefrain; });
+      return misraRow(texts, refs);
+    }
+
+    // Old-format bayt (sadr / ajuz)
+    if (!bayt.ajuz || ((opts || {}).layoutMode === "stacked")) {
+      return soloRow(bayt.sadr || "", !!bayt.sadrRefrain);
+    }
+    return misraRow(
+      [bayt.sadr, bayt.ajuz],
+      [!!bayt.sadrRefrain, !!bayt.ajuzRefrain]
+    );
+  }
+
+  function stanzaTableOoxml(stanza, opts, textWidthTwips) {
+    var si = stanzaGridInfo(stanza, opts, textWidthTwips);
+    var tblPr = "<w:tblPr>" +
+      '<w:tblW w:w="0" w:type="auto"/>' +
+      '<w:jc w:val="center"/>' +
+      tblBordersXml() +
+      "<w:bidiVisual/>" +
+      "</w:tblPr>";
+    var rows = stanza.bayts.map(function (bayt) {
+      return baytRowsOoxml(bayt, si, opts);
+    }).filter(Boolean).join("");
+    return "<w:tbl>" + tblPr + tblGridXml(si.GRID, si.cwt) + rows + "</w:tbl>";
+  }
+
+  function renderForWordOoxml(text, opts, Ashaar, textWidthTwips) {
+    opts = opts || {};
+    var twips = (textWidthTwips > 0) ? textWidthTwips : 9360;
+    var poems = parsePoetry(String(text || ""), Ashaar);
+    if (!poems.length) return "";
+    var tables = [];
+    poems.forEach(function (poem) {
+      poem.stanzas.forEach(function (stanza) {
+        tables.push(stanzaTableOoxml(stanza, opts, twips));
+      });
+    });
+    return tables.join("<w:p/>");
+  }
+
+  function wrapOoxml(bodyContent) {
+    var wns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+    var pkgns = 'xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"';
+    var rels = '<pkg:part pkg:name="/_rels/.rels"' +
+      ' pkg:contentType="application/vnd.openxmlformats-package.relationships+xml"' +
+      ' pkg:padding="512"><pkg:xmlData>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1"' +
+      ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"' +
+      ' Target="word/document.xml"/>' +
+      '</Relationships></pkg:xmlData></pkg:part>';
+    var docPart = '<pkg:part pkg:name="/word/document.xml"' +
+      ' pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml">' +
+      '<pkg:xmlData><w:document ' + wns + '><w:body>' +
+      bodyContent + '<w:sectPr/></w:body></w:document></pkg:xmlData></pkg:part>';
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<pkg:package ' + pkgns + '>' + rels + docPart + '</pkg:package>';
   }
 
   return {
@@ -623,12 +995,16 @@
     renderTemplateForWord: renderTemplateForWord,
     layoutTablesForText: layoutTablesForText,
     layoutTablesForTemplate: layoutTablesForTemplate,
+    layoutTablesForPoem: layoutTablesForPoem,
     extractMisras: extractMisras,
     templateGrid: templateGrid,
     templateColumns: templateColumns,
     parseLayoutSpec: parseLayoutSpec,
     tableColumns: tableColumns,
     contentControlTag: contentControlTag,
-    justifyPlainTextBlock: justifyPlainTextBlock
+    justifyPlainTextBlock: justifyPlainTextBlock,
+    renderForWordOoxml: renderForWordOoxml,
+    wrapOoxml: wrapOoxml,
+    misraSpans: misraSpans
   };
 }));

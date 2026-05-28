@@ -1,4 +1,4 @@
 localhost-key.pem
 localhost.pem
 node_modules/
-package-lock.json
+package-lock.jsontest-documents/*.docx

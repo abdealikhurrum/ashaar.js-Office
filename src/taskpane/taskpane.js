@@ -29,7 +29,7 @@
       bandhCount: Number(bandhCount.value || 1),
       misraCount: Number(misraCount.value || 4),
       misraPattern: layoutPreset.value,
-      layoutSpec: layoutSpec.value,
+      layoutSpec: (!tablePanel.hidden) ? layoutSpec.value : "",
       fontMode: fontMode.value,
       tatweelCount: Number(tatweelCount.value || 0),
       gapWidth: Number(gapWidth.value || 4)
@@ -162,8 +162,10 @@
     var anchor = selection;
     tables.forEach(function (layoutTable, index) {
       var values = layoutTable.rows.map(function (row) {
-        return row.map(function (cell) {
-          return AshaarWord.justifyPlainTextBlock(cell.text || "", opts);
+        return row.map(function (cell, colIdx) {
+          var colWidthPx = opts._textWidthPx && layoutTable.widths && layoutTable.widths[colIdx]
+            ? layoutTable.widths[colIdx] / 100 * opts._textWidthPx : 0;
+          return AshaarWord.justifyPlainTextBlock(cell.text || "", opts, colWidthPx);
         });
       });
       var insertLocation = index === 0 ? Word.InsertLocation.after : Word.InsertLocation.after;
@@ -179,24 +181,46 @@
     await withWord(async function (context) {
       var opts = options();
       var source = String(input.value || "");
-      var html;
-      if (opts.layoutSpec && opts.layoutSpec.trim()) {
-        var tables = AshaarWord.layoutTablesForText(source, opts);
-        if (await insertNativeLayoutTables(context, tables, opts, source, replaceSelection)) return;
-        html = "";
-      } else {
-        try {
-          html = AshaarWord.renderForWord(source, opts, Ashaar);
-        } catch (error) {
-          html = "";
+
+      var sectionP = context.document.sections.getFirst();
+      sectionP.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      var selFontP = context.document.getSelection();
+      selFontP.load("font/size,font/name");
+      await context.sync();
+
+      // pageLayout requires WordApi 1.5; fall back to US-Letter 6.5" on older builds
+      var plP = sectionP.pageLayout;
+      var textWidthTwips = plP && plP.width
+        ? Math.round((plP.width - (plP.leftMargin || 0) - (plP.rightMargin || 0)) * 20)
+        : 9360;
+
+      if (opts.justifyMode === "kashida") {
+        opts._textWidthPx = textWidthTwips * 96 / 1440;
+        var fontSizeP = selFontP.font.size || 12;
+        var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
+                      : opts.fontMode === "arabic-serif" ? "Scheherazade New"
+                      : (selFontP.font.name || "Times New Roman");
+        var canvasP = document.createElement("canvas");
+        var ctxP = canvasP.getContext("2d");
+        if (ctxP) {
+          ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
+          opts._justifyCtx = ctxP;
         }
       }
-      if (!html) {
-        setMessage("Enter poetry text first.");
+
+      var ooxmlBody;
+      try {
+        ooxmlBody = AshaarWord.renderForWordOoxml(source, opts, Ashaar, textWidthTwips);
+      } catch (err) {
+        setMessage("Render error: " + (err.message || String(err)));
         return;
       }
+      if (!ooxmlBody) { setMessage("No content generated."); return; }
+
+      var ooxml = AshaarWord.wrapOoxml(ooxmlBody);
       var selection = context.document.getSelection();
-      var inserted = selection.insertHtml(html, replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
+      var inserted = selection.insertOoxml(ooxml,
+        replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
       var control = inserted.insertContentControl();
       control.title = "Ashaar Poem";
       control.tag = AshaarWord.contentControlTag(source, opts);
@@ -218,6 +242,57 @@
       var control = inserted.insertContentControl();
       control.title = "Ashaar Poem";
       control.tag = AshaarWord.contentControlTag("template", opts);
+      control.appearance = "BoundingBox";
+      await context.sync();
+    });
+  }
+
+  async function insertTabStopPoem() {
+    await withWord(async function (context) {
+      // Read the actual text-area width so tab stops fit the document's page size and margins.
+      // pageLayout properties are in points; multiply by 20 to convert to twips.
+      var section = context.document.sections.getFirst();
+      section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      var selFont = context.document.getSelection();
+      selFont.load("font/size,font/name");
+      await context.sync();
+      var pl = section.pageLayout;
+      // pageLayout requires WordApi 1.5; fall back to US-Letter 6.5" text width on older builds
+      var textWidthTwips = pl && pl.width
+        ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
+        : 9360;
+
+      var opts = options();
+      if (opts.justifyMode === "kashida") {
+        var fontSize = selFont.font.size || 12;
+        var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
+                     : opts.fontMode === "arabic-serif" ? "Scheherazade New"
+                     : (selFont.font.name || "Times New Roman");
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.font = fontSize + "pt \"" + fontName + "\"";
+          opts._justifyCtx = ctx;
+        }
+      }
+      var source = String(input.value || "");
+      var content;
+      try {
+        content = AshaarTabStop.poemToOoxml(source, opts, Ashaar, textWidthTwips);
+      } catch (e) {
+        setMessage("Paragraph engine error: " + (e.message || String(e)));
+        return;
+      }
+      if (!content) {
+        setMessage("No content generated.");
+        return;
+      }
+      var ooxml = AshaarTabStop.wrapOoxml(content);
+      var selection = context.document.getSelection();
+      var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
+      var control = inserted.insertContentControl();
+      control.title = "Ashaar Poem";
+      control.tag = AshaarWord.contentControlTag(source, opts);
       control.appearance = "BoundingBox";
       await context.sync();
     });
@@ -259,6 +334,7 @@
     modeConvert.addEventListener("click", function () { setMode("convert"); });
     document.getElementById("insert-structure").addEventListener("click", insertStructure);
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
+    document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
