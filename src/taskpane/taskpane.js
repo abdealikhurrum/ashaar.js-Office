@@ -190,7 +190,10 @@
 
       if (opts.justifyMode === "kashida") {
         var plP = sectionP.pageLayout;
-        var textWidthTwipsP = Math.round((plP.width - plP.leftMargin - plP.rightMargin) * 20);
+        // pageLayout requires WordApi 1.5; fall back to US-Letter 6.5" text width on older builds
+        var textWidthTwipsP = plP && plP.width
+          ? Math.round((plP.width - (plP.leftMargin || 0) - (plP.rightMargin || 0)) * 20)
+          : 9360;
         opts._textWidthPx = textWidthTwipsP * 96 / 1440;
         var fontSizeP = selFontP.font.size || 12;
         var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
@@ -289,7 +292,10 @@
       selFont.load("font/size,font/name");
       await context.sync();
       var pl = section.pageLayout;
-      var textWidthTwips = Math.round((pl.width - pl.leftMargin - pl.rightMargin) * 20);
+      // pageLayout requires WordApi 1.5; fall back to US-Letter 6.5" text width on older builds
+      var textWidthTwips = pl && pl.width
+        ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
+        : 9360;
 
       var opts = options();
       if (opts.justifyMode === "kashida") {
