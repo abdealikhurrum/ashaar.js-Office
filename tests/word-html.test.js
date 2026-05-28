@@ -15,22 +15,24 @@ const html = AshaarWord.renderForWord(source, {
 assert.match(html, /<table dir="rtl"/);
 assert.match(html, /<colgroup>/);
 assert.match(html, /data-ashaar-layout="balanced"/);
-assert.match(html, /<td style="[^"]*text-align:left/);
-assert.match(html, /<td style="[^"]*text-align:right/);
+// 12-column grid: <td> now has colspan before style
+assert.match(html, /text-align:left/);
+assert.match(html, /text-align:right/);
 assert.match(html, /ـ/);
 
+// N=2 → 2 cells (sadr colspan=6, ajuz colspan=6); no gap cell
 const firstRow = html.match(/<tr>(.*?)<\/tr>/)[1];
-const cells = firstRow.match(/<td style="[^"]*"/g);
-assert.match(cells[0], /text-align:right/);
-assert.match(cells[1], /text-align:center/);
-assert.match(cells[2], /text-align:left/);
+const cells = firstRow.match(/<td[^>]*style="[^"]*"/g);
+assert.equal(cells.length, 2);
+assert.match(cells[0], /text-align:right/); // sadr (visual right in RTL)
+assert.match(cells[1], /text-align:left/);  // ajuz (visual left in RTL)
 
 const stacked = AshaarWord.renderForWord(source, {
   justifyMode: "none",
   layoutMode: "stacked"
 }, Ashaar);
 
-assert.match(stacked, /colspan="3"/);
+assert.match(stacked, /colspan="12"/); // stacked mode: single cell spans full 12-col grid
 assert.match(stacked, /<br>/);
 
 const compact = AshaarWord.renderForWord(source, {
@@ -199,17 +201,17 @@ function multiMisraTest(lineCount, misraCount) {
     assert.match(html, new RegExp("م" + (j + 1)), "misra " + (j + 1) + " missing for " + misraCount + "-misra line");
   }
 
-  // Colgroup has exactly misraCount columns
+  // 12-column grid: always 12 <col> elements
   var cols = (html.match(/<col style=/g) || []).length;
-  assert.equal(cols, misraCount, "Expected " + misraCount + " columns for " + misraCount + "-misra stanza");
+  assert.equal(cols, 12, "Expected 12 grid columns for " + misraCount + "-misra stanza");
 
-  // Multi-misra row has exactly misraCount cells
+  // Multi-misra row has exactly misraCount cells (each spanning colsPerMisra cols)
   var rowCells = html.match(/<tr>(<td[^>]*>[\s\S]*?<\/td>){1,}<\/tr>/g) || [];
   var firstRowCellCount = (rowCells[0].match(/<td/g) || []).length;
   assert.equal(firstRowCellCount, misraCount, "Expected " + misraCount + " cells in full row");
 
-  // Solo misra row uses colspan=misraCount
-  assert.match(html, new RegExp('colspan="' + misraCount + '"'), "Solo row should span all " + misraCount + " columns");
+  // Solo misra row spans the full 12-column grid
+  assert.match(html, /colspan="12"/, "Solo row should span full 12-col grid");
 }
 
 multiMisraTest(1, 3);
@@ -232,8 +234,8 @@ assert.match(marsiyaWordHtml, /شاه كے اصحاب تھے/);
 assert.match(marsiyaWordHtml, /خلق ميں الباب تھے/);
 assert.match(marsiyaWordHtml, /صدق كے ارباب تھے/);
 assert.match(marsiyaWordHtml, /هائے كربلاء والو/);
-assert.equal((marsiyaWordHtml.match(/<col style=/g) || []).length, 3);
-assert.match(marsiyaWordHtml, /colspan="3"/);
+assert.equal((marsiyaWordHtml.match(/<col style=/g) || []).length, 12); // 12-column grid
+assert.match(marsiyaWordHtml, /colspan="12"/); // solo misra spans full grid
 
 // Test: layoutTablesForPoem — native table path for multi-misra poems
 // Uses 2N-1 interleaved columns: content at even indices (0,2,4), gap at odd indices (1,3)
