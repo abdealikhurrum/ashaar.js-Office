@@ -254,6 +254,32 @@
     });
   }
 
+  async function insertTabStopPoem() {
+    await withWord(async function (context) {
+      var opts = options();
+      var source = String(input.value || "");
+      var content;
+      try {
+        content = AshaarTabStop.poemToOoxml(source, opts, Ashaar);
+      } catch (e) {
+        setMessage("Paragraph engine error: " + (e.message || String(e)));
+        return;
+      }
+      if (!content) {
+        setMessage("No content generated.");
+        return;
+      }
+      var ooxml = AshaarTabStop.wrapOoxml(content);
+      var selection = context.document.getSelection();
+      var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
+      var control = inserted.insertContentControl();
+      control.title = "Ashaar Poem";
+      control.tag = AshaarWord.contentControlTag(source, opts);
+      control.appearance = "BoundingBox";
+      await context.sync();
+    });
+  }
+
   async function loadSelection() {
     await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -290,6 +316,7 @@
     modeConvert.addEventListener("click", function () { setMode("convert"); });
     document.getElementById("insert-structure").addEventListener("click", insertStructure);
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
+    document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
