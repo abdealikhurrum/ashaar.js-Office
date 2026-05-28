@@ -256,11 +256,19 @@
 
   async function insertTabStopPoem() {
     await withWord(async function (context) {
+      // Read the actual text-area width so tab stops fit the document's page size and margins.
+      // pageLayout properties are in points; multiply by 20 to convert to twips.
+      var section = context.document.sections.getFirst();
+      section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      await context.sync();
+      var pl = section.pageLayout;
+      var textWidthTwips = Math.round((pl.width - pl.leftMargin - pl.rightMargin) * 20);
+
       var opts = options();
       var source = String(input.value || "");
       var content;
       try {
-        content = AshaarTabStop.poemToOoxml(source, opts, Ashaar);
+        content = AshaarTabStop.poemToOoxml(source, opts, Ashaar, textWidthTwips);
       } catch (e) {
         setMessage("Paragraph engine error: " + (e.message || String(e)));
         return;
