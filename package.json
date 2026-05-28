@@ -4,7 +4,8 @@
   "private": true,
   "description": "Microsoft Word task pane add-in for entering and justifying poetry with Ashaar.js.",
   "scripts": {
-    "start": "office-addin-debugging start manifest.xml desktop --app word --dev-server \"npm run dev-server\" --dev-server-port 3000",
+    "start": "office-addin-debugging start manifest.xml desktop --app word --dev-server \"npm run dev-server\" --dev-server-port 3000 --document test-documents/marsiya-test.docx",
+    "make-test-doc": "node scripts/make-test-doc.mjs",
     "stop": "office-addin-debugging stop manifest.xml desktop",
     "dev-server": "node server.mjs",
     "serve": "node server.mjs",
