@@ -449,15 +449,17 @@
         var sadrColor2 = misras[0].isRefrain ? "color:#a7352a;" : "";
         var ajuzColor2 = misras[1].isRefrain ? "color:#a7352a;" : "";
         var gapSpan = N - 2;
+        // First <td> is visual RIGHT in Word's RTL table → sadr; last <td> → ajuz
         return "<tr>" +
-          "<td style=\"" + leftSideCellStyle(opts) + ajuzColor2 + "\">" + ajuz2 + "</td>" +
+          "<td style=\"" + leftSideCellStyle(opts) + sadrColor2 + "\">" + sadr2 + "</td>" +
           (gapSpan > 0 ? "<td colspan=\"" + gapSpan + "\" style=\"" + gapStyle() + "\"></td>" : "") +
-          "<td style=\"" + rightSideCellStyle(opts) + sadrColor2 + "\">" + sadr2 + "</td>" +
+          "<td style=\"" + rightSideCellStyle(opts) + ajuzColor2 + "\">" + ajuz2 + "</td>" +
           "</tr>";
       }
 
       if (K === N) {
-        return "<tr>" + misras.slice().reverse().map(function (m, i) {
+        // No reversal: misras[0] (sadr) in first <td> = visual right in RTL table
+        return "<tr>" + misras.map(function (m, i) {
           var align = i === 0 ? "right" : i === N - 1 ? "left" : "center";
           var mc = m.isRefrain ? "color:#a7352a;" : "";
           var colPx = cols.widths ? cols.widths[i] / 100 * textWidthPx : normColPx;
@@ -481,11 +483,12 @@
     }
 
     if (cols.mode === "compact") {
+      // First <td> = visual right in RTL → sadr; last content <td> → ajuz
       return "<tr>" +
         "<td style=\"padding:0\"></td>" +
-        "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+        "<td style=\"" + leftSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
         "<td style=\"" + gapStyle() + "\"></td>" +
-        "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
+        "<td style=\"" + rightSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
         "<td style=\"padding:0\"></td>" +
         "</tr>";
     }
@@ -493,16 +496,16 @@
     if (N) {
       var gapSpanBayt = N - 2;
       return "<tr>" +
-        "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+        "<td style=\"" + leftSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
         (gapSpanBayt > 0 ? "<td colspan=\"" + gapSpanBayt + "\" style=\"" + gapStyle() + "\"></td>" : "") +
-        "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
+        "<td style=\"" + rightSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
         "</tr>";
     }
 
     return "<tr>" +
-      "<td style=\"" + leftSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
+      "<td style=\"" + leftSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
       "<td style=\"" + gapStyle() + "\"></td>" +
-      "<td style=\"" + rightSideCellStyle(opts) + sadrColor + "\">" + sadr + "</td>" +
+      "<td style=\"" + rightSideCellStyle(opts) + ajuzColor + "\">" + ajuz + "</td>" +
       "</tr>";
   }
 
@@ -583,28 +586,28 @@
             if (K === 1) {
               row[centerMCol] = { text: bayt.misras[0].text, align: "center" };
             } else if (K >= N) {
-              // Full N-misra row: content col i → M col 2i, misras reversed
+              // Full N-misra row: misras[0] (sadr) in col 0 = visual right in RTL table
               for (var i = 0; i < N; i++) {
                 var align = i === 0 ? "right" : i === N - 1 ? "left" : "center";
-                row[2 * i] = { text: bayt.misras[N - 1 - i].text, align: align };
+                row[2 * i] = { text: bayt.misras[i].text, align: align };
               }
             } else if (K === 2) {
-              // Pair within multi-misra stanza: span full width
-              row[0] = { text: bayt.misras[1].text, align: "right" };
-              row[M - 1] = { text: bayt.misras[0].text, align: "left" };
+              // Pair within multi-misra stanza: sadr in col 0 (visual right), ajuz in col M-1
+              row[0] = { text: bayt.misras[0].text, align: "right" };
+              row[M - 1] = { text: bayt.misras[1].text, align: "left" };
             } else {
-              // Partial K-misra row (3 <= K < N): occupy rightmost K content cols
+              // Partial K-misra row (3 <= K < N): occupy leftmost K content cols (visual right in RTL)
               for (var j = 0; j < K; j++) {
-                var contentCol = N - 1 - j;
-                var align = j === 0 ? "left" : j === K - 1 ? "right" : "center";
-                row[2 * contentCol] = { text: bayt.misras[j].text, align: align };
+                var align = j === 0 ? "right" : j === K - 1 ? "left" : "center";
+                row[2 * j] = { text: bayt.misras[j].text, align: align };
               }
             }
           } else if (!bayt.ajuz) {
             row[centerMCol] = { text: bayt.sadr, align: "center" };
           } else {
-            row[0] = { text: bayt.ajuz, align: "right" };
-            row[M - 1] = { text: bayt.sadr, align: "left" };
+            // sadr in col 0 (visual right in RTL table), ajuz in col M-1 (visual left)
+            row[0] = { text: bayt.sadr, align: "right" };
+            row[M - 1] = { text: bayt.ajuz, align: "left" };
           }
 
           return row;
