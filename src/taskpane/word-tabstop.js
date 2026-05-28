@@ -28,29 +28,30 @@
     return AshaarJustify.spreadTatweels(text, count);
   }
 
-  // Tab stop positions for N content columns (in twips from left margin).
+  // Tab stop positions for N content columns in an RTL (<w:bidi/>) paragraph.
   //
-  // The paragraph is LTR with RTL text runs.  Column order (left → right):
-  //   col 0 = ajuz side (leftmost visually), col N-1 = sadr side (rightmost).
+  // The paragraph is RTL: cursor starts at the right margin (W) and moves leftward.
+  // Column order in XML (first run → last run): sadr (col 0, rightmost) → ajuz (col N-1, leftmost).
   //
-  // Col 0: no stop needed — text starts at the left margin automatically.
-  // Cols 1..N-2: CENTER stops at each column's midpoint.
-  // Col N-1: RIGHT stop at W (sadr right-aligns to the right margin).
+  // Col 0 (sadr): no stop — text starts at the right margin automatically.
+  // Cols 1..N-2: CENTER stops at each column's midpoint going leftward.
+  // Col N-1 (ajuz): LEFT stop at 0 so ajuz anchors to the left margin.
   //
-  // textWidth: measured text-area width in twips (pageWidth - leftMargin - rightMargin,
-  //            all in points × 20).  Falls back to TEXT_WIDTH_DEFAULT when omitted.
+  // For equal-width columns the CENTER stop positions are symmetric around W/2
+  // and happen to equal the LTR midpoints; only the final stop changes
+  // (RIGHT at W → LEFT at 0).
+  //
+  // textWidth: measured text-area width in twips. Falls back to TEXT_WIDTH_DEFAULT.
   function tabStopsForN(N, textWidth) {
     var W = (textWidth > 0) ? textWidth : TEXT_WIDTH_DEFAULT;
     var colW = W / N;
     var stops = [];
-    for (var i = 1; i < N; i++) {
-      if (i === N - 1) {
-        stops.push({ pos: W, val: "right" });
-      } else {
-        // Midpoint of column i: (i + 0.5) × colW = (2i+1) × colW / 2
-        stops.push({ pos: Math.round((2 * i + 1) * colW / 2), val: "center" });
-      }
+    if (N >= 2) stops.push({ pos: 0, val: "left" }); // ajuz anchors to left margin
+    for (var i = N - 2; i >= 1; i--) {
+      // Midpoint of column i (from the right): W - (i + 0.5) × colW
+      stops.push({ pos: Math.round(W - (i + 0.5) * colW), val: "center" });
     }
+    stops.sort(function (a, b) { return a.pos - b.pos; }); // ascending per OOXML convention
     return stops;
   }
 
@@ -94,18 +95,18 @@
       for (i = 0; i < N; i++) cols.push(null);
 
       if (K >= N) {
-        // Full N-misra row: col 0 = misras[N-1] (ajuz/left), col N-1 = misras[0] (sadr/right)
+        // Full N-misra row: col 0 = misras[0] (sadr/right in RTL), col N-1 = misras[N-1] (ajuz/left)
         for (i = 0; i < N; i++) {
-          cols[i] = { text: misras[N - 1 - i].text, isRefrain: !!misras[N - 1 - i].isRefrain };
+          cols[i] = { text: misras[i].text, isRefrain: !!misras[i].isRefrain };
         }
       } else if (K === 2) {
-        // Pair inside a wider stanza: span to the outer columns
-        cols[0] = { text: misras[1].text, isRefrain: !!misras[1].isRefrain };
-        cols[N - 1] = { text: misras[0].text, isRefrain: !!misras[0].isRefrain };
+        // Pair inside a wider stanza: sadr in col 0 (right), ajuz in col N-1 (left)
+        cols[0] = { text: misras[0].text, isRefrain: !!misras[0].isRefrain };
+        cols[N - 1] = { text: misras[1].text, isRefrain: !!misras[1].isRefrain };
       } else {
-        // Partial row (3 ≤ K < N): fill rightmost K content columns
+        // Partial row (3 ≤ K < N): fill leftmost K cols (= rightmost visually in RTL)
         for (j = 0; j < K; j++) {
-          cols[N - 1 - j] = { text: misras[j].text, isRefrain: !!misras[j].isRefrain };
+          cols[j] = { text: misras[j].text, isRefrain: !!misras[j].isRefrain };
         }
       }
       return { solo: false, cols: cols };
@@ -116,8 +117,9 @@
 
     cols = [];
     for (i = 0; i < N; i++) cols.push(null);
-    cols[0] = { text: bayt.ajuz, isRefrain: !!bayt.ajuzRefrain };
-    cols[N - 1] = { text: bayt.sadr, isRefrain: !!bayt.sadrRefrain };
+    // RTL paragraph: sadr in col 0 (right margin), ajuz in col N-1 (left margin)
+    cols[0] = { text: bayt.sadr, isRefrain: !!bayt.sadrRefrain };
+    cols[N - 1] = { text: bayt.ajuz, isRefrain: !!bayt.ajuzRefrain };
     return { solo: false, cols: cols };
   }
 
@@ -138,12 +140,14 @@
   }
 
   function columnParaXml(row, stopsXml, opts, afterPt, colWidthPx) {
-    return "<w:p><w:pPr>" + stopsXml + spacingAttr(afterPt) + "</w:pPr>" +
+    // Schema order: tabs(9) → bidi(17) → spacing(20)
+    return "<w:p><w:pPr>" + stopsXml + "<w:bidi/>" + spacingAttr(afterPt) + "</w:pPr>" +
       buildRuns(row.cols, opts, colWidthPx) + "</w:p>";
   }
 
   function soloParaXml(row, opts, afterPt, textWidthPx) {
-    return '<w:p><w:pPr><w:jc w:val="center"/>' + spacingAttr(afterPt) + "</w:pPr>" +
+    // Schema order: bidi(17) → spacing(20) → jc(25)
+    return '<w:p><w:pPr><w:bidi/>' + spacingAttr(afterPt) + '<w:jc w:val="center"/>' + "</w:pPr>" +
       textRun(row.text, opts, row.isRefrain, textWidthPx) + "</w:p>";
   }
 
