@@ -32,8 +32,11 @@
     return Math.max(1, weight);
   }
 
-  function justifyText(text, opts) {
+  function justifyText(text, opts, colWidthPx) {
     opts = opts || {};
+    if (AshaarJustify && opts.justifyMode === "kashida" && opts._justifyCtx && colWidthPx > 0) {
+      return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, { targetFill: 0.92 });
+    }
     var count = Number(opts.tatweelCount || 0);
     if (!AshaarJustify || opts.justifyMode !== "kashida" || count <= 0) return text;
     return AshaarJustify.spreadTatweels(text, count);
@@ -408,16 +411,23 @@
     return tables;
   }
 
-  function stackedMisras(misras, spanCount, opts) {
+  function stackedMisras(misras, spanCount, opts, colWidthPx) {
     return "<tr><td colspan=\"" + spanCount + "\" style=\"text-align:center;direction:rtl;padding:0 0 5pt 0;\">" +
       misras.map(function (m) {
         var mc = m.isRefrain ? "color:#a7352a;" : "";
-        return "<span style=\"padding-right:32pt;" + mc + "\">" + escapeHtml(justifyText(m.text, opts)) + "</span>";
+        return "<span style=\"padding-right:32pt;" + mc + "\">" + escapeHtml(justifyText(m.text, opts, colWidthPx)) + "</span>";
       }).join("<br>") + "</td></tr>";
   }
 
   function renderBaytRow(bayt, opts, cols) {
     var N = cols.mode === "normalized" && cols.count ? cols.count : 0;
+    var textWidthPx = (opts || {})._textWidthPx || 0;
+    var normColPx = textWidthPx > 0 && cols.widths && cols.widths.length
+      ? cols.widths[0] / 100 * textWidthPx : 0;
+    var sadrColPx = textWidthPx > 0 && cols.sadr
+      ? cols.sadr / 100 * textWidthPx : normColPx;
+    var ajuzColPx = textWidthPx > 0 && cols.ajuz
+      ? cols.ajuz / 100 * textWidthPx : normColPx;
 
     if (bayt.type === "row") {
       var misras = bayt.misras || [];
@@ -426,16 +436,16 @@
 
       if (!N) {
         var fallbackSpan = cols.mode === "compact" ? 5 : 3;
-        return stackedMisras(misras, fallbackSpan, opts);
+        return stackedMisras(misras, fallbackSpan, opts, textWidthPx);
       }
 
       if (K === 1 || opts.layoutMode === "stacked") {
-        return stackedMisras(misras, N, opts);
+        return stackedMisras(misras, N, opts, textWidthPx);
       }
 
       if (K === 2) {
-        var sadr2 = escapeHtml(justifyText(misras[0].text, opts));
-        var ajuz2 = escapeHtml(justifyText(misras[1].text, opts));
+        var sadr2 = escapeHtml(justifyText(misras[0].text, opts, sadrColPx || normColPx));
+        var ajuz2 = escapeHtml(justifyText(misras[1].text, opts, ajuzColPx || normColPx));
         var sadrColor2 = misras[0].isRefrain ? "color:#a7352a;" : "";
         var ajuzColor2 = misras[1].isRefrain ? "color:#a7352a;" : "";
         var gapSpan = N - 2;
@@ -450,16 +460,17 @@
         return "<tr>" + misras.slice().reverse().map(function (m, i) {
           var align = i === 0 ? "right" : i === N - 1 ? "left" : "center";
           var mc = m.isRefrain ? "color:#a7352a;" : "";
-          return "<td style=\"" + misraCellStyle({ align: align }, opts) + mc + "\">" + escapeHtml(justifyText(m.text, opts)) + "</td>";
+          var colPx = cols.widths ? cols.widths[i] / 100 * textWidthPx : normColPx;
+          return "<td style=\"" + misraCellStyle({ align: align }, opts) + mc + "\">" + escapeHtml(justifyText(m.text, opts, colPx)) + "</td>";
         }).join("") + "</tr>";
       }
 
       // K > 2 and K < N: rare mixed-count stanza — stacked fallback
-      return stackedMisras(misras, N, opts);
+      return stackedMisras(misras, N, opts, textWidthPx);
     }
 
-    var sadr = escapeHtml(justifyText(bayt.sadr, opts));
-    var ajuz = bayt.ajuz ? escapeHtml(justifyText(bayt.ajuz, opts)) : "";
+    var sadr = escapeHtml(justifyText(bayt.sadr, opts, sadrColPx || normColPx));
+    var ajuz = bayt.ajuz ? escapeHtml(justifyText(bayt.ajuz, opts, ajuzColPx || normColPx)) : "";
     var sadrColor = bayt.sadrRefrain ? "color:#a7352a;" : "";
     var ajuzColor = bayt.ajuzRefrain ? "color:#a7352a;" : "";
 
@@ -761,9 +772,9 @@
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
-  function justifyPlainTextBlock(text, opts) {
+  function justifyPlainTextBlock(text, opts, colWidthPx) {
     return String(text || "").split(/\r?\n/).map(function (line) {
-      return line.trim() ? justifyText(line, opts) : line;
+      return line.trim() ? justifyText(line, opts, colWidthPx) : line;
     }).join("\n");
   }
 

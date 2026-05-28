@@ -162,8 +162,10 @@
     var anchor = selection;
     tables.forEach(function (layoutTable, index) {
       var values = layoutTable.rows.map(function (row) {
-        return row.map(function (cell) {
-          return AshaarWord.justifyPlainTextBlock(cell.text || "", opts);
+        return row.map(function (cell, colIdx) {
+          var colWidthPx = opts._textWidthPx && layoutTable.widths && layoutTable.widths[colIdx]
+            ? layoutTable.widths[colIdx] / 100 * opts._textWidthPx : 0;
+          return AshaarWord.justifyPlainTextBlock(cell.text || "", opts, colWidthPx);
         });
       });
       var insertLocation = index === 0 ? Word.InsertLocation.after : Word.InsertLocation.after;
@@ -179,6 +181,27 @@
     await withWord(async function (context) {
       var opts = options();
       var source = String(input.value || "");
+
+      var sectionP = context.document.sections.getFirst();
+      sectionP.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      var normalStyleP = context.document.styles.getByName("Normal");
+      normalStyleP.load("font/size,font/name");
+      await context.sync();
+
+      if (opts.justifyMode === "kashida") {
+        var plP = sectionP.pageLayout;
+        var textWidthTwipsP = Math.round((plP.width - plP.leftMargin - plP.rightMargin) * 20);
+        opts._textWidthPx = textWidthTwipsP * 96 / 1440;
+        var fontSizeP = normalStyleP.font.size || 12;
+        var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
+                      : opts.fontMode === "arabic-serif" ? "Scheherazade New"
+                      : (normalStyleP.font.name || "Times New Roman");
+        var canvasP = document.createElement("canvas");
+        var ctxP = canvasP.getContext("2d");
+        ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
+        opts._justifyCtx = ctxP;
+      }
+
       var html;
       var diagLines = [];
 
@@ -260,11 +283,23 @@
       // pageLayout properties are in points; multiply by 20 to convert to twips.
       var section = context.document.sections.getFirst();
       section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      var normalStyle = context.document.styles.getByName("Normal");
+      normalStyle.load("font/size,font/name");
       await context.sync();
       var pl = section.pageLayout;
       var textWidthTwips = Math.round((pl.width - pl.leftMargin - pl.rightMargin) * 20);
 
       var opts = options();
+      if (opts.justifyMode === "kashida") {
+        var fontSize = normalStyle.font.size || 12;
+        var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
+                     : opts.fontMode === "arabic-serif" ? "Scheherazade New"
+                     : (normalStyle.font.name || "Times New Roman");
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        ctx.font = fontSize + "pt \"" + fontName + "\"";
+        opts._justifyCtx = ctx;
+      }
       var source = String(input.value || "");
       var content;
       try {

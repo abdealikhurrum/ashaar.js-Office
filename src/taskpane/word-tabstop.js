@@ -18,9 +18,13 @@
       .replace(/"/g, "&quot;");
   }
 
-  function justifyMisra(text, opts) {
-    var count = Number((opts || {}).tatweelCount || 0);
-    if (!AshaarJustify || (opts || {}).justifyMode !== "kashida" || count <= 0) return text;
+  function justifyMisra(text, opts, colWidthPx) {
+    opts = opts || {};
+    if (AshaarJustify && opts.justifyMode === "kashida" && opts._justifyCtx && colWidthPx > 0) {
+      return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, { targetFill: 0.92 });
+    }
+    var count = Number(opts.tatweelCount || 0);
+    if (!AshaarJustify || opts.justifyMode !== "kashida" || count <= 0) return text;
     return AshaarJustify.spreadTatweels(text, count);
   }
 
@@ -66,9 +70,9 @@
     return "<w:rPr>" + inner + "</w:rPr>";
   }
 
-  function textRun(text, opts, isRefrain) {
+  function textRun(text, opts, isRefrain, colWidthPx) {
     return "<w:r>" + runPropsXml(opts, isRefrain) +
-      '<w:t xml:space="preserve">' + escapeXml(justifyMisra(text, opts)) + "</w:t></w:r>";
+      '<w:t xml:space="preserve">' + escapeXml(justifyMisra(text, opts, colWidthPx)) + "</w:t></w:r>";
   }
 
   function tabRun() { return "<w:r><w:tab/></w:r>"; }
@@ -119,11 +123,11 @@
 
   // Build OOXML runs for a column-based row.
   // Null columns contribute nothing but still advance the cursor via the inter-column tab.
-  function buildRuns(cols, opts) {
+  function buildRuns(cols, opts, colWidthPx) {
     var parts = [];
     for (var i = 0; i < cols.length; i++) {
       var col = cols[i];
-      if (col) parts.push(textRun(col.text, opts, col.isRefrain));
+      if (col) parts.push(textRun(col.text, opts, col.isRefrain, colWidthPx));
       if (i < cols.length - 1) parts.push(tabRun());
     }
     return parts.join("");
@@ -133,14 +137,14 @@
     return '<w:spacing w:after="' + Math.round(afterPt * 20) + '"/>';
   }
 
-  function columnParaXml(row, stopsXml, opts, afterPt) {
+  function columnParaXml(row, stopsXml, opts, afterPt, colWidthPx) {
     return "<w:p><w:pPr>" + stopsXml + spacingAttr(afterPt) + "</w:pPr>" +
-      buildRuns(row.cols, opts) + "</w:p>";
+      buildRuns(row.cols, opts, colWidthPx) + "</w:p>";
   }
 
-  function soloParaXml(row, opts, afterPt) {
+  function soloParaXml(row, opts, afterPt, textWidthPx) {
     return '<w:p><w:pPr><w:jc w:val="center"/>' + spacingAttr(afterPt) + "</w:pPr>" +
-      textRun(row.text, opts, row.isRefrain) + "</w:p>";
+      textRun(row.text, opts, row.isRefrain, textWidthPx) + "</w:p>";
   }
 
   // Convert poetry source text to OOXML paragraph markup (no document wrapper).
@@ -164,6 +168,9 @@
 
         var stops = tabStopsForN(N, textWidth);
         var stopsXml = tabStopsXml(stops);
+        var W = (textWidth > 0) ? textWidth : TEXT_WIDTH_DEFAULT;
+        var textWidthPx = W / 20 * (96 / 72);
+        var colWidthPx = textWidthPx / N;
 
         stanza.bayts.forEach(function (bayt, baytIdx) {
           var isLast = baytIdx === stanza.bayts.length - 1;
@@ -172,8 +179,8 @@
           var row = baytToRow(bayt, N);
           if (!row) return;
           paras.push(row.solo
-            ? soloParaXml(row, opts, afterPt)
-            : columnParaXml(row, stopsXml, opts, afterPt));
+            ? soloParaXml(row, opts, afterPt, textWidthPx)
+            : columnParaXml(row, stopsXml, opts, afterPt, colWidthPx));
         });
       });
     });
