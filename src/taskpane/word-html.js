@@ -27,6 +27,8 @@
     var weight = 0;
     for (var i = 0; i < cleaned.length; i++) {
       var cp = cleaned.charCodeAt(i);
+      // Skip Arabic combining diacritics (harakat U+064B–U+065F, superscript alef U+0670)
+      if ((cp >= 0x064B && cp <= 0x065F) || cp === 0x0670) continue;
       weight += cp >= 0x0600 && cp <= 0x06FF ? 1 : 0.72;
     }
     return Math.max(1, weight);
