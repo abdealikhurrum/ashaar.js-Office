@@ -428,7 +428,11 @@
           justified = AshaarWord.justifyPlainTextBlock(raw, opts, colPx);
         }
         if (justified !== raw) {
-          cell.body.insertText(justified, Word.InsertLocation.replace);
+          // Use paragraph.insertText rather than body.insertText so paragraph-level
+          // properties (jc, spacing, indents — including jc="both" for spacing mode)
+          // are preserved. body.insertText replaces the entire cell content including
+          // those properties.
+          cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
           changed++;
         }
       });
