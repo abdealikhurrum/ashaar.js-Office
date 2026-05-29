@@ -79,16 +79,17 @@
   /* the couplet — two hemistichs like the add-in's table cells */
   .couplet{
     position:relative;z-index:2;display:flex;gap:0;
-    max-width:780px;margin:0 auto 14px;
+    max-width:940px;margin:0 auto 14px;
     border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
     direction:rtl;
   }
   .misra{
-    flex:1;padding:30px 26px;
-    font-family:"Amiri",serif;font-size:clamp(26px,4.4vw,40px);
-    line-height:1.9;color:var(--ink);
+    flex:1;padding:28px 22px;
+    font-family:"Amiri",serif;font-size:clamp(20px,2.6vw,30px);
+    line-height:1.9;color:var(--ink);white-space:nowrap;
     display:flex;align-items:center;justify-content:center;text-align:center;
   }
+  @media(max-width:560px){.misra{white-space:normal;font-size:22px}}
   .misra:first-child{border-inline-end:1px solid var(--rule)}
   .attribution{
     position:relative;z-index:2;font-style:italic;color:var(--ink-soft);
