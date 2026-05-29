@@ -96,7 +96,7 @@
       return rows.join("\n");
     }
     if (preset === "indented-stack") {
-      for (i = 1; i <= count; i++) rows.push(new Array(Math.max(0, count - i) + 1).join("  ") + i);
+      for (i = 1; i <= count; i++) rows.push(new Array(i).join("  ") + i);
       return rows.join("\n");
     }
     if (preset === "karbala-refrain") {

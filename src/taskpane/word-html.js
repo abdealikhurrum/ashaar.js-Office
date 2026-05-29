@@ -783,7 +783,7 @@
     }
 
     if (pattern === "indented-stack") {
-      for (i = 1; i <= count; i++) rows.push({ type: "center", misra: i, align: "right", indent: (count - i) * 12 });
+      for (i = 1; i <= count; i++) rows.push({ type: "center", misra: i, align: "right", indent: (i - 1) * 12 });
       return rows;
     }
 
