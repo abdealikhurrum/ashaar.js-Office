@@ -197,9 +197,18 @@ add(heading("Urdu Poetry", 1));
 add(heading("Ghalib — ghazal (3 bayts)", 2));
 add(poem(URDU_GHALIB));
 
-add(heading("Iqbal — single couplet, Nastaliq", 2));
+add(heading("Iqbal — single couplet, Nastaliq (no justification)", 2));
 add(note("خودی کو کر بلند اتنا کہ ہر تقدیر سے پہلے / خدا بندے سے خود پوچھے بتا تیری رضا کیا ہے"));
 add(poem(URDU_IQBAL, { fontMode: "nastaliq" }));
+
+add(heading("Iqbal — Nastaliq, spacing mode (w:jc both — Word word-spacing)", 2));
+add(poem(URDU_IQBAL, { fontMode: "nastaliq", justifyMode: "spacing" }));
+
+add(heading("Ghalib ghazal — Nastaliq, spacing mode (3 bayts)", 2));
+add(poem(URDU_GHALIB, { fontMode: "nastaliq", justifyMode: "spacing" }));
+
+add(heading("Farsi Hafiz — Arabic serif, spacing mode", 2));
+add(poem(FARSI_GHAZAL, { fontMode: "arabic-serif", justifyMode: "spacing" }));
 
 add(heading("Mir Taqi Mir — 2 bayts", 2));
 add(poem(URDU_MIR));

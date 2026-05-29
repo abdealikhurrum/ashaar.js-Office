@@ -885,7 +885,12 @@
 
   // indTwips: optional right-indent in twips (used by stacked layout to offset ajuz from sadr)
   function misraParaXml(text, align, isRefrain, opts, indTwips) {
+    var mode = (opts || {}).justifyMode;
     var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    // spacing / css modes: hand full justification to Word so it distributes word spaces.
+    // This is the correct mechanism for Nastaliq, where tatweel insertion is inappropriate.
+    // Only applies to sadr/ajuz cells (right/left), not centred solo rows.
+    if ((mode === "spacing" || mode === "css") && jc !== "center") jc = "both";
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
     if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
