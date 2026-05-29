@@ -39,6 +39,29 @@ Then open `https://localhost:3000/src/taskpane/taskpane.html`. The repo includes
 
 Use `manifest.xml` as the Office add-in manifest. The add-in requests `ReadWriteDocument` so it can insert or replace selected document content.
 
+## Deploying for testers
+
+The add-in is hosted as a static site on GitHub Pages from the `main` branch (root path). Because the whole project is static (no build step) and the taskpane loads its assets via relative paths, the live files mirror the repo layout:
+
+- Task pane: `https://abdealikhurrum.github.io/ashaar.js-Office/src/taskpane/taskpane.html`
+- Distribution manifest: `https://abdealikhurrum.github.io/ashaar.js-Office/manifest.prod.xml`
+
+`manifest.prod.xml` is the manifest to hand to testers. It points at the live GitHub Pages URL and uses its own `<Id>` GUID (distinct from `manifest.xml`) so it can coexist with the local-dev manifest on the same machine. `manifest.xml` stays pointed at `https://localhost:3000` for local development via `npm start`.
+
+A `.nojekyll` file at the repo root tells Pages to serve files verbatim (no Jekyll processing). Pushing to `main` rebuilds the site automatically in about a minute.
+
+### Sideload `manifest.prod.xml`
+
+Testers download `manifest.prod.xml` from the URL above (right-click → Save As), then:
+
+- **Word on the web:** New doc → Home → Add-ins → More Add-ins → My Add-ins → Upload My Add-in → select the manifest.
+- **Word for Mac:** Save it into `~/Library/Containers/com.microsoft.Word/Data/Documents/wef/` (create `wef` if missing), restart Word, then Home → Add-ins → (dropdown) → Shared Folder.
+- **Word for Windows:** Put it in a shared folder, then File → Options → Trust Center → Trust Center Settings → Trusted Add-in Catalogs → add the folder's share path → Show in Menu → restart Word → Home → Add-ins → Shared Folder.
+
+### Cache busting after updates
+
+Files are served with the `?v=20260527-native-layout` query string in `manifest.prod.xml`. If a JS/CSS change doesn't appear after a deploy, bump that version string in `manifest.prod.xml` and re-distribute it to force testers' clients to refetch.
+
 ## Development Notes
 
 The preview pane uses Ashaar.js native HTML/CSS. Word insertion uses generated table HTML because Word's HTML importer preserves table layout more reliably than browser flex layout.
