@@ -457,11 +457,13 @@
     var maxIndent = rawRows.reduce(function (m, r) { return Math.max(m, r.indent || 0); }, 0);
     if (!maxIndent) return null;
     return rawRows.map(function (row) {
-      var emptySpan = Math.round((row.indent || 0) / maxIndent * (N - 1));
-      var contentSpan = N - emptySpan;
+      // GRID = 2N: content fixed at N cols, rightSpan + leftSpan = N so both sides are adjustable.
+      var rightSpan = Math.round((row.indent || 0) / maxIndent * (N - 1));
+      var leftSpan = N - rightSpan;
       var cells = [];
-      if (emptySpan > 0) cells.push({ span: emptySpan, text: " ", align: "center" });
-      cells.push({ span: contentSpan, text: blankMisraLabel(String(row.misra || " ")), align: "right" });
+      if (rightSpan > 0) cells.push({ span: rightSpan, text: " ", align: "center" });
+      cells.push({ span: N, text: blankMisraLabel(String(row.misra || " ")), align: "right" });
+      if (leftSpan > 0) cells.push({ span: leftSpan, text: " ", align: "center" });
       return cells;
     });
   }
@@ -474,7 +476,7 @@
       var rawRows = templateGrid(opts);
       var spanRows = indentedRowsToSpans(rawRows);
       if (spanRows) {
-        tables.push({ columnCount: rawRows.length, rows: spanRows, spanBased: true });
+        tables.push({ columnCount: 2 * rawRows.length, rows: spanRows, spanBased: true });
       } else {
         var table = normalizedLayoutRows(rawRows);
         table.widths = layoutColumnWidths(table.columnCount, opts);
