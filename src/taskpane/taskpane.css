@@ -182,6 +182,10 @@ input[type="range"] {
   grid-column: auto;
 }
 
+.two-col button:first-child {
+  grid-column: auto;
+}
+
 button {
   min-height: 36px;
   border: 1px solid var(--accent);
@@ -226,6 +230,127 @@ button:hover {
 
 #message {
   min-height: 18px;
+}
+
+/* Checkbox field */
+.field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.field--checkbox label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.field--checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Secondary and danger button styles */
+.button--secondary {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.button--secondary:hover {
+  background: var(--surface);
+}
+
+.button--danger {
+  background: var(--panel);
+  border-color: var(--refrain);
+  color: var(--refrain);
+  font-weight: 650;
+}
+
+.button--danger:hover {
+  background: #fdf1f0;
+}
+
+/* Templates panel */
+.templates-panel {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.templates-summary {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+}
+
+.templates-summary::-webkit-details-marker { display: none; }
+
+.templates-summary::before {
+  content: "▶";
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+
+.templates-panel[open] .templates-summary::before {
+  transform: rotate(90deg);
+}
+
+.templates-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.templates-capture {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.template-name-input {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.templates-apply-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+}
+
+.template-list {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.templates-io {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
 }
 
 @media (max-width: 360px) {

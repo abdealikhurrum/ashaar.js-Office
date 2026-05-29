@@ -9,6 +9,7 @@ const dest = join(root, "src", "vendor");
 const files = [
   ["ashaar.js", "ashaar.js"],
   ["ashaar-justify.js", "ashaar-justify.js"],
+  ["ashaar-tune.js", "ashaar-autotune.js"],
   ["stylesheet.css", "ashaar.css"]
 ];
 

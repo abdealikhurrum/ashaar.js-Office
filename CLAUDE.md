@@ -52,9 +52,19 @@ npm run update:ashaar
 - `src/taskpane/word-tabstop.js` — `AshaarTabStop` class: generates OOXML paragraphs with tab stops as an alternative to tables. `poemToOoxml()` builds OOXML XML strings from parsed poem structure.
 
 **Vendor Layer** (`src/vendor/`)
-- `ashaar.js` — Poetry parser (`Ashaar.parse()`) and HTML renderer
-- `ashaar-justify.js` — Canvas-based kashida justification engine (`AshaarJustify.justifyEl()`)
-- Files are synced from `vendor/ashaar-js/` submodule via `scripts/sync-ashaar-vendor.mjs`; never edit `src/vendor/` directly
+
+Three modules synced from `vendor/ashaar-js/` submodule via `scripts/sync-ashaar-vendor.mjs`. Never edit `src/vendor/` directly.
+
+- `ashaar.js` — Poetry parser (`Ashaar.parse()`), HTML renderer, and in-browser layout engine. `Ashaar.justifyEl(el, opts)` applies block-level justification to a rendered poem container in the DOM, balancing all misras to the width of the longest line.
+
+- `ashaar-justify.js` — Low-level canvas-based kashida insertion engine. `AshaarJustify.justifyLine(text, targetWidth, ctx, params, fontProfile)` binary-searches for the maximum number of tatweels that fit within a target pixel width. `buildSlots()` ranks legal tatweel insertion positions; `spreadTatweels()` is a simpler count-based alternative. Used directly by both `word-html.js` and `ashaar-autotune.js`.
+
+- `ashaar-autotune.js` (upstream: `ashaar-tune.js`) — Font analysis, visual calibration, and recipe deployment for optimal kashida justification. Three-phase workflow:
+  1. **Probe** (`AshaarTune.probeFont({fontFamily, fontSize})`) — analyses a loaded font via canvas width-delta measurements to score which character pairs have designed kashida glyphs vs. generic fallback. Returns a `FontProfile` with per-pair quality scores.
+  2. **Calibrate** (`AshaarTune.calibrate({texts, fontFamily, fontSize, containerWidth, mode, fontProfile, iterations})`) — runs a hill-climbing optimiser on sample poem texts, scoring candidates visually by rendering to an offscreen canvas and measuring ink-column density evenness and inter-line harmony. Returns a `CalibrationSession` with optimal `{targetFill, fontQualityBoost}` params; call `.bake()` to get a portable JSON recipe. Use `calibrateWidths()` for responsive multi-column recipes.
+  3. **Deploy** (`AshaarTune.loadRecipe(recipe)`) — loads a baked JSON recipe and returns a `justifyEl` drop-in replacement that uses the calibrated params.
+  - The `setScorer(fn)` extension point allows replacing the canvas scorer with an ML model.
+  - Treat each Ashaar Poem content control as a single calibration unit: gather all misra texts from the poem's tables, calibrate once, then apply the same params to every cell.
 
 ### Two Main Workflows
 
@@ -62,6 +72,13 @@ npm run update:ashaar
 ```
 User sets layout → "Draw Table" → insertStructure()
   → AshaarWord.layoutTablesForTemplate() → Word.run() table with content controls
+
+"Drop Grid" → insertBareGrid() → AshaarWord.generateBareGrid12Ooxml()
+  → 12-column blank table with thin borders; user merges/reshapes cells natively in Word
+  → "Capture from Word" → captureSelectedTableLayout()
+    → reads cell columnWidths, infers 12-col spans, saves to localStorage as named template
+  → "Apply" → applyTemplate() → AshaarWord.templateToOoxml() → inserts captured layout
+  → "Export / Import JSON" → portable across documents
 ```
 
 **Conversion Mode:**
@@ -70,6 +87,18 @@ Paste poetry text → renderPreview() (live Ashaar.js render in taskpane)
   → "Insert as Table"      → insertPoem() → insertNativeLayoutTables()
   → "Insert as Paragraphs" → insertTabStopPoem() → AshaarTabStop.poemToOoxml()
   → "Replace Selection"    → insertPoem(true) replaces selected Word text
+```
+
+**Justify Selected Text:**
+```
+Click inside an Ashaar Poem content control → "Justify Selected Text"
+  → justifySelection()
+  → AshaarTune.probeFont() → FontProfile (quality scores per character pair)
+  → Finds enclosing "Ashaar Poem" content control; gathers ALL cell texts as one corpus
+  → AshaarTune.calibrate({texts, containerWidth: avgColPx, mode: "poetry"})
+    → hill-climb optimises {targetFill, fontQualityBoost} for this poem's text + font
+  → AshaarJustify.justifyLine(text, colPx, ctx, calibParams, fontProfile) per cell
+  → cell.body.insertText() — replaces only cell content, never the table structure
 ```
 
 ### Poetry Input Format

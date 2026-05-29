@@ -83,9 +83,30 @@
 4 - 3</textarea>
         </section>
 
-        <section class="actions single-action" aria-label="Table input actions">
+        <section class="actions two-col" aria-label="Table input actions">
           <button id="insert-structure" type="button">Draw Table</button>
+          <button id="drop-grid" type="button" class="button--secondary">Drop Grid</button>
         </section>
+
+        <details class="templates-panel">
+          <summary class="templates-summary">Templates</summary>
+          <div class="templates-body">
+            <div class="templates-capture">
+              <input id="template-name" type="text" placeholder="Template name…" class="template-name-input">
+              <button id="capture-template" type="button" class="button--secondary">Capture from Word</button>
+            </div>
+            <div class="templates-apply-row">
+              <select id="template-list" class="template-list"></select>
+              <button id="apply-template" type="button">Apply</button>
+              <button id="delete-template" type="button" class="button--danger">Delete</button>
+            </div>
+            <div class="templates-io">
+              <button id="export-templates" type="button" class="button--secondary">Export JSON</button>
+              <button id="import-templates" type="button" class="button--secondary">Import JSON</button>
+              <input id="import-file" type="file" accept=".json" hidden>
+            </div>
+          </div>
+        </details>
       </section>
 
       <section id="convert-mode-panel" class="mode-panel" role="tabpanel" aria-labelledby="mode-convert" hidden>
@@ -143,6 +164,7 @@
 
     <script src="../vendor/ashaar-justify.js?v=20260527-native-layout"></script>
     <script src="../vendor/ashaar.js?v=20260527-native-layout"></script>
+    <script src="../vendor/ashaar-autotune.js?v=20260527-native-layout"></script>
     <script src="./word-html.js?v=20260527-native-layout"></script>
     <script src="./word-tabstop.js?v=20260527-native-layout"></script>
     <script src="./taskpane.js?v=20260527-native-layout"></script>

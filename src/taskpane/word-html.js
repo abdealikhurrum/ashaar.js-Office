@@ -37,7 +37,9 @@
   function justifyText(text, opts, colWidthPx) {
     opts = opts || {};
     if (AshaarJustify && opts.justifyMode === "kashida" && opts._justifyCtx && colWidthPx > 0) {
-      return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, { targetFill: 0.92 });
+      var params = { targetFill: 0.92 };
+      if (opts._fontProfile) params.fontQualityBoost = 1.8;
+      return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, params, opts._fontProfile || null);
     }
     var count = Number(opts.tatweelCount || 0);
     if (!AshaarJustify || opts.justifyMode !== "kashida" || count <= 0) return text;
@@ -854,6 +856,15 @@
       "</w:tblBorders>";
   }
 
+  function tblBordersGridXml() {
+    var thin = 'w:val="single" w:sz="4" w:space="0" w:color="auto"';
+    return "<w:tblBorders>" +
+      "<w:top " + thin + "/><w:left " + thin + "/>" +
+      "<w:bottom " + thin + "/><w:right " + thin + "/>" +
+      "<w:insideH " + thin + "/><w:insideV " + thin + "/>" +
+      "</w:tblBorders>";
+  }
+
   function tblGridXml(GRID, cwt) {
     var col = '<w:gridCol w:w="' + cwt + '"/>';
     var g = "<w:tblGrid>";
@@ -914,7 +925,8 @@
       var cells = "";
       for (var i = 0; i < K; i++) {
         var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
-        cells += tcXml(spans[i], cwt, misraParaXml(justify(texts[i], spans[i]), align, refrains[i], opts));
+        var px = textWidthPx > 0 ? (spans[i] / si.GRID) * textWidthPx : 0;
+        cells += tcXml(spans[i], cwt, misraParaXml(justifyText(texts[i], opts, px), align, refrains[i], opts));
         if (i < K - 1) cells += gapTc();
       }
       return "<w:tr>" + cells + "</w:tr>";
@@ -954,6 +966,52 @@
       return baytRowsOoxml(bayt, si, opts);
     }).filter(Boolean).join("");
     return "<w:tbl>" + tblPr + tblGridXml(si.GRID, si.cwt) + rows + "</w:tbl>";
+  }
+
+  // Generate a blank 12-column grid table for the user to merge/resize in Word.
+  // Thin borders are shown so cells are clearly visible.
+  function generateBareGrid12Ooxml(textWidthTwips) {
+    var twips = textWidthTwips > 0 ? textWidthTwips : 9360;
+    var cwt = Math.round(twips / 12);
+    var tblPr = "<w:tblPr>" +
+      '<w:tblW w:w="0" w:type="auto"/>' +
+      '<w:jc w:val="center"/>' +
+      tblBordersGridXml() +
+      "<w:bidiVisual/>" +
+      "</w:tblPr>";
+    var emptyPara = "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+    var cells = "";
+    for (var i = 0; i < 12; i++) cells += tcXml(1, cwt, emptyPara);
+    return "<w:tbl>" + tblPr + tblGridXml(12, cwt) + "<w:tr>" + cells + "</w:tr></w:tbl>";
+  }
+
+  // Generate an OOXML table from a captured template (rows of {span} cells).
+  // GRID defaults to templateData.columnCount (12 for captured grids).
+  function templateToOoxml(templateData, textWidthTwips, opts) {
+    var twips = textWidthTwips > 0 ? textWidthTwips : 9360;
+    var GRID = templateData.columnCount || 12;
+    var cwt = Math.round(twips / GRID);
+    var tblPr = "<w:tblPr>" +
+      '<w:tblW w:w="0" w:type="auto"/>' +
+      '<w:jc w:val="center"/>' +
+      tblBordersXml() +
+      "<w:bidiVisual/>" +
+      "</w:tblPr>";
+    var emptyPara = "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/></w:pPr></w:p>";
+    var rpr = "<w:rPr><w:rtl/>";
+    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
+    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    rpr += "</w:rPr>";
+    var rows = (templateData.rows || []).map(function (row) {
+      var cells = row.map(function (cell, cIdx) {
+        var jc = cIdx === 0 ? "right" : cIdx === row.length - 1 ? "left" : "center";
+        var para = "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" +
+          "<w:r>" + rpr + "<w:t/></w:r></w:p>";
+        return tcXml(cell.span, cwt, para);
+      }).join("");
+      return "<w:tr>" + cells + "</w:tr>";
+    }).join("");
+    return "<w:tbl>" + tblPr + tblGridXml(GRID, cwt) + rows + "</w:tbl>";
   }
 
   function renderForWordOoxml(text, opts, Ashaar, textWidthTwips) {
@@ -1005,6 +1063,8 @@
     justifyPlainTextBlock: justifyPlainTextBlock,
     renderForWordOoxml: renderForWordOoxml,
     wrapOoxml: wrapOoxml,
-    misraSpans: misraSpans
+    misraSpans: misraSpans,
+    generateBareGrid12Ooxml: generateBareGrid12Ooxml,
+    templateToOoxml: templateToOoxml
   };
 }));

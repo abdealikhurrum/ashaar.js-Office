@@ -18,6 +18,9 @@
   var tatweelCount = document.getElementById("tatweel-count");
   var tatweelValue = document.getElementById("tatweel-value");
   var gapWidth = document.getElementById("gap-width");
+  var templateNameInput = document.getElementById("template-name");
+  var templateList = document.getElementById("template-list");
+  var importFileInput = document.getElementById("import-file");
 
   function options() {
     return {
@@ -309,14 +312,337 @@
   }
 
   async function justifySelection() {
+    var opts = options();
+
+    // Build canvas context for kashida measurement
+    var canvasCtx = null;
+    var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
+                 : opts.fontMode === "arabic-serif" ? "Scheherazade New"
+                 : "Times New Roman";
+    if (opts.justifyMode === "kashida") {
+      var c = document.createElement("canvas").getContext("2d");
+      if (c) {
+        c.font = "16pt \"" + fontName + "\"";
+        canvasCtx = c;
+        opts._justifyCtx = c;
+      }
+    }
+
+    // Probe font once for quality-aware kashida slot selection
+    var fontProfile = null;
+    if (canvasCtx && typeof AshaarTune !== "undefined") {
+      try { fontProfile = await AshaarTune.probeFont({ fontFamily: fontName, fontSize: 64 }); }
+      catch (e) { /* degrade gracefully */ }
+    }
+    if (fontProfile) opts._fontProfile = fontProfile;
+
+    setMessage("Justifying…");
+
     await withWord(async function (context) {
       var selection = context.document.getSelection();
-      selection.load("text");
+
+      // Find enclosing Ashaar Poem content control (the poem is the calibration unit)
+      var cc = selection.parentContentControlOrNullObject;
+      cc.load("title");
       await context.sync();
-      var justified = AshaarWord.justifyPlainTextBlock(selection.text, options());
-      selection.insertText(justified, Word.InsertLocation.replace);
+
+      // Determine the range to work on: content control if we're inside one, else selection
+      var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem")
+        ? cc.getRange() : selection;
+
+      // Gather tables in the work range
+      var tables = workRange.tables;
+      tables.load("items");
       await context.sync();
+
+      if (!tables.items.length) {
+        // No tables — justify plain selection text
+        selection.load("text");
+        await context.sync();
+        var justifiedText = AshaarWord.justifyPlainTextBlock(selection.text, opts);
+        selection.insertText(justifiedText, Word.InsertLocation.replace);
+        await context.sync();
+        return;
+      }
+
+      // Load rows → cells (columnWidth + body text) across all tables
+      tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+      await context.sync();
+      tables.items.forEach(function (tbl) {
+        tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+      });
+      await context.sync();
+
+      var allCells = [];
+      tables.items.forEach(function (tbl) {
+        tbl.rows.items.forEach(function (row) {
+          row.cells.items.forEach(function (cell) {
+            allCells.push(cell);
+            cell.body.load("text");
+          });
+        });
+      });
+      await context.sync();
+
+      // Calibrate params treating the whole poem as one unit (using AshaarTune)
+      var calibParams = { targetFill: 0.92 };
+      if (fontProfile) calibParams.fontQualityBoost = 1.8;
+
+      if (canvasCtx && typeof AshaarTune !== "undefined") {
+        var lineTexts = [];
+        var totalColPx = 0, colCount = 0;
+        allCells.forEach(function (cell) {
+          var t = (cell.body.text || "").replace(/[\r\n]+/g, " ").trim();
+          if (t) lineTexts.push(t);
+          if (cell.columnWidth > 0) { totalColPx += cell.columnWidth * 96 / 72; colCount++; }
+        });
+        var avgColPx = colCount ? totalColPx / colCount : 300;
+
+        if (lineTexts.length) {
+          try {
+            var session = await AshaarTune.calibrate({
+              texts: lineTexts,
+              fontFamily: fontName,
+              fontSize: 16,
+              containerWidth: avgColPx,
+              mode: "poetry",
+              fontProfile: fontProfile,
+              iterations: 50
+            });
+            calibParams = Object.assign({}, session.params);
+            if (fontProfile) calibParams.fontQualityBoost = calibParams.fontQualityBoost || 1.8;
+          } catch (e) { /* keep defaults */ }
+        }
+      }
+
+      // Apply justified text back to each cell
+      var changed = 0;
+      allCells.forEach(function (cell) {
+        var raw = (cell.body.text || "").trim();
+        if (!raw) return;
+        var colPx = (cell.columnWidth || 0) * 96 / 72;
+        var justified;
+        if (canvasCtx && colPx > 0) {
+          justified = AshaarJustify.justifyLine(raw, colPx, canvasCtx, calibParams, fontProfile || null);
+        } else {
+          justified = AshaarWord.justifyPlainTextBlock(raw, opts, colPx);
+        }
+        if (justified !== raw) {
+          cell.body.insertText(justified, Word.InsertLocation.replace);
+          changed++;
+        }
+      });
+
+      await context.sync();
+      setMessage("Justified " + changed + " cell(s) across " + tables.items.length + " table(s).");
     });
+  }
+
+  // ── Template persistence helpers ───────────────────────────────────────────
+
+  function loadTemplates() {
+    try { return JSON.parse(localStorage.getItem("ashaar-templates") || "[]"); }
+    catch (e) { return []; }
+  }
+
+  function saveTemplates(templates) {
+    localStorage.setItem("ashaar-templates", JSON.stringify(templates));
+  }
+
+  function renderTemplateList() {
+    var templates = loadTemplates();
+    templateList.innerHTML = "";
+    if (!templates.length) {
+      var opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "— no saved templates —";
+      opt.disabled = true;
+      opt.selected = true;
+      templateList.appendChild(opt);
+      return;
+    }
+    templates.forEach(function (t) {
+      var opt = document.createElement("option");
+      opt.value = t.id;
+      opt.textContent = t.name;
+      templateList.appendChild(opt);
+    });
+  }
+
+  // ── Drop bare 12-column grid ───────────────────────────────────────────────
+
+  async function insertBareGrid() {
+    await withWord(async function (context) {
+      var section = context.document.sections.getFirst();
+      section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      await context.sync();
+      var pl = section.pageLayout;
+      var textWidthTwips = pl && pl.width
+        ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
+        : 9360;
+      var ooxml = AshaarWord.wrapOoxml(AshaarWord.generateBareGrid12Ooxml(textWidthTwips));
+      var selection = context.document.getSelection();
+      var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
+      var control = inserted.insertContentControl();
+      control.title = "Ashaar Poem";
+      control.tag = AshaarWord.contentControlTag("grid12", options());
+      control.appearance = "BoundingBox";
+      await context.sync();
+      setMessage("12-column grid inserted. Merge cells in Word, then Capture as a template.");
+    });
+  }
+
+  // ── Capture selected table layout ─────────────────────────────────────────
+
+  async function captureSelectedTableLayout() {
+    var name = (templateNameInput.value || "").trim();
+    if (!name) { setMessage("Enter a template name first."); return; }
+
+    await withWord(async function (context) {
+      var selection = context.document.getSelection();
+      var table = selection.parentTableOrNullObject;
+      table.load("rows");
+      await context.sync();
+      if (table.isNullObject) { setMessage("Click inside a table first, then capture."); return; }
+
+      table.rows.load("items");
+      await context.sync();
+      table.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+      await context.sync();
+
+      // Infer total table width (sum of first row cell widths in points)
+      var firstRow = table.rows.items[0];
+      var totalWidthPt = 0;
+      firstRow.cells.items.forEach(function (cell) { totalWidthPt += (cell.columnWidth || 0); });
+      if (totalWidthPt <= 0) { setMessage("Could not read table cell widths."); return; }
+
+      var GRID = 12;
+      var baseColPt = totalWidthPt / GRID;
+      var rows = table.rows.items.map(function (row) {
+        return row.cells.items.map(function (cell) {
+          var span = Math.max(1, Math.min(GRID, Math.round((cell.columnWidth || baseColPt) / baseColPt)));
+          return { span: span };
+        });
+      });
+
+      var id = String(Date.now());
+      var template = {
+        id: id,
+        name: name,
+        columnCount: GRID,
+        rows: rows,
+        fontMode: fontMode.value,
+        justifyMode: justifyMode.value,
+        tatweelCount: Number(tatweelCount.value || 0),
+        gapWidth: Number(gapWidth.value || 4)
+      };
+
+      var templates = loadTemplates();
+      templates.push(template);
+      saveTemplates(templates);
+      renderTemplateList();
+      // Select the newly saved template
+      for (var i = 0; i < templateList.options.length; i++) {
+        if (templateList.options[i].value === id) { templateList.selectedIndex = i; break; }
+      }
+      templateNameInput.value = "";
+      setMessage("Template \"" + name + "\" saved.");
+    });
+  }
+
+  // ── Apply saved template ───────────────────────────────────────────────────
+
+  async function applyTemplate() {
+    var id = templateList.value;
+    if (!id) { setMessage("Select a template first."); return; }
+    var templates = loadTemplates();
+    var tmpl = null;
+    for (var i = 0; i < templates.length; i++) {
+      if (templates[i].id === id) { tmpl = templates[i]; break; }
+    }
+    if (!tmpl) { setMessage("Template not found."); return; }
+
+    await withWord(async function (context) {
+      var section = context.document.sections.getFirst();
+      section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      await context.sync();
+      var pl = section.pageLayout;
+      var textWidthTwips = pl && pl.width
+        ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
+        : 9360;
+
+      var opts = options();
+      var ooxml = AshaarWord.wrapOoxml(AshaarWord.templateToOoxml(tmpl, textWidthTwips, opts));
+      var selection = context.document.getSelection();
+      var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
+      var control = inserted.insertContentControl();
+      control.title = "Ashaar Poem";
+      control.tag = AshaarWord.contentControlTag("template:" + tmpl.name, opts);
+      control.appearance = "BoundingBox";
+      await context.sync();
+      setMessage("Template \"" + tmpl.name + "\" inserted.");
+    });
+  }
+
+  // ── Delete template ────────────────────────────────────────────────────────
+
+  function deleteTemplate() {
+    var id = templateList.value;
+    if (!id) return;
+    var templates = loadTemplates().filter(function (t) { return t.id !== id; });
+    saveTemplates(templates);
+    renderTemplateList();
+    setMessage("Template deleted.");
+  }
+
+  // ── Export / Import ────────────────────────────────────────────────────────
+
+  function exportTemplates() {
+    var templates = loadTemplates();
+    if (!templates.length) { setMessage("No templates to export."); return; }
+    var json = JSON.stringify(templates, null, 2);
+    var blob = new Blob([json], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "ashaar-templates.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importTemplates() {
+    importFileInput.click();
+  }
+
+  function onImportFile(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var incoming = JSON.parse(e.target.result);
+        if (!Array.isArray(incoming)) throw new Error("Expected array");
+        var existing = loadTemplates();
+        var existingIds = {};
+        existing.forEach(function (t) { existingIds[t.id] = true; });
+        var added = 0;
+        incoming.forEach(function (t) {
+          if (t && t.id && t.name && t.rows && !existingIds[t.id]) {
+            existing.push(t);
+            added++;
+          }
+        });
+        saveTemplates(existing);
+        renderTemplateList();
+        setMessage("Imported " + added + " template(s).");
+      } catch (err) {
+        setMessage("Import failed: " + (err.message || String(err)));
+      }
+      importFileInput.value = "";
+    };
+    reader.readAsText(file);
   }
 
   var isBound = false;
@@ -338,9 +664,17 @@
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
+    document.getElementById("drop-grid").addEventListener("click", insertBareGrid);
+    document.getElementById("capture-template").addEventListener("click", captureSelectedTableLayout);
+    document.getElementById("apply-template").addEventListener("click", applyTemplate);
+    document.getElementById("delete-template").addEventListener("click", deleteTemplate);
+    document.getElementById("export-templates").addEventListener("click", exportTemplates);
+    document.getElementById("import-templates").addEventListener("click", importTemplates);
+    importFileInput.addEventListener("change", onImportFile);
     applyLayoutPreset();
     renderPreview();
     setMode("table");
+    renderTemplateList();
   }
 
   if (window.Office && Office.onReady) {
