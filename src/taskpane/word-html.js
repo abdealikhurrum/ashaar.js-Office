@@ -883,15 +883,17 @@
       "</w:tc>";
   }
 
-  function misraParaXml(text, align, isRefrain, opts) {
+  // indTwips: optional right-indent in twips (used by stacked layout to offset ajuz from sadr)
+  function misraParaXml(text, align, isRefrain, opts, indTwips) {
     var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
     if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
     else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
     rpr += "</w:rPr>";
+    var ind = indTwips ? '<w:ind w:right="' + indTwips + '"/>' : "";
     return "<w:p>" +
-      "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" +
+      "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + "</w:pPr>" +
       "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
       "</w:p>";
   }
@@ -908,11 +910,12 @@
     function gapTc() { return tcXml(gapCols, cwt, null); }
     function padTc(p) { return p > 0 ? tcXml(p, cwt, null) : ""; }
 
-    function soloRow(text, isRefrain) {
+    // indTwips: right-indent passed through to misraParaXml for stacked ajuz offset
+    function soloRow(text, isRefrain, indTwips) {
       var soloSpan = BASE_CPM;
       var leftPad = Math.floor((si.GRID - soloSpan) / 2);
       var rightPad = si.GRID - soloSpan - leftPad;
-      var para = misraParaXml(justify(text, soloSpan), "center", isRefrain, opts);
+      var para = misraParaXml(justify(text, soloSpan), "center", isRefrain, opts, indTwips || 0);
       return "<w:tr>" + padTc(leftPad) + tcXml(soloSpan, cwt, para) + padTc(rightPad) + "</w:tr>";
     }
 
@@ -936,8 +939,14 @@
       var misras = bayt.misras || [];
       var K = misras.length;
       if (K === 0) return "";
-      if (K === 1 || ((opts || {}).layoutMode === "stacked")) {
+      if (K === 1) {
         return soloRow(misras[0].text, !!misras[0].isRefrain);
+      }
+      if ((opts || {}).layoutMode === "stacked") {
+        // Each misra gets its own centered row; first at true center, rest with 640-twips (32pt) indent
+        return misras.slice(0, N).map(function (m, i) {
+          return soloRow(m.text, !!m.isRefrain, i > 0 ? 640 : 0);
+        }).join("");
       }
       var texts = misras.map(function (m) { return m.text; });
       var refs = misras.map(function (m) { return !!m.isRefrain; });
@@ -945,8 +954,13 @@
     }
 
     // Old-format bayt (sadr / ajuz)
-    if (!bayt.ajuz || ((opts || {}).layoutMode === "stacked")) {
+    if (!bayt.ajuz) {
       return soloRow(bayt.sadr || "", !!bayt.sadrRefrain);
+    }
+    if ((opts || {}).layoutMode === "stacked") {
+      // Two rows: sadr at center, ajuz indented 640 twips (32pt) to match HTML stacked offset
+      return soloRow(bayt.sadr || "", !!bayt.sadrRefrain) +
+             soloRow(bayt.ajuz, !!bayt.ajuzRefrain, 640);
     }
     return misraRow(
       [bayt.sadr, bayt.ajuz],
