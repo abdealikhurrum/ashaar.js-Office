@@ -891,7 +891,7 @@
     if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
     else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
     rpr += "</w:rPr>";
-    var ind = indTwips ? '<w:ind w:right="' + indTwips + '"/>' : "";
+    var ind = indTwips ? '<w:ind w:left="' + indTwips + '"/>' : "";
     return "<w:p>" +
       "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + "</w:pPr>" +
       "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
