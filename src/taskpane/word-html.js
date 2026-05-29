@@ -81,19 +81,29 @@
     return applyN(lo);
   }
 
+  // Map tatweelCount slider (0–24) to targetFill:
+  //   0  → off (return unchanged)
+  //   1–24 → 0.90 + count/24 * 0.08  (6 = 0.92, 24 = 0.98)
+  // This preserves the previous default behaviour at slider position 6.
+  function sliderToFill(count) {
+    return 0.90 + (Number(count) / 24) * 0.08;
+  }
+
   function justifyText(text, opts, colWidthPx) {
     opts = opts || {};
+    var count = Number(opts.tatweelCount || 0);
     if (opts._justifyCtx && colWidthPx > 0) {
       if (AshaarJustify && opts.justifyMode === "kashida") {
-        var params = { targetFill: 0.92 };
+        if (count === 0) return text; // slider at 0 = off
+        var params = { targetFill: sliderToFill(count) };
         if (opts._fontProfile) params.fontQualityBoost = 1.8;
         return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, params, opts._fontProfile || null);
       }
       if (opts.justifyMode === "spacing") {
-        return justifyWordSpacing(text, colWidthPx, opts._justifyCtx, 0.92);
+        if (count === 0) return text;
+        return justifyWordSpacing(text, colWidthPx, opts._justifyCtx, sliderToFill(count));
       }
     }
-    var count = Number(opts.tatweelCount || 0);
     if (!AshaarJustify || opts.justifyMode !== "kashida" || count <= 0) return text;
     return AshaarJustify.spreadTatweels(text, count);
   }

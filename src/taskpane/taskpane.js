@@ -76,7 +76,10 @@
     } else if (opts.justify === "spacing") {
       Ashaar.justifyEl(preview, { method: "spacing", tatweel: false });
     } else if (opts.justify === "kashida") {
-      Ashaar.justifyEl(preview, {});
+      // tatweelCount=0 suppresses tatweels; otherwise justifyEl fills to available width.
+      // Fine-grained strength is applied on OOXML insertion (not controllable here without
+      // modifying the vendor ashaar.js justifyMisra function).
+      Ashaar.justifyEl(preview, opts.tatweelCount === 0 ? { tatweel: false } : {});
     }
   }
 
