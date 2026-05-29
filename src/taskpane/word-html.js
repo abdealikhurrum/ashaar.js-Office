@@ -34,12 +34,64 @@
     return Math.max(1, weight);
   }
 
+  // Distribute hair spaces (U+200A) between words to reach targetWidth * targetFill.
+  // Falls back to thin spaces (U+2009) if the font returns zero width for hair space.
+  // Uses the same binary-search pattern as AshaarJustify.justifyLine for tatweels.
+  function justifyWordSpacing(text, targetWidth, ctx, targetFill) {
+    if (!text || !ctx || targetWidth <= 0) return text;
+    var target = targetWidth * (targetFill || 0.92);
+    var natural = ctx.measureText(String(text)).width;
+    if (natural >= target) return text;
+    var words = String(text).split(" ");
+    var gaps = words.length - 1;
+    if (gaps <= 0) return text;
+
+    var SPACE = " "; // hair space — ~1/24 em
+    var spaceW = ctx.measureText(SPACE).width;
+    if (spaceW <= 0) {
+      SPACE = " "; // thin space — ~1/5 em
+      spaceW = ctx.measureText(SPACE).width;
+    }
+    if (spaceW <= 0) return text;
+
+    var maxN = Math.min(Math.floor((target - natural) / spaceW), 1000);
+
+    function applyN(n) {
+      if (n <= 0) return text;
+      var base = Math.floor(n / gaps);
+      var extra = n % gaps;
+      var out = "";
+      for (var i = 0; i < words.length; i++) {
+        if (i > 0) {
+          out += " ";
+          var add = base + (i - 1 < extra ? 1 : 0);
+          for (var j = 0; j < add; j++) out += SPACE;
+        }
+        out += words[i];
+      }
+      return out;
+    }
+
+    var lo = 0, hi = maxN;
+    while (lo < hi) {
+      var mid = Math.ceil((lo + hi) / 2);
+      if (ctx.measureText(applyN(mid)).width <= target) lo = mid;
+      else hi = mid - 1;
+    }
+    return applyN(lo);
+  }
+
   function justifyText(text, opts, colWidthPx) {
     opts = opts || {};
-    if (AshaarJustify && opts.justifyMode === "kashida" && opts._justifyCtx && colWidthPx > 0) {
-      var params = { targetFill: 0.92 };
-      if (opts._fontProfile) params.fontQualityBoost = 1.8;
-      return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, params, opts._fontProfile || null);
+    if (opts._justifyCtx && colWidthPx > 0) {
+      if (AshaarJustify && opts.justifyMode === "kashida") {
+        var params = { targetFill: 0.92 };
+        if (opts._fontProfile) params.fontQualityBoost = 1.8;
+        return AshaarJustify.justifyLine(text, colWidthPx, opts._justifyCtx, params, opts._fontProfile || null);
+      }
+      if (opts.justifyMode === "spacing") {
+        return justifyWordSpacing(text, colWidthPx, opts._justifyCtx, 0.92);
+      }
     }
     var count = Number(opts.tatweelCount || 0);
     if (!AshaarJustify || opts.justifyMode !== "kashida" || count <= 0) return text;
@@ -885,12 +937,7 @@
 
   // indTwips: optional right-indent in twips (used by stacked layout to offset ajuz from sadr)
   function misraParaXml(text, align, isRefrain, opts, indTwips) {
-    var mode = (opts || {}).justifyMode;
     var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
-    // spacing / css modes: hand full justification to Word so it distributes word spaces.
-    // This is the correct mechanism for Nastaliq, where tatweel insertion is inappropriate.
-    // Only applies to sadr/ajuz cells (right/left), not centred solo rows.
-    if ((mode === "spacing" || mode === "css") && jc !== "center") jc = "both";
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
     if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';

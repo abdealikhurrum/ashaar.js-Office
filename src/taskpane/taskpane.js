@@ -197,7 +197,7 @@
         ? Math.round((plP.width - (plP.leftMargin || 0) - (plP.rightMargin || 0)) * 20)
         : 9360;
 
-      if (opts.justifyMode === "kashida") {
+      if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
         opts._textWidthPx = textWidthTwips * 96 / 1440;
         var fontSizeP = selFontP.font.size || 12;
         var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
@@ -266,7 +266,7 @@
         : 9360;
 
       var opts = options();
-      if (opts.justifyMode === "kashida") {
+      if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
         var fontSize = selFont.font.size || 12;
         var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
                      : opts.fontMode === "arabic-serif" ? "Scheherazade New"
@@ -319,7 +319,7 @@
     var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
                  : opts.fontMode === "arabic-serif" ? "Scheherazade New"
                  : "Times New Roman";
-    if (opts.justifyMode === "kashida") {
+    if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
       var c = document.createElement("canvas").getContext("2d");
       if (c) {
         c.font = "16pt \"" + fontName + "\"";
@@ -422,9 +422,10 @@
         if (!raw) return;
         var colPx = (cell.columnWidth || 0) * 96 / 72;
         var justified;
-        if (canvasCtx && colPx > 0) {
+        if (canvasCtx && colPx > 0 && opts.justifyMode === "kashida") {
           justified = AshaarJustify.justifyLine(raw, colPx, canvasCtx, calibParams, fontProfile || null);
         } else {
+          // spacing mode: justifyText dispatches to justifyWordSpacing via justifyPlainTextBlock
           justified = AshaarWord.justifyPlainTextBlock(raw, opts, colPx);
         }
         if (justified !== raw) {
