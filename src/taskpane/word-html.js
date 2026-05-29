@@ -449,14 +449,42 @@
     });
   }
 
+  // Convert rows-with-indent to span-based cells for structural indentation.
+  // Returns null when no row has indent (caller falls back to normalizedLayoutRows).
+  function indentedRowsToSpans(rawRows) {
+    var N = rawRows.length;
+    if (N < 2) return null;
+    var maxIndent = rawRows.reduce(function (m, r) { return Math.max(m, r.indent || 0); }, 0);
+    if (!maxIndent) return null;
+    return rawRows.map(function (row) {
+      var emptySpan = Math.round((row.indent || 0) / maxIndent * (N - 1));
+      var contentSpan = N - emptySpan;
+      var cells = [];
+      if (emptySpan > 0) cells.push({ span: emptySpan, text: " ", align: "center" });
+      cells.push({ span: contentSpan, text: blankMisraLabel(String(row.misra || " ")), align: "right" });
+      return cells;
+    });
+  }
+
   function layoutTablesForTemplate(opts) {
     opts = Object.assign({}, opts || {});
     var bandhCount = clamp(Number(opts.bandhCount || 1), 1, 20);
     var tables = [];
     for (var i = 0; i < bandhCount; i++) {
-      var table = normalizedLayoutRows(templateGrid(opts));
-      table.widths = layoutColumnWidths(table.columnCount, opts);
-      tables.push(table);
+      var rawRows = templateGrid(opts);
+      var spanRows = indentedRowsToSpans(rawRows);
+      if (spanRows) {
+        tables.push({ columnCount: rawRows.length, rows: spanRows, spanBased: true });
+      } else {
+        var table = normalizedLayoutRows(rawRows);
+        table.widths = layoutColumnWidths(table.columnCount, opts);
+        table.rows = table.rows.map(function (row) {
+          return row.map(function (cell) {
+            return Object.assign({}, cell, { text: blankMisraLabel(cell.text) });
+          });
+        });
+        tables.push(table);
+      }
     }
     return tables;
   }
@@ -1080,7 +1108,7 @@
     rpr += "</w:rPr>";
     var rows = (templateData.rows || []).map(function (row) {
       var cells = row.map(function (cell, cIdx) {
-        var jc = cIdx === 0 ? "right" : cIdx === row.length - 1 ? "left" : "center";
+        var jc = cell.align || (cIdx === 0 ? "right" : cIdx === row.length - 1 ? "left" : "center");
         var para = "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" +
           "<w:r>" + rpr + "<w:t/></w:r></w:p>";
         return tcXml(cell.span, cwt, para);

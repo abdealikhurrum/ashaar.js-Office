@@ -238,10 +238,30 @@
   async function insertStructure() {
     await withWord(async function (context) {
       var opts = options();
-      if (opts.layoutSpec && opts.layoutSpec.trim()) {
-        var tables = AshaarWord.layoutTablesForTemplate(opts);
-        if (await insertNativeLayoutTables(context, tables, opts, "template", false)) return;
+      var tables = AshaarWord.layoutTablesForTemplate(opts);
+
+      if (tables.length && tables.some(function (t) { return t.spanBased; })) {
+        var section = context.document.sections.getFirst();
+        section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+        await context.sync();
+        var pl = section.pageLayout;
+        var textWidthTwips = pl && pl.width
+          ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
+          : 9360;
+        var ooxmlBody = tables.map(function (t) {
+          return AshaarWord.templateToOoxml(t, textWidthTwips, opts);
+        }).join("<w:p/>");
+        var selection = context.document.getSelection();
+        var inserted = selection.insertOoxml(AshaarWord.wrapOoxml(ooxmlBody), Word.InsertLocation.end);
+        var control = inserted.insertContentControl();
+        control.title = "Ashaar Poem";
+        control.tag = AshaarWord.contentControlTag("template", opts);
+        control.appearance = "BoundingBox";
+        await context.sync();
+        return;
       }
+
+      if (tables.length && await insertNativeLayoutTables(context, tables, opts, "template", false)) return;
       var html = AshaarWord.renderTemplateForWord(opts);
       var selection = context.document.getSelection();
       var inserted = selection.insertHtml(html, Word.InsertLocation.end);
