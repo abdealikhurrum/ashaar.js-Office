@@ -334,6 +334,15 @@
     });
   }
 
+  // Kashida (U+0640) and the micro-spaces inserted by spacing justification
+  // (hair U+200A, thin U+2009) are elongation artifacts, not part of the source
+  // line. Strip them so every justification pass re-derives from the bare text —
+  // making justification idempotent and reducible: re-justify any number of times
+  // and the kashida count follows the current width / font / fill, never compounds.
+  function stripJustification(s) {
+    return String(s || "").replace(/[ـ  ]/g, "");
+  }
+
   async function justifySelection() {
     var opts = options();
 
@@ -382,7 +391,7 @@
         // No tables — justify plain selection text
         selection.load("text");
         await context.sync();
-        var justifiedText = AshaarWord.justifyPlainTextBlock(selection.text, opts);
+        var justifiedText = AshaarWord.justifyPlainTextBlock(stripJustification(selection.text), opts);
         selection.insertText(justifiedText, Word.InsertLocation.replace);
         await context.sync();
         return;
@@ -415,7 +424,7 @@
         var lineTexts = [];
         var totalColPx = 0, colCount = 0;
         allCells.forEach(function (cell) {
-          var t = (cell.body.text || "").replace(/[\r\n]+/g, " ").trim();
+          var t = stripJustification(cell.body.text || "").replace(/[\r\n]+/g, " ").trim();
           if (t) lineTexts.push(t);
           if (cell.columnWidth > 0) { totalColPx += cell.columnWidth * 96 / 72; colCount++; }
         });
@@ -441,17 +450,20 @@
       // Apply justified text back to each cell
       var changed = 0;
       allCells.forEach(function (cell) {
-        var raw = (cell.body.text || "").trim();
-        if (!raw) return;
+        var current = (cell.body.text || "").trim();
+        var base = stripJustification(current); // re-justify from the bare line, not prior kashidas
+        if (!base) return;
         var colPx = (cell.columnWidth || 0) * 96 / 72;
         var justified;
         if (canvasCtx && colPx > 0 && opts.justifyMode === "kashida") {
-          justified = AshaarJustify.justifyLine(raw, colPx, canvasCtx, calibParams, fontProfile || null);
+          justified = AshaarJustify.justifyLine(base, colPx, canvasCtx, calibParams, fontProfile || null);
         } else {
           // spacing mode: justifyText dispatches to justifyWordSpacing via justifyPlainTextBlock
-          justified = AshaarWord.justifyPlainTextBlock(raw, opts, colPx);
+          justified = AshaarWord.justifyPlainTextBlock(base, opts, colPx);
         }
-        if (justified !== raw) {
+        // Compare against the CURRENT cell text so a reduction (fewer or zero
+        // kashidas) is written back even when the result equals the bare base.
+        if (justified !== current) {
           // Use paragraph.insertText rather than body.insertText so paragraph-level
           // properties (jc, spacing, indents — including jc="both" for spacing mode)
           // are preserved. body.insertText replaces the entire cell content including
