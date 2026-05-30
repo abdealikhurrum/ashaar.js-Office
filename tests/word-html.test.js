@@ -339,4 +339,23 @@ const rowLong = coupletRow(stanzaLong);
 assert.ok(rowShort && rowLong, "couplet row must be found in both renders");
 assert.equal(rowShort, rowLong, "couplet row must be independent of sibling solo widths");
 
+// ── Justify engine idempotency (vendored ashaar-justify) ────────────────────
+// Re-justification must re-derive from the bare line: reducible and idempotent,
+// never compounding on previously inserted tatweels.
+const AshaarJustify = require("../src/vendor/ashaar-justify");
+const _ctx = { measureText: (s) => ({ width: s.replace(/\s/g, "").length }) };
+const _base = "قفا نبك من ذكرى";
+const _wide = AshaarJustify.justifyLine(_base, 30, _ctx, { targetFill: 1 });
+const _wideN = (_wide.match(/ـ/g) || []).length;
+assert.ok(_wideN > 0, "justifyLine adds tatweels for a wide target");
+assert.ok((AshaarJustify.justifyLine(_wide, 18, _ctx, { targetFill: 1 }).match(/ـ/g) || []).length < _wideN,
+  "re-justify an already-stretched line reduces toward a narrower target");
+assert.doesNotMatch(AshaarJustify.justifyLine(_wide, _base.replace(/\s/g, "").length, _ctx, { targetFill: 1 }), /ـ/,
+  "re-justify strips back to bare when the line already fits");
+assert.equal(
+  AshaarJustify.spreadTatweels(AshaarJustify.spreadTatweels("ليلي", 3), 3),
+  AshaarJustify.spreadTatweels("ليلي", 3),
+  "spreadTatweels is idempotent (no compounding)"
+);
+
 console.log("word-html tests passed");

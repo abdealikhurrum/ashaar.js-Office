@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=c40438eb3f1187d37c50579c73ded9a664212cd1
-date=2026-05-27T00:42:52-05:00
+commit=4dd534cc47e347756a383b99c226467e411912ce
+date=2026-05-30T07:47:04-05:00
 package=ashaar-js
 version=0.1.0
-subject=feature enhancement - multi-misra rows
+subject=Make kashida justification idempotent (strip prior tatweels)
