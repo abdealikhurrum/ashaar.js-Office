@@ -307,4 +307,36 @@ const spans = AshaarWord.misraSpans(["abc", "abcdef"], 6); // weights 3:6 → 2:
 assert.equal(spans[0] + spans[1], 6, "spans must sum to contentCols");
 assert.ok(spans[1] > spans[0], "longer text gets more columns");
 
+// ── Stanza-internal independence (couplet must not depend on solo widths) ───
+// A stanza is one Word table with a shared grid. Word's default auto-fit resizes
+// shared grid columns to content across ALL rows, so a wide solo misra would drag
+// the couplet's column split with it. The table must declare fixed layout with a
+// definite width so the grid is rigid and each row lays out independently.
+
+function ooxmlStanza(soloText) {
+  // 4 solos + 1 couplet + 1 solo, all in one stanza
+  const src = [soloText, soloText, soloText, soloText,
+    "سادر بيت \\ عجز بيت", soloText].join("\n");
+  return AshaarWord.renderForWordOoxml(src, { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
+}
+
+const stanzaShort = ooxmlStanza("الف");
+const stanzaLong = ooxmlStanza("الف الف الف الف الف الف الف الف الف الف");
+
+// Fixed table layout + definite width (the rigidity that removes cross-row coupling)
+assert.match(stanzaShort, /<w:tblLayout w:type="fixed"\/>/, "stanza table must use fixed layout");
+assert.match(stanzaShort, /<w:tblW w:w="\d+" w:type="dxa"\/>/, "stanza table must have a definite dxa width");
+assert.doesNotMatch(stanzaShort, /<w:tblW w:w="0" w:type="auto"\/>/, "stanza table must not be auto-width");
+
+// The couplet row (the one containing both hemistichs) must be byte-identical
+// regardless of how wide the sibling solo misras are.
+function coupletRow(ooxml) {
+  const rows = ooxml.match(/<w:tr>[\s\S]*?<\/w:tr>/g) || [];
+  return rows.filter((r) => /سادر بيت/.test(r) && /عجز بيت/.test(r))[0];
+}
+const rowShort = coupletRow(stanzaShort);
+const rowLong = coupletRow(stanzaLong);
+assert.ok(rowShort && rowLong, "couplet row must be found in both renders");
+assert.equal(rowShort, rowLong, "couplet row must be independent of sibling solo widths");
+
 console.log("word-html tests passed");

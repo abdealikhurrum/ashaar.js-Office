@@ -1002,13 +1002,14 @@
     function gapTc() { return tcXml(gapCols, cwt, null); }
     function padTc(p) { return p > 0 ? tcXml(p, cwt, null) : ""; }
 
+    // Solo misra spans the FULL grid, centred. A single full-width cell keeps the
+    // solo independent of the couplet's column split (no shared content column can
+    // push the grid under fixed table layout). Justify target stays at BASE_CPM so a
+    // short solo still centres modestly; a long solo simply uses the full width.
     // indTwips: right-indent passed through to misraParaXml for stacked ajuz offset
     function soloRow(text, isRefrain, indTwips) {
-      var soloSpan = BASE_CPM;
-      var leftPad = Math.floor((si.GRID - soloSpan) / 2);
-      var rightPad = si.GRID - soloSpan - leftPad;
-      var para = misraParaXml(justify(text, soloSpan), "center", isRefrain, opts, indTwips || 0);
-      return "<w:tr>" + padTc(leftPad) + tcXml(soloSpan, cwt, para) + padTc(rightPad) + "</w:tr>";
+      var para = misraParaXml(justify(text, BASE_CPM), "center", isRefrain, opts, indTwips || 0);
+      return "<w:tr>" + tcXml(si.GRID, cwt, para) + "</w:tr>";
     }
 
     function misraRow(texts, refrains) {
@@ -1062,9 +1063,15 @@
 
   function stanzaTableOoxml(stanza, opts, textWidthTwips) {
     var si = stanzaGridInfo(stanza, opts, textWidthTwips);
+    // Fixed layout + a definite width make the shared grid rigid: Word uses the
+    // gridCol widths verbatim instead of auto-fitting columns to content across
+    // rows. Without this, a wide solo misra widens the centre columns and drags
+    // the couplet's split with it — coupling rows within a stanza.
+    var totalW = si.GRID * si.cwt;
     var tblPr = "<w:tblPr>" +
-      '<w:tblW w:w="0" w:type="auto"/>' +
+      '<w:tblW w:w="' + totalW + '" w:type="dxa"/>' +
       '<w:jc w:val="center"/>' +
+      '<w:tblLayout w:type="fixed"/>' +
       tblBordersXml() +
       "<w:bidiVisual/>" +
       "</w:tblPr>";
