@@ -1,3 +1,14 @@
+/* Bundled font (vendored via the font-fatemi submodule, synced to assets/fonts).
+   family-name matches exactly what Word reports (name table nameID 1) so the
+   WebView resolves it and the justify canvas measures the same outlines Word renders. */
+@font-face {
+  font-family: "FatemiMaqala";
+  src: url("../../assets/fonts/FatemiMaqala-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   --surface: #fbfaf7;

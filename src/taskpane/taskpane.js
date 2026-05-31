@@ -676,6 +676,13 @@
         if (c) { c.font = repSize + "pt \"" + repName + "\""; canvasCtx = c; opts._justifyCtx = c; }
       }
 
+      // Ensure a bundled @font-face (e.g. FatemiMaqala) finishes loading before we
+      // measure, so the canvas measures the same outlines Word renders. @font-face
+      // fonts load lazily on first use; this forces the load and awaits it.
+      if (canvasCtx && typeof document !== "undefined" && document.fonts && document.fonts.load) {
+        try { await document.fonts.load(repSize + "pt \"" + repName + "\""); } catch (e) {}
+      }
+
       // Auto-fit (in place): widen each table's columns so the widest misra has
       // kashida headroom, then justify into the new widths. Uses the desktop-only
       // TableColumn API (WordApiDesktop 1.3); on hosts without it, justify proceeds

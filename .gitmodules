@@ -1,3 +1,6 @@
 [submodule "vendor/ashaar-js"]
 	path = vendor/ashaar-js
 	url = https://github.com/abdealikhurrum/ashaar-js.git
+[submodule "vendor/font-fatemi"]
+	path = vendor/font-fatemi
+	url = https://github.com/abdealikhurrum/font-fatemi.git
