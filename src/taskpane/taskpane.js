@@ -676,6 +676,59 @@
         if (c) { c.font = repSize + "pt \"" + repName + "\""; canvasCtx = c; opts._justifyCtx = c; }
       }
 
+      // Auto-fit (in place): widen each table's columns so the widest misra has
+      // kashida headroom, then justify into the new widths. Uses the desktop-only
+      // TableColumn API (WordApiDesktop 1.3); on hosts without it, justify proceeds
+      // at the current widths (no resize).
+      var canResize = (typeof Office !== "undefined" && Office.context && Office.context.requirements
+        && Office.context.requirements.isSetSupported
+        && Office.context.requirements.isSetSupported("WordApiDesktop", "1.3"));
+      if (opts.autoFitWidth && canvasCtx && canResize) {
+        var sectionA = context.document.sections.getFirst();
+        sectionA.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+        await context.sync();
+        var plA = sectionA.pageLayout;
+        var pagePt = plA && plA.width ? (plA.width - (plA.leftMargin || 0) - (plA.rightMargin || 0)) : 468;
+        var kOn = (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") && Number(opts.tatweelCount || 0) > 0;
+        var headroom = kOn ? 0.9 : 0.98;
+
+        // Per table: the scale needed so the tightest cell gains headroom, capped at page width.
+        var scaleByTable = tables.items.map(function (tbl) {
+          var maxScale = 1, tableWpt = 0;
+          tbl.rows.items.forEach(function (row, ri) {
+            row.cells.items.forEach(function (cell) {
+              if (ri === 0) tableWpt += (cell.columnWidth || 0);
+              var t = stripJustification(cell.body.text || "").replace(/\s+/g, " ").trim();
+              if (!t) return;
+              var cf = cell.body.font;
+              canvasCtx.font = ((cf && cf.size) || repSize) + "pt \"" + ((cf && cf.name) || repName) + "\"";
+              var colWpx = (cell.columnWidth || 0) * 96 / 72;
+              if (colWpx > 0) maxScale = Math.max(maxScale, canvasCtx.measureText(t).width / (headroom * colWpx));
+            });
+          });
+          if (tableWpt > 0 && tableWpt * maxScale > pagePt) maxScale = pagePt / tableWpt;
+          return maxScale;
+        });
+
+        if (scaleByTable.some(function (s) { return s > 1.01; })) {
+          var colSets = tables.items.map(function (tbl, i) {
+            if (scaleByTable[i] <= 1.01) return null;
+            var cols = tbl.columns; cols.load("items/width"); return cols;
+          });
+          await context.sync();
+          colSets.forEach(function (cols, i) {
+            if (!cols) return;
+            cols.items.forEach(function (col) { col.width = Math.round(col.width * scaleByTable[i] * 100) / 100; });
+          });
+          await context.sync();
+          // Re-read cell widths (now changed) so justify targets the resized columns.
+          tables.items.forEach(function (tbl) {
+            tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+          });
+          await context.sync();
+        }
+      }
+
       // Probe + calibrate using the real font/size and content widths.
       var fontProfile = null;
       if (canvasCtx && typeof AshaarTune !== "undefined") {
