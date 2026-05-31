@@ -10,9 +10,9 @@ after a pause. Design spec: `2026-05-31-qaseeda-profiles-design.md`.
 | Kashida cap fix (engine) | `feature/layout-grid-mode` | ✅ pushed (submodule `47e6250`, parent `d6abf8b`) |
 | P1 in-place auto-fit resize on Justify | `feature/layout-grid-mode` | ✅ pushed (`8320235`) |
 | FatemiMaqala webfont bundling | `feature/layout-grid-mode` | ✅ pushed (`3ffc67d`) |
-| **P2** profile model + store + tagging | `feature/qaseeda-p2-profiles` | ✅ this branch |
-| **P3** apply/refresh engine | `feature/qaseeda-p3-apply` | ⏳ next |
-| **P4** profile UI + colours + correction + warning | `feature/qaseeda-p4-ui` | ⏳ pending |
+| **P2** profile model + store + tagging | `feature/qaseeda-p2-profiles` | ✅ pushed |
+| **P3** apply/refresh engine | `feature/qaseeda-p3-apply` | ✅ this branch |
+| **P4** profile UI + colours + correction + warning | `feature/qaseeda-p4-ui` | ⏳ next |
 
 Each phase branches off the previous phase branch (stacked); none merged to `main` yet.
 
@@ -47,21 +47,34 @@ Each phase branches off the previous phase branch (stacked); none merged to `mai
     qaseeda name on the Ashaar Poem block at the cursor.
 - profiles.js wired into `taskpane.html` (before word-html.js) and `package.json` test script.
 
-## P3 — apply/refresh engine (next)
+## P3 — apply/refresh engine (done)
 
-Per design §"Apply / refresh engine":
-1. `gatherQaseedaBlocks(name)` — find all content controls whose tag names that qaseeda
-   (iterate `context.document.contentControls`, filter title "Ashaar Poem" +
-   `parseContentControlTag(tag).qaseeda === name`).
-2. `deriveProfileWidths(blocks, profile)` — measure each block's per-column natural
-   widths (reuse the per-cell real-font canvas measurement from `justifySelection`),
-   feed into `AshaarProfiles.deriveSharedWidths` (auto-fit) or use fixed %.
-3. `applyProfileToQaseeda(name)` — resize every block's columns in place to the shared
-   vector (reuse P1's `TableColumn.width` path, WordApiDesktop 1.3) and re-justify with
-   the profile's params; cache `derived.colWidthVector` via `putProfile`.
-4. **Hybrid trigger:** in `justifySelection`, if the block has a qaseeda and its content
-   exceeds the cached widths, refresh the vector and re-apply to all the qaseeda's blocks.
-- Pure width-vector→twips/span conversion math should be added to `profiles.js` and tested.
+Implemented **additively** — `justifySelection` was deliberately left untouched (it
+is the confirmed-working path; any P3 regression is isolated to this unmerged branch
+and recoverable by reverting to P2). The new engine mirrors the proven P1 resize +
+justify snippets rather than refactoring the shared function. **Verify in Word.**
+
+- **profiles.js (tested):** `columnPointsFromContentPx(px, marginPt)` (content px →
+  column width in points incl. both cell margins); `strengthToTargetFill(strength)`
+  (0..24 → 0.90..1.0, matches word-html `sliderToFill`).
+- **taskpane.js:**
+  - `gatherQaseedaBlocks(context, name)` — all "Ashaar Poem" CCs whose tag qaseeda === name.
+  - `applyProfileToQaseeda(name)` — loads every block's tables/cells (real font + width),
+    and for `width.mode==="auto-fit"` (and WordApiDesktop 1.3) computes ONE shared table
+    width = the largest a block's tightest cell needs (× headroom), capped at page width,
+    then scales every block's columns to it; finally re-justifies every cell with the
+    profile's params (`AshaarJustify.justifyLine`, targetFill from strength). Falls back to
+    re-justify-only when resize isn't supported. Caches via `putProfile`.
+
+**Scope notes / deferred refinements (do in P4 or later, with in-Word testing):**
+- Shared sizing is **one table width per qaseeda** (proportional column scaling), not yet a
+  per-grid-column absolute vector — `deriveSharedWidths` exists and is tested for when we
+  move to per-column equality (needs gridSpan-aware column mapping).
+- **Hybrid auto-refresh on justify** (re-apply to siblings when a block outgrows cached
+  widths) is **not** wired into `justifySelection` yet — kept out to protect that path.
+  Fold it into P4's "Apply to all" flow / a guarded justify hook once testable in Word.
+- The measure+justify loop duplicates ~70 lines of `justifySelection`; consolidate into a
+  shared `justifyWorkRange(context, range, opts, cfg)` helper once it can be verified live.
 
 ## P4 — profile UI + colours + correction + warning (pending)
 

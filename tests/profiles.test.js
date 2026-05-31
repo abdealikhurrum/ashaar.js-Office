@@ -5,6 +5,8 @@ const {
   mergeProfile,
   applyFontCorrection,
   deriveSharedWidths,
+  columnPointsFromContentPx,
+  strengthToTargetFill,
 } = require("../src/taskpane/profiles");
 
 // ── defaultProfile ──────────────────────────────────────────────────────────
@@ -85,6 +87,23 @@ const {
   const out = deriveSharedWidths([[], [{ px: 30, font: "A" }]], { headroom: 1 });
   assert.equal(out[0], 0, "empty column => 0");
   assert.equal(out[1], 30, "populated column => its max");
+}
+
+// ── columnPointsFromContentPx (content px → column width in points) ───────────
+
+{
+  // 192 px content @ 96dpi = 144 pt; + 2×5.76pt cell margins = 155.52 pt.
+  assert.ok(Math.abs(columnPointsFromContentPx(192, 5.76) - 155.52) < 1e-6, "px→points incl. both margins");
+  assert.ok(Math.abs(columnPointsFromContentPx(96, 0) - 72) < 1e-6, "no margin => pure px→pt");
+}
+
+// ── strengthToTargetFill (kashida-strength slider → targetFill) ───────────────
+
+{
+  assert.ok(Math.abs(strengthToTargetFill(0) - 0.90) < 1e-9, "strength 0 => 0.90 fill");
+  assert.ok(Math.abs(strengthToTargetFill(24) - 1.0) < 1e-9, "strength 24 => 1.0 fill");
+  assert.ok(Math.abs(strengthToTargetFill(12) - 0.95) < 1e-9, "strength 12 => 0.95 fill");
+  assert.ok(Math.abs(strengthToTargetFill(48) - 1.0) < 1e-9, "clamps above 24 to 1.0");
 }
 
 console.log("profiles tests passed");

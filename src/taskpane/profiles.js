@@ -84,11 +84,26 @@
     });
   }
 
+  // Content-width px (at 96 dpi) → a Word column width in points, adding back
+  // both reserved cell side margins. Mirror of taskpane's contentPx() inverse.
+  function columnPointsFromContentPx(px, marginPt) {
+    return (px || 0) * 72 / 96 + 2 * (marginPt || 0);
+  }
+
+  // Kashida-strength slider (0..24) → justify targetFill (0.90..1.0), matching
+  // word-html's sliderToFill. Values above 24 clamp to full fill.
+  function strengthToTargetFill(strength) {
+    var s = Math.max(0, Math.min(24, Number(strength) || 0));
+    return 0.90 + (s / 24) * 0.10;
+  }
+
   return {
     defaultProfile: defaultProfile,
     normalizeProfile: normalizeProfile,
     mergeProfile: mergeProfile,
     applyFontCorrection: applyFontCorrection,
     deriveSharedWidths: deriveSharedWidths,
+    columnPointsFromContentPx: columnPointsFromContentPx,
+    strengthToTargetFill: strengthToTargetFill,
   };
 }));
