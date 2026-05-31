@@ -76,6 +76,10 @@
   var qaseedaStrengthValue = document.getElementById("qaseeda-strength-value");
   var qaseedaCorrFont = document.getElementById("qaseeda-corr-font");
   var qaseedaCorrFactor = document.getElementById("qaseeda-corr-factor");
+  var qaseedaDebugTatweel = document.getElementById("qaseeda-debug-tatweel");
+  var qaseedaDebugTatweelOn = document.getElementById("qaseeda-debug-tatweel-on");
+  var qaseedaDebugSpace = document.getElementById("qaseeda-debug-space");
+  var qaseedaDebugSpaceOn = document.getElementById("qaseeda-debug-space-on");
   var qaseedaFontStatus = document.getElementById("qaseeda-font-status");
 
   // Format collected per-cell justification metrics into the Debug panel.
@@ -578,7 +582,6 @@
           }
           await context.sync();
           // Re-read columnWidth on the captured proxies (justifySelection-proven).
-          // Re-read columnWidth on the captured proxies (justifySelection-proven).
           tableInfos.forEach(function (info) { info.tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); }); });
           await context.sync();
         }
@@ -603,7 +606,31 @@
           });
         });
         await context.sync();
+
+        // Debug colouring: tint the tatweels / micro-spaces that justification
+        // inserted, so they're visible. Best-effort via Word search (the spaces
+        // are exact code points; some hosts may not surface them).
+        var tatColor = (profile.debugColors && profile.debugColors.tatweel) || "";
+        var spcColor = (profile.debugColors && profile.debugColors.space) || "";
+        var coloured = 0;
+        if (tatColor || spcColor) {
+          var hits = [];
+          tableInfos.forEach(function (info) {
+            info.cells.forEach(function (c) {
+              if (tatColor) { var st = c.cell.body.search("ـ"); st.load("items"); hits.push({ s: st, color: tatColor }); }
+              if (spcColor) {
+                var sh = c.cell.body.search(" "); sh.load("items"); hits.push({ s: sh, color: spcColor });
+                var sn = c.cell.body.search(" "); sn.load("items"); hits.push({ s: sn, color: spcColor });
+              }
+            });
+          });
+          await context.sync();
+          hits.forEach(function (h) { h.s.items.forEach(function (r) { r.font.color = h.color; coloured++; }); });
+          await context.sync();
+        }
+
         summary = "Applied qaseeda “" + name + "” to " + blocks.length + " block(s); justified " + changed + " cell(s)"
+          + (coloured ? "; coloured " + coloured + " artifact(s)" : "")
           + (canResize ? "." : " (widths unchanged — desktop Word needed to resize).");
       });
       // Hybrid refresh: remember that this qaseeda was applied (widths cached lazily next pass).
@@ -624,6 +651,10 @@
     var corrFont = (qaseedaCorrFont.value || "").trim();
     p.fontCorrections = {};
     if (corrFont) p.fontCorrections[corrFont] = Number(qaseedaCorrFactor.value || 1);
+    p.debugColors = {
+      tatweel: (qaseedaDebugTatweelOn && qaseedaDebugTatweelOn.checked) ? (qaseedaDebugTatweel.value || "") : "",
+      space: (qaseedaDebugSpaceOn && qaseedaDebugSpaceOn.checked) ? (qaseedaDebugSpace.value || "") : ""
+    };
     return AshaarProfiles.normalizeProfile(p);
   }
 
@@ -637,6 +668,11 @@
     var fonts = Object.keys(p.fontCorrections || {});
     qaseedaCorrFont.value = fonts[0] || "";
     qaseedaCorrFactor.value = fonts[0] ? p.fontCorrections[fonts[0]] : 1;
+    var dc = p.debugColors || {};
+    if (qaseedaDebugTatweelOn) qaseedaDebugTatweelOn.checked = !!dc.tatweel;
+    if (dc.tatweel) qaseedaDebugTatweel.value = dc.tatweel;
+    if (qaseedaDebugSpaceOn) qaseedaDebugSpaceOn.checked = !!dc.space;
+    if (dc.space) qaseedaDebugSpace.value = dc.space;
   }
 
   function populateQaseedaNames() {

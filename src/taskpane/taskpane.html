@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-refine">
-    <link rel="stylesheet" href="./taskpane.css?v=20260531-refine">
+    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-color">
+    <link rel="stylesheet" href="./taskpane.css?v=20260531-color">
   </head>
   <body>
     <main class="pane">
@@ -262,6 +262,17 @@
                 <input id="qaseeda-corr-font" type="text" class="template-name-input" placeholder="font name">
                 <input id="qaseeda-corr-factor" type="number" min="0.5" max="2" step="0.01" value="1">
               </div>
+              <div class="field">
+                <label for="qaseeda-debug-tatweel">Highlight kashida</label>
+                <input id="qaseeda-debug-tatweel" type="color" value="#a7352a">
+                <label class="adopt-check"><input type="checkbox" id="qaseeda-debug-tatweel-on"> on</label>
+              </div>
+              <div class="field">
+                <label for="qaseeda-debug-space">Highlight spaces</label>
+                <input id="qaseeda-debug-space" type="color" value="#1f6f68">
+                <label class="adopt-check"><input type="checkbox" id="qaseeda-debug-space-on"> on</label>
+              </div>
+              <p class="adopt-hint">Colours the tatweels / micro-spaces inserted by justification so you can see where they landed. Applied on “Save &amp; Apply to all”.</p>
               <button id="qaseeda-font-check" type="button" class="button--secondary">Check font at cursor</button>
               <div id="qaseeda-font-status" class="qaseeda-font-status" aria-live="polite"></div>
             </div>
@@ -278,15 +289,15 @@
       </details>
     </main>
 
-    <script src="../vendor/ashaar-justify.js?v=20260531-refine"></script>
-    <script src="../vendor/ashaar.js?v=20260531-refine"></script>
-    <script src="../vendor/ashaar-autotune.js?v=20260531-refine"></script>
-    <script src="./profiles.js?v=20260531-refine"></script>
-    <script src="./word-html.js?v=20260531-refine"></script>
-    <script src="./word-tabstop.js?v=20260531-refine"></script>
-    <script src="./table-adopt.js?v=20260531-refine"></script>
-    <script src="./separators.js?v=20260531-refine"></script>
-    <script src="./layout-grid.js?v=20260531-refine"></script>
-    <script src="./taskpane.js?v=20260531-refine"></script>
+    <script src="../vendor/ashaar-justify.js?v=20260531-color"></script>
+    <script src="../vendor/ashaar.js?v=20260531-color"></script>
+    <script src="../vendor/ashaar-autotune.js?v=20260531-color"></script>
+    <script src="./profiles.js?v=20260531-color"></script>
+    <script src="./word-html.js?v=20260531-color"></script>
+    <script src="./word-tabstop.js?v=20260531-color"></script>
+    <script src="./table-adopt.js?v=20260531-color"></script>
+    <script src="./separators.js?v=20260531-color"></script>
+    <script src="./layout-grid.js?v=20260531-color"></script>
+    <script src="./taskpane.js?v=20260531-color"></script>
   </body>
 </html>
