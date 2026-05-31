@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=4dd534cc47e347756a383b99c226467e411912ce
-date=2026-05-30T07:47:04-05:00
+commit=47e6250120bcb9ba3297d2a62c7b99afcd3dada0
+date=2026-05-31T12:06:54-05:00
 package=ashaar-js
 version=0.1.0
-subject=Make kashida justification idempotent (strip prior tatweels)
+subject=Raise kashida cap so lines can fill wide columns
