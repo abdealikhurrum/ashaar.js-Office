@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-p4">
-    <link rel="stylesheet" href="./taskpane.css?v=20260531-p4">
+    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-p4b">
+    <link rel="stylesheet" href="./taskpane.css?v=20260531-p4b">
   </head>
   <body>
     <main class="pane">
@@ -223,15 +223,11 @@
       <details class="qaseeda-panel">
         <summary>Qaseeda profile</summary>
         <div class="qaseeda-body">
-          <p class="adopt-hint">Link blocks of one poem under a name so they share a width &amp; justification, and apply it everywhere at once.</p>
+          <p class="adopt-hint">Name a poem, tag its blocks, then size &amp; justify them all the same with one click.</p>
           <div class="field">
             <label for="qaseeda-name">Qaseeda name</label>
             <input id="qaseeda-name" type="text" class="template-name-input" placeholder="e.g. Karbala" list="qaseeda-names">
             <datalist id="qaseeda-names"></datalist>
-          </div>
-          <div class="qaseeda-assign-row">
-            <button id="qaseeda-assign" type="button" class="button--secondary">Assign block at cursor</button>
-            <button id="qaseeda-apply" type="button">Save &amp; Apply to all</button>
           </div>
           <div class="field">
             <label for="qaseeda-width-mode">Width</label>
@@ -242,48 +238,32 @@
             <input id="qaseeda-width-pct" type="number" min="25" max="100" step="5" value="50">
           </div>
           <div class="field">
-            <label for="qaseeda-justify-mode">Justification</label>
-            <select id="qaseeda-justify-mode">
-              <option value="kashida" selected>Kashida</option>
-              <option value="spacing">Spacing</option>
-              <option value="css">Word justify</option>
-              <option value="none">None</option>
-            </select>
-          </div>
-          <div class="field">
             <label for="qaseeda-strength">Kashida strength <span id="qaseeda-strength-value">6</span></label>
             <input id="qaseeda-strength" type="range" min="0" max="24" value="6">
           </div>
-          <div id="qaseeda-font-status" class="qaseeda-font-status" aria-live="polite"></div>
-          <button id="qaseeda-font-check" type="button" class="button--secondary">Check font at cursor</button>
+          <div class="qaseeda-assign-row">
+            <button id="qaseeda-assign" type="button" class="button--secondary">Assign block at cursor</button>
+            <button id="qaseeda-apply" type="button">Save &amp; Apply to all</button>
+          </div>
           <details class="qaseeda-advanced">
-            <summary>Appearance &amp; correction</summary>
+            <summary>Advanced</summary>
             <div class="qaseeda-advanced-body">
               <div class="field">
-                <label for="qaseeda-gap">Middle gap</label>
-                <input id="qaseeda-gap" type="number" min="0" max="20" value="4">
+                <label for="qaseeda-justify-mode">Justification mode</label>
+                <select id="qaseeda-justify-mode">
+                  <option value="kashida" selected>Kashida</option>
+                  <option value="spacing">Spacing</option>
+                  <option value="css">Word justify</option>
+                  <option value="none">None</option>
+                </select>
               </div>
               <div class="field">
-                <label for="qaseeda-symbol">Misra symbol</label>
-                <input id="qaseeda-symbol" type="text" class="template-name-input" placeholder="(none)">
-              </div>
-              <div class="field">
-                <label for="qaseeda-symbol-color">Symbol colour</label>
-                <input id="qaseeda-symbol-color" type="text" class="template-name-input" placeholder="#a7352a">
-              </div>
-              <div class="field">
-                <label for="qaseeda-debug-tatweel">Debug: tatweel colour</label>
-                <input id="qaseeda-debug-tatweel" type="text" class="template-name-input" placeholder="(none)">
-              </div>
-              <div class="field">
-                <label for="qaseeda-debug-space">Debug: space colour</label>
-                <input id="qaseeda-debug-space" type="text" class="template-name-input" placeholder="(none)">
-              </div>
-              <div class="field">
-                <label for="qaseeda-corr-font">Per-font correction</label>
+                <label for="qaseeda-corr-font">Per-font width correction</label>
                 <input id="qaseeda-corr-font" type="text" class="template-name-input" placeholder="font name">
                 <input id="qaseeda-corr-factor" type="number" min="0.5" max="2" step="0.01" value="1">
               </div>
+              <button id="qaseeda-font-check" type="button" class="button--secondary">Check font at cursor</button>
+              <div id="qaseeda-font-status" class="qaseeda-font-status" aria-live="polite"></div>
             </div>
           </details>
         </div>
@@ -298,15 +278,15 @@
       </details>
     </main>
 
-    <script src="../vendor/ashaar-justify.js?v=20260531-p4"></script>
-    <script src="../vendor/ashaar.js?v=20260531-p4"></script>
-    <script src="../vendor/ashaar-autotune.js?v=20260531-p4"></script>
-    <script src="./profiles.js?v=20260531-p4"></script>
-    <script src="./word-html.js?v=20260531-p4"></script>
-    <script src="./word-tabstop.js?v=20260531-p4"></script>
-    <script src="./table-adopt.js?v=20260531-p4"></script>
-    <script src="./separators.js?v=20260531-p4"></script>
-    <script src="./layout-grid.js?v=20260531-p4"></script>
-    <script src="./taskpane.js?v=20260531-p4"></script>
+    <script src="../vendor/ashaar-justify.js?v=20260531-p4b"></script>
+    <script src="../vendor/ashaar.js?v=20260531-p4b"></script>
+    <script src="../vendor/ashaar-autotune.js?v=20260531-p4b"></script>
+    <script src="./profiles.js?v=20260531-p4b"></script>
+    <script src="./word-html.js?v=20260531-p4b"></script>
+    <script src="./word-tabstop.js?v=20260531-p4b"></script>
+    <script src="./table-adopt.js?v=20260531-p4b"></script>
+    <script src="./separators.js?v=20260531-p4b"></script>
+    <script src="./layout-grid.js?v=20260531-p4b"></script>
+    <script src="./taskpane.js?v=20260531-p4b"></script>
   </body>
 </html>

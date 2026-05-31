@@ -74,11 +74,6 @@
   var qaseedaJustifyMode = document.getElementById("qaseeda-justify-mode");
   var qaseedaStrength = document.getElementById("qaseeda-strength");
   var qaseedaStrengthValue = document.getElementById("qaseeda-strength-value");
-  var qaseedaGap = document.getElementById("qaseeda-gap");
-  var qaseedaSymbol = document.getElementById("qaseeda-symbol");
-  var qaseedaSymbolColor = document.getElementById("qaseeda-symbol-color");
-  var qaseedaDebugTatweel = document.getElementById("qaseeda-debug-tatweel");
-  var qaseedaDebugSpace = document.getElementById("qaseeda-debug-space");
   var qaseedaCorrFont = document.getElementById("qaseeda-corr-font");
   var qaseedaCorrFactor = document.getElementById("qaseeda-corr-factor");
   var qaseedaFontStatus = document.getElementById("qaseeda-font-status");
@@ -465,9 +460,14 @@
         await context.sync();
         var allTables = [];
         blockTables.forEach(function (t) { t.items.forEach(function (tbl) { allTables.push(tbl); }); });
+        // Stage 1: load each row's cells (must sync before reading cells.items).
+        allTables.forEach(function (tbl) {
+          tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+        });
+        await context.sync();
+        // Stage 2: now cells.items is available — load each cell's text + real font.
         allTables.forEach(function (tbl) {
           tbl.rows.items.forEach(function (row) {
-            row.cells.load("items/columnWidth");
             row.cells.items.forEach(function (cell) { cell.body.load("text"); cell.body.font.load("name,size"); });
           });
         });
@@ -578,10 +578,6 @@
     p.width.pct = Number(qaseedaWidthPct.value || 50);
     p.justify.mode = qaseedaJustifyMode.value;
     p.justify.strength = Number(qaseedaStrength.value || 0);
-    p.gap = Number(qaseedaGap.value || 4);
-    p.misraSymbol = qaseedaSymbol.value || "";
-    p.symbolColor = qaseedaSymbolColor.value || "";
-    p.debugColors = { tatweel: qaseedaDebugTatweel.value || "", space: qaseedaDebugSpace.value || "" };
     var corrFont = (qaseedaCorrFont.value || "").trim();
     p.fontCorrections = {};
     if (corrFont) p.fontCorrections[corrFont] = Number(qaseedaCorrFactor.value || 1);
@@ -595,11 +591,6 @@
     qaseedaJustifyMode.value = p.justify.mode;
     qaseedaStrength.value = p.justify.strength;
     qaseedaStrengthValue.textContent = p.justify.strength;
-    qaseedaGap.value = p.gap;
-    qaseedaSymbol.value = p.misraSymbol || "";
-    qaseedaSymbolColor.value = p.symbolColor || "";
-    qaseedaDebugTatweel.value = (p.debugColors && p.debugColors.tatweel) || "";
-    qaseedaDebugSpace.value = (p.debugColors && p.debugColors.space) || "";
     var fonts = Object.keys(p.fontCorrections || {});
     qaseedaCorrFont.value = fonts[0] || "";
     qaseedaCorrFactor.value = fonts[0] ? p.fontCorrections[fonts[0]] : 1;
