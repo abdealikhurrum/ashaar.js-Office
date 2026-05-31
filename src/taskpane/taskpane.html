@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260530-rejustify2">
-    <link rel="stylesheet" href="./taskpane.css?v=20260530-rejustify2">
+    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260530-adopt">
+    <link rel="stylesheet" href="./taskpane.css?v=20260530-adopt">
   </head>
   <body>
     <main class="pane">
@@ -88,6 +88,32 @@
           <button id="drop-grid" type="button" class="button--secondary">Drop Grid</button>
         </section>
 
+        <section class="adopt-panel" aria-label="Adopt existing table">
+          <button id="adopt-table" type="button">Adopt Existing Table</button>
+          <p class="adopt-hint">Cursor in a table of poetry? Adopt it into a clean, justifiable Ashaar block.</p>
+          <details class="adopt-advanced">
+            <summary>Adopt options</summary>
+            <div class="adopt-advanced-body">
+              <label class="adopt-check"><input type="checkbox" id="adopt-review"> Review before replacing</label>
+              <div class="field">
+                <label for="adopt-direction">Reading direction</label>
+                <select id="adopt-direction">
+                  <option value="auto" selected>Auto (right-to-left)</option>
+                  <option value="rtl">Right-to-left</option>
+                  <option value="ltr">Left-to-right</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="adopt-scope">Scope</label>
+                <select id="adopt-scope">
+                  <option value="cursor" selected>Table at cursor</option>
+                  <option value="selection">All tables in selection</option>
+                </select>
+              </div>
+            </div>
+          </details>
+        </section>
+
         <details class="templates-panel">
           <summary class="templates-summary">Templates</summary>
           <div class="templates-body">
@@ -162,11 +188,12 @@
       <div id="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="../vendor/ashaar-justify.js?v=20260530-rejustify2"></script>
-    <script src="../vendor/ashaar.js?v=20260530-rejustify2"></script>
-    <script src="../vendor/ashaar-autotune.js?v=20260530-rejustify2"></script>
-    <script src="./word-html.js?v=20260530-rejustify2"></script>
-    <script src="./word-tabstop.js?v=20260530-rejustify2"></script>
-    <script src="./taskpane.js?v=20260530-rejustify2"></script>
+    <script src="../vendor/ashaar-justify.js?v=20260530-adopt"></script>
+    <script src="../vendor/ashaar.js?v=20260530-adopt"></script>
+    <script src="../vendor/ashaar-autotune.js?v=20260530-adopt"></script>
+    <script src="./word-html.js?v=20260530-adopt"></script>
+    <script src="./word-tabstop.js?v=20260530-adopt"></script>
+    <script src="./table-adopt.js?v=20260530-adopt"></script>
+    <script src="./taskpane.js?v=20260530-adopt"></script>
   </body>
 </html>

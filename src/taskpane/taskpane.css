@@ -363,3 +363,39 @@ button:hover {
     grid-column: auto;
   }
 }
+
+/* ── Adopt existing table ──────────────────────────────────────────────── */
+.adopt-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.adopt-panel > #adopt-table {
+  width: 100%;
+}
+.adopt-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.adopt-advanced {
+  margin-top: 8px;
+}
+.adopt-advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.adopt-advanced-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.adopt-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink);
+}

@@ -478,6 +478,90 @@
     });
   }
 
+  // Adopt an existing Word table of poetry: read its cells, reconstruct the
+  // canonical Ashaar source, and (by default) replace the table in place with a
+  // managed, content-controlled Ashaar block. Uses Word.run directly so we keep
+  // control of messaging (withWord forces a "Done." message).
+  async function adoptTable() {
+    if (typeof Word === "undefined") {
+      setMessage("Open this task pane inside Word to adopt a table.");
+      return;
+    }
+    var reviewOnly = document.getElementById("adopt-review").checked;
+    var dirChoice = document.getElementById("adopt-direction").value;     // auto | rtl | ltr
+    var direction = dirChoice === "ltr" ? "ltr" : "rtl";                   // auto → rtl
+    var scope = document.getElementById("adopt-scope").value;             // cursor | selection
+    var source = "";
+
+    try {
+      await Word.run(async function (context) {
+        var selection = context.document.getSelection();
+        var targetTables;
+
+        if (scope === "selection") {
+          var tbls = selection.tables;
+          tbls.load("items");
+          await context.sync();
+          targetTables = tbls.items;
+          if (!targetTables.length) { setMessage("Select one or more tables to adopt."); return; }
+        } else {
+          var t = selection.parentTableOrNullObject;
+          t.load("rows");
+          await context.sync();
+          if (t.isNullObject) { setMessage("Place the cursor inside a table to adopt it."); return; }
+          targetTables = [t];
+        }
+
+        targetTables.forEach(function (tbl) { tbl.rows.load("items"); });
+        await context.sync();
+        targetTables.forEach(function (tbl) {
+          tbl.rows.items.forEach(function (row) { row.cells.load("items"); });
+        });
+        await context.sync();
+        targetTables.forEach(function (tbl) {
+          tbl.rows.items.forEach(function (row) {
+            row.cells.items.forEach(function (cell) { cell.body.load("text"); });
+          });
+        });
+        await context.sync();
+
+        // Each table → one stanza; multiple selected tables → stanza-separated.
+        source = targetTables.map(function (tbl) {
+          var rows = tbl.rows.items.map(function (row) {
+            return row.cells.items.map(function (cell) { return cell.body.text || ""; });
+          });
+          return AshaarTableAdopt.adoptTableToSource(rows, { direction: direction });
+        }).filter(function (s) { return s.trim(); }).join("\n\n");
+
+        if (!source.trim()) { setMessage("That table didn't contain any text to adopt."); return; }
+
+        // Put the selection on the content we'll replace, so insertPoem(true) targets it.
+        var range = (scope === "cursor") ? targetTables[0].getRange() : selection.getRange();
+        range.select();
+        await context.sync();
+      });
+    } catch (e) {
+      setMessage("Adopt failed: " + (e && e.message ? e.message : String(e)));
+      return;
+    }
+
+    if (!source.trim()) return; // a friendly message was already shown
+
+    // Show the recovered source + preview (transparent, editable).
+    setMode("convert");
+    input.value = source;
+    renderPreview();
+
+    if (reviewOnly) {
+      setMessage("Adopted the table into the editor. Review the text, then click Replace Selection.");
+      return;
+    }
+
+    // One-click: replace the selected table with the regenerated Ashaar block.
+    await insertPoem(true);
+    setMessage("Table adopted and replaced with a formatted Ashaar block.");
+  }
+
   // ── Template persistence helpers ───────────────────────────────────────────
 
   function loadTemplates() {
@@ -705,6 +789,7 @@
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
     document.getElementById("drop-grid").addEventListener("click", insertBareGrid);
+    document.getElementById("adopt-table").addEventListener("click", adoptTable);
     document.getElementById("capture-template").addEventListener("click", captureSelectedTableLayout);
     document.getElementById("apply-template").addEventListener("click", applyTemplate);
     document.getElementById("delete-template").addEventListener("click", deleteTemplate);
