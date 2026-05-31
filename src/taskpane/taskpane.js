@@ -325,6 +325,87 @@
     }
   }
 
+  // ── Qaseeda profiles — document store + block tagging (P2) ────────────────
+  // Profiles live in Word document settings (one authoritative copy that travels
+  // with the .docx), keyed by name. A block is linked to a qaseeda by the
+  // `qaseeda` field in its content-control tag. Pure profile math is in
+  // profiles.js (AshaarProfiles); this layer is the Office.js orchestration.
+  var PROFILE_STORE_KEY = "ashaar:profiles";
+
+  function loadProfileStore() {
+    try {
+      if (typeof Office === "undefined" || !Office.context || !Office.context.document) return {};
+      var raw = Office.context.document.settings.get(PROFILE_STORE_KEY);
+      var obj = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : {};
+      return (obj && typeof obj === "object") ? obj : {};
+    } catch (e) { return {}; }
+  }
+
+  function saveProfileStore(store) {
+    return new Promise(function (resolve) {
+      try {
+        if (typeof Office === "undefined" || !Office.context || !Office.context.document) { resolve(false); return; }
+        Office.context.document.settings.set(PROFILE_STORE_KEY, JSON.stringify(store || {}));
+        Office.context.document.settings.saveAsync(function (res) {
+          resolve(!!(res && res.status === Office.AsyncResultStatus.Succeeded));
+        });
+      } catch (e) { resolve(false); }
+    });
+  }
+
+  function getProfile(name) {
+    var p = loadProfileStore()[name];
+    return p ? AshaarProfiles.normalizeProfile(p) : AshaarProfiles.defaultProfile(name);
+  }
+
+  async function putProfile(profile) {
+    var p = AshaarProfiles.normalizeProfile(profile);
+    if (!p.name) return false;
+    var store = loadProfileStore();
+    store[p.name] = p;
+    return await saveProfileStore(store);
+  }
+
+  function listProfileNames() {
+    return Object.keys(loadProfileStore());
+  }
+
+  // Assign (or clear, with "") a qaseeda name onto the Ashaar Poem block at the cursor.
+  async function setQaseedaOnSelection(name) {
+    var done = false;
+    await withWord(async function (context) {
+      var cc = context.document.getSelection().parentContentControlOrNullObject;
+      cc.load("title,tag");
+      await context.sync();
+      if (cc.isNullObject || cc.title !== "Ashaar Poem") {
+        setMessage("Place the cursor inside an Ashaar Poem block first.");
+        return;
+      }
+      cc.tag = AshaarWord.setTagQaseeda(cc.tag, name);
+      await context.sync();
+      done = true;
+    });
+    return done;
+  }
+
+  // Read the qaseeda name on the Ashaar Poem block at the cursor ("" if none).
+  async function getQaseedaAtSelection() {
+    var qaseeda = "";
+    if (typeof Word === "undefined") return qaseeda;
+    try {
+      await Word.run(async function (context) {
+        var cc = context.document.getSelection().parentContentControlOrNullObject;
+        cc.load("title,tag");
+        await context.sync();
+        if (!cc.isNullObject && cc.title === "Ashaar Poem") {
+          var payload = AshaarWord.parseContentControlTag(cc.tag);
+          qaseeda = (payload && payload.qaseeda) || "";
+        }
+      });
+    } catch (e) { /* leave qaseeda empty */ }
+    return qaseeda;
+  }
+
   function wordAlignment(align) {
     if (align === "left") return "Left";
     if (align === "right") return "Right";

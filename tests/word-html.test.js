@@ -392,4 +392,34 @@ assert.equal(
   "tag carries tableWidthPct"
 );
 
+// Content-control tag carries the qaseeda name and round-trips through the parser
+const tagQ = AshaarWord.contentControlTag("x", { qaseeda: "Karbala" });
+assert.equal(
+  AshaarWord.parseContentControlTag(tagQ).qaseeda, "Karbala",
+  "tag carries and parses the qaseeda name"
+);
+const tagNoQ = "ashaar:" + encodeURIComponent(JSON.stringify({ k: "ashaar-poem", v: 1 }));
+assert.equal(
+  AshaarWord.parseContentControlTag(tagNoQ).qaseeda, "",
+  "qaseeda defaults to empty when absent from the payload"
+);
+// parseContentControlTag tolerates non-ashaar / malformed tags
+assert.equal(AshaarWord.parseContentControlTag(""), null, "empty tag => null");
+assert.equal(AshaarWord.parseContentControlTag("not-ashaar"), null, "non-ashaar tag => null");
+// Round-trips a real payload
+const tagFull = AshaarWord.contentControlTag("poem", { layoutMode: "balanced", tableWidthPct: 75, qaseeda: "Q1" });
+const parsedFull = AshaarWord.parseContentControlTag(tagFull);
+assert.equal(parsedFull.k, "ashaar-poem", "parses kind");
+assert.equal(parsedFull.tableWidthPct, 75, "parses tableWidthPct");
+assert.equal(parsedFull.qaseeda, "Q1", "parses qaseeda");
+
+// setTagQaseeda rewrites only the qaseeda field, leaving other payload intact
+const tagBase = AshaarWord.contentControlTag("poem", { tableWidthPct: 60, qaseeda: "Old" });
+const tagSet = AshaarWord.setTagQaseeda(tagBase, "New");
+const parsedSet = AshaarWord.parseContentControlTag(tagSet);
+assert.equal(parsedSet.qaseeda, "New", "setTagQaseeda updates the qaseeda name");
+assert.equal(parsedSet.tableWidthPct, 60, "setTagQaseeda preserves other payload fields");
+assert.equal(AshaarWord.setTagQaseeda("not-ashaar", "X"), "not-ashaar", "non-ashaar tag returned unchanged");
+assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase, "")).qaseeda, "", "clearing the name yields empty string");
+
 console.log("word-html tests passed");

@@ -886,8 +886,33 @@
       misraCount: Number(opts.misraCount || 4),
       fontMode: opts.fontMode || "document",
       tableWidthPct: Number(opts.tableWidthPct || 100),
+      qaseeda: opts.qaseeda || "",
       sourceHash: (hash >>> 0).toString(16)
     };
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // Decode an "ashaar:" content-control tag back into its payload object.
+  // Returns null for empty/non-ashaar/malformed tags. Guarantees a string
+  // `qaseeda` field so callers can read it without a presence check.
+  function parseContentControlTag(tag) {
+    if (typeof tag !== "string" || tag.indexOf("ashaar:") !== 0) return null;
+    try {
+      var payload = JSON.parse(decodeURIComponent(tag.slice("ashaar:".length)));
+      if (!payload || typeof payload !== "object") return null;
+      if (typeof payload.qaseeda !== "string") payload.qaseeda = "";
+      return payload;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Return a copy of an "ashaar:" tag with only its qaseeda name replaced.
+  // Non-ashaar / malformed tags are returned unchanged.
+  function setTagQaseeda(tag, name) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    payload.qaseeda = name || "";
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
@@ -1209,6 +1234,8 @@
     parseLayoutSpec: parseLayoutSpec,
     tableColumns: tableColumns,
     contentControlTag: contentControlTag,
+    parseContentControlTag: parseContentControlTag,
+    setTagQaseeda: setTagQaseeda,
     justifyPlainTextBlock: justifyPlainTextBlock,
     renderForWordOoxml: renderForWordOoxml,
     wrapOoxml: wrapOoxml,
