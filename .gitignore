@@ -11,4 +11,10 @@ localhost-key.pem
 node_modules/
 
 # New test documents (existing corpus fixtures are tracked)
-test-documents/*.docx
+#test-documents/*.docx
+
+# Brainstorm scratch (visual companion)
+.superpowers/
+
+# Word lock / temp files
+~$*
