@@ -37,6 +37,29 @@
   var layoutGridEl = document.getElementById("layout-grid");
   var layoutViewGridBtn = document.getElementById("layout-view-grid");
   var layoutViewNumbersBtn = document.getElementById("layout-view-numbers");
+  var debugMode = document.getElementById("debug-mode");
+  var debugOutput = document.getElementById("debug-output");
+
+  // Format collected per-cell justification metrics into the Debug panel.
+  function renderDebug(diags) {
+    if (!debugOutput) return;
+    if (!diags.length) { debugOutput.textContent = "(no kashida cells measured)"; return; }
+    var head = "cell  font        col(in)   nat  target  final  fill  tw/cap  text";
+    var rows = diags.map(function (d) {
+      return [
+        String(d.i).padEnd(4),
+        d.font.padEnd(11),
+        (d.colPx + "(" + d.colIn + ")").padEnd(9),
+        String(d.nat).padStart(4),
+        String(d.target).padStart(6),
+        String(d.fin).padStart(6),
+        (d.fill + "%").padStart(5),
+        (d.tw + "/" + d.cap).padStart(6),
+        "  " + d.text
+      ].join(" ");
+    });
+    debugOutput.textContent = head + "\n" + rows.join("\n");
+  }
 
   var GRID_COLS = 12;
   var layoutView = "numbers";   // "grid" | "numbers"
@@ -509,6 +532,8 @@
                      : "Times New Roman";
     var doKashida = opts.justifyMode === "kashida" || opts.justifyMode === "spacing";
     var CELL_MARGIN_PT = 5.76; // Word default cell side margin (0.08") reserved for text
+    var debug = !!(debugMode && debugMode.checked);
+    var diags = [];
 
     setMessage("Justifying…");
 
@@ -633,6 +658,22 @@
           // spacing mode: justifyText dispatches to justifyWordSpacing via justifyPlainTextBlock
           justified = AshaarWord.justifyPlainTextBlock(base, opts, colPx);
         }
+        if (debug && canvasCtx) {
+          var dCf = cell.body.font;
+          diags.push({
+            i: diags.length,
+            font: (((dCf && dCf.size) || repSize)) + "pt " + (((dCf && dCf.name) || repName)),
+            colPx: Math.round(colPx),
+            colIn: (colPx / 96).toFixed(2),
+            nat: Math.round(canvasCtx.measureText(base).width),
+            target: Math.round(colPx * (calibParams.targetFill || 1)),
+            fin: Math.round(canvasCtx.measureText(justified).width),
+            fill: colPx ? Math.round(canvasCtx.measureText(justified).width / colPx * 100) : 0,
+            tw: (justified.match(/ـ/g) || []).length,
+            cap: base.replace(/\s/g, "").length,
+            text: base.slice(0, 14)
+          });
+        }
         // Compare against the CURRENT cell text so a reduction (fewer or zero
         // kashidas) is written back even when the result equals the bare base.
         if (justified !== current) {
@@ -644,6 +685,7 @@
 
       await context.sync();
       setMessage("Justified " + changed + " cell(s) across " + tables.items.length + " table(s).");
+      if (debug) renderDebug(diags);
     });
   }
 

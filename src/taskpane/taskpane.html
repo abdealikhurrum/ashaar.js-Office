@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-just">
-    <link rel="stylesheet" href="./taskpane.css?v=20260531-just">
+    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-debug">
+    <link rel="stylesheet" href="./taskpane.css?v=20260531-debug">
   </head>
   <body>
     <main class="pane">
@@ -220,16 +220,22 @@
       </section>
 
       <div id="message" role="status" aria-live="polite"></div>
+
+      <details class="debug-panel">
+        <summary>Debug</summary>
+        <label class="adopt-check"><input type="checkbox" id="debug-mode"> Capture justification metrics</label>
+        <pre id="debug-output" class="debug-output" aria-live="polite"></pre>
+      </details>
     </main>
 
-    <script src="../vendor/ashaar-justify.js?v=20260531-just"></script>
-    <script src="../vendor/ashaar.js?v=20260531-just"></script>
-    <script src="../vendor/ashaar-autotune.js?v=20260531-just"></script>
-    <script src="./word-html.js?v=20260531-just"></script>
-    <script src="./word-tabstop.js?v=20260531-just"></script>
-    <script src="./table-adopt.js?v=20260531-just"></script>
-    <script src="./separators.js?v=20260531-just"></script>
-    <script src="./layout-grid.js?v=20260531-just"></script>
-    <script src="./taskpane.js?v=20260531-just"></script>
+    <script src="../vendor/ashaar-justify.js?v=20260531-debug"></script>
+    <script src="../vendor/ashaar.js?v=20260531-debug"></script>
+    <script src="../vendor/ashaar-autotune.js?v=20260531-debug"></script>
+    <script src="./word-html.js?v=20260531-debug"></script>
+    <script src="./word-tabstop.js?v=20260531-debug"></script>
+    <script src="./table-adopt.js?v=20260531-debug"></script>
+    <script src="./separators.js?v=20260531-debug"></script>
+    <script src="./layout-grid.js?v=20260531-debug"></script>
+    <script src="./taskpane.js?v=20260531-debug"></script>
   </body>
 </html>
