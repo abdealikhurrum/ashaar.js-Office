@@ -12,7 +12,7 @@ after a pause. Design spec: `2026-05-31-qaseeda-profiles-design.md`.
 | FatemiMaqala webfont bundling | `feature/layout-grid-mode` | ✅ pushed (`3ffc67d`) |
 | **P2** profile model + store + tagging | `feature/qaseeda-p2-profiles` | ✅ pushed |
 | **P3** apply/refresh engine | `feature/qaseeda-p3-apply` | ✅ this branch |
-| **P4** profile UI + colours + correction + warning | `feature/qaseeda-p4-ui` | ⏳ next |
+| **P4** profile UI + correction + warning | `feature/qaseeda-p4-ui` | ✅ this branch (colouring deferred) |
 
 Each phase branches off the previous phase branch (stacked); none merged to `main` yet.
 
@@ -76,12 +76,32 @@ justify snippets rather than refactoring the shared function. **Verify in Word.*
 - The measure+justify loop duplicates ~70 lines of `justifySelection`; consolidate into a
   shared `justifyWorkRange(context, range, opts, cfg)` helper once it can be verified live.
 
-## P4 — profile UI + colours + correction + warning (pending)
+## P4 — profile UI + correction + warning (done; colouring deferred)
 
-- Profile panel (collapsible): pick/name a qaseeda; edit width auto/fixed, gap, misra
-  symbol + colour, justify type/strength, debug tatweel/space colours, per-font correction.
-  "Apply to all". Assign-qaseeda control on inserts. `res`/warning when font unresolved.
-- `word-html.js` generator: misra-symbol colouring + debug colouring of inserted artifacts.
+- **Profile panel** (`taskpane.html` `.qaseeda-panel`, styled in `taskpane.css`): qaseeda
+  name (with a `<datalist>` of saved names), width auto-fit/fixed + %, justification
+  type + strength, and under "Appearance & correction": gap, misra symbol + colour,
+  debug tatweel/space colours, per-font correction (font + factor).
+- **Wiring** (`taskpane.js`): `panelToProfile`/`profileToPanel`, `populateQaseedaNames`,
+  `loadQaseedaIntoPanel` (typing a saved name loads it), `saveAndApplyQaseeda`
+  ("Save & Apply to all" → `putProfile` then `applyProfileToQaseeda`),
+  `assignBlockToQaseeda` ("Assign block at cursor" → `setQaseedaOnSelection`),
+  `checkQaseedaFont` ("Check font at cursor" → `fontAvailable`, shows accurate/approximate).
+- `options()` now carries the qaseeda name, so **new inserts are tagged** with it.
+- **Per-font correction is live** in the apply engine: measured width × `fontCorrections`
+  factor feeds the resize (via tested `AshaarProfiles.applyFontCorrection`).
+
+**Deferred (cosmetic, not safely verifiable without a live Word session):**
+- `word-html.js` generator **OOXML run-colouring** of the misra symbol and of inserted
+  tatweels/spaces (debug colours). The profile *fields* are complete and stored; only the
+  coloured rendering in the generator remains. Implement with a real .docx to check the
+  run-level `<w:color>` output.
+
+## Suggested merge / verify order
+1. In Word: re-confirm Justify (cap fix + font res). 2. Tag two blocks with one qaseeda,
+   "Save & Apply to all", confirm both get the same width + justification. 3. "Check font
+   at cursor" on Arial (ok) and an unresolved font (warn). 4. Merge `feature/layout-grid-mode`
+   first (P1+cap+font), then the qaseeda branches in order P2→P3→P4 (they are stacked).
 
 ## Resume instructions
 - `npm test` must stay green (now 7 suites incl. `profiles`).

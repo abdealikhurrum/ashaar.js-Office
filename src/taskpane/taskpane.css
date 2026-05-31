@@ -563,6 +563,49 @@ button:hover {
   white-space: pre;
 }
 
+/* ── Qaseeda profile panel ─────────────────────────────────────────────── */
+.qaseeda-panel {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.qaseeda-panel > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+.qaseeda-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qaseeda-assign-row {
+  display: flex;
+  gap: 8px;
+}
+.qaseeda-assign-row > button {
+  flex: 1;
+}
+.qaseeda-font-status {
+  font-size: 12px;
+  min-height: 16px;
+}
+.qaseeda-font-status.is-ok { color: var(--accent); }
+.qaseeda-font-status.is-warn { color: var(--refrain); }
+.qaseeda-advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.qaseeda-advanced-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ── Auto-fit width toggle ─────────────────────────────────────────────── */
 .auto-fit-check {
   display: flex;

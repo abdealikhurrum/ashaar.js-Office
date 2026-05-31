@@ -67,6 +67,21 @@
   var layoutViewNumbersBtn = document.getElementById("layout-view-numbers");
   var debugMode = document.getElementById("debug-mode");
   var debugOutput = document.getElementById("debug-output");
+  var qaseedaName = document.getElementById("qaseeda-name");
+  var qaseedaNames = document.getElementById("qaseeda-names");
+  var qaseedaWidthMode = document.getElementById("qaseeda-width-mode");
+  var qaseedaWidthPct = document.getElementById("qaseeda-width-pct");
+  var qaseedaJustifyMode = document.getElementById("qaseeda-justify-mode");
+  var qaseedaStrength = document.getElementById("qaseeda-strength");
+  var qaseedaStrengthValue = document.getElementById("qaseeda-strength-value");
+  var qaseedaGap = document.getElementById("qaseeda-gap");
+  var qaseedaSymbol = document.getElementById("qaseeda-symbol");
+  var qaseedaSymbolColor = document.getElementById("qaseeda-symbol-color");
+  var qaseedaDebugTatweel = document.getElementById("qaseeda-debug-tatweel");
+  var qaseedaDebugSpace = document.getElementById("qaseeda-debug-space");
+  var qaseedaCorrFont = document.getElementById("qaseeda-corr-font");
+  var qaseedaCorrFactor = document.getElementById("qaseeda-corr-factor");
+  var qaseedaFontStatus = document.getElementById("qaseeda-font-status");
 
   // Format collected per-cell justification metrics into the Debug panel.
   function renderDebug(diags) {
@@ -233,7 +248,8 @@
       tatweelCount: Number(tatweelCount.value || 0),
       gapWidth: Number(gapWidth.value || 4),
       tableWidthPct: tableWidthPct(),
-      autoFitWidth: !!(autoFitWidth && autoFitWidth.checked)
+      autoFitWidth: !!(autoFitWidth && autoFitWidth.checked),
+      qaseeda: (qaseedaName && qaseedaName.value ? qaseedaName.value.trim() : "")
     };
   }
 
@@ -492,9 +508,13 @@
                 if (ri === 0) tableWpt += (cell.columnWidth || 0);
                 var t = cellText(cell); if (!t) return;
                 var cf = cell.body.font;
-                canvasCtx.font = ((cf && cf.size) || repSize) + "pt \"" + ((cf && cf.name) || repName) + "\"";
+                var fname = (cf && cf.name) || repName;
+                canvasCtx.font = ((cf && cf.size) || repSize) + "pt \"" + fname + "\"";
                 var colWpx = (cell.columnWidth || 0) * 96 / 72;
-                if (colWpx > 0) needScale = Math.max(needScale, canvasCtx.measureText(t).width / (headroom * colWpx));
+                // Per-font correction nudges the measured width for fonts that the
+                // WebView can't resolve accurately (see profile.fontCorrections).
+                var measured = AshaarProfiles.applyFontCorrection(canvasCtx.measureText(t).width, fname, profile.fontCorrections);
+                if (colWpx > 0) needScale = Math.max(needScale, measured / (headroom * colWpx));
               });
             });
             return { tbl: tbl, widthPt: tableWpt, needScale: needScale };
@@ -549,6 +569,100 @@
       summary = "Apply failed: " + (error && error.message ? error.message : String(error));
     }
     setMessage(summary);
+  }
+
+  // ── Qaseeda panel ↔ profile (P4 UI) ───────────────────────────────────────
+  function panelToProfile() {
+    var p = AshaarProfiles.defaultProfile((qaseedaName.value || "").trim());
+    p.width.mode = qaseedaWidthMode.value;
+    p.width.pct = Number(qaseedaWidthPct.value || 50);
+    p.justify.mode = qaseedaJustifyMode.value;
+    p.justify.strength = Number(qaseedaStrength.value || 0);
+    p.gap = Number(qaseedaGap.value || 4);
+    p.misraSymbol = qaseedaSymbol.value || "";
+    p.symbolColor = qaseedaSymbolColor.value || "";
+    p.debugColors = { tatweel: qaseedaDebugTatweel.value || "", space: qaseedaDebugSpace.value || "" };
+    var corrFont = (qaseedaCorrFont.value || "").trim();
+    p.fontCorrections = {};
+    if (corrFont) p.fontCorrections[corrFont] = Number(qaseedaCorrFactor.value || 1);
+    return AshaarProfiles.normalizeProfile(p);
+  }
+
+  function profileToPanel(profile) {
+    var p = AshaarProfiles.normalizeProfile(profile || {});
+    qaseedaWidthMode.value = p.width.mode;
+    qaseedaWidthPct.value = p.width.pct;
+    qaseedaJustifyMode.value = p.justify.mode;
+    qaseedaStrength.value = p.justify.strength;
+    qaseedaStrengthValue.textContent = p.justify.strength;
+    qaseedaGap.value = p.gap;
+    qaseedaSymbol.value = p.misraSymbol || "";
+    qaseedaSymbolColor.value = p.symbolColor || "";
+    qaseedaDebugTatweel.value = (p.debugColors && p.debugColors.tatweel) || "";
+    qaseedaDebugSpace.value = (p.debugColors && p.debugColors.space) || "";
+    var fonts = Object.keys(p.fontCorrections || {});
+    qaseedaCorrFont.value = fonts[0] || "";
+    qaseedaCorrFactor.value = fonts[0] ? p.fontCorrections[fonts[0]] : 1;
+  }
+
+  function populateQaseedaNames() {
+    if (!qaseedaNames) return;
+    var names = listProfileNames();
+    qaseedaNames.innerHTML = names.map(function (n) {
+      return "<option value=\"" + String(n).replace(/"/g, "&quot;") + "\">";
+    }).join("");
+  }
+
+  function loadQaseedaIntoPanel() {
+    var name = (qaseedaName.value || "").trim();
+    if (!name) return;
+    var store = loadProfileStore();
+    if (store[name]) profileToPanel(store[name]);
+  }
+
+  async function saveAndApplyQaseeda() {
+    var p = panelToProfile();
+    if (!p.name) { setMessage("Name the qaseeda first."); return; }
+    await putProfile(p);
+    populateQaseedaNames();
+    await applyProfileToQaseeda(p.name);
+  }
+
+  async function assignBlockToQaseeda() {
+    var name = (qaseedaName.value || "").trim();
+    if (!name) { setMessage("Name the qaseeda first."); return; }
+    if (!loadProfileStore()[name]) await putProfile(panelToProfile());
+    await setQaseedaOnSelection(name);
+    populateQaseedaNames();
+  }
+
+  function setQaseedaFontStatus(text, kind) {
+    if (!qaseedaFontStatus) return;
+    qaseedaFontStatus.textContent = text;
+    qaseedaFontStatus.className = "qaseeda-font-status" + (kind === "ok" ? " is-ok" : kind === "warn" ? " is-warn" : "");
+  }
+
+  // Check whether the font of the block/selection at the cursor resolves in the
+  // WebView; if not, justify metrics for it are only approximate.
+  async function checkQaseedaFont() {
+    if (typeof Word === "undefined") { setQaseedaFontStatus("Open in Word to check.", "warn"); return; }
+    var fontName = "";
+    try {
+      await Word.run(async function (context) {
+        var sel = context.document.getSelection();
+        var cc = sel.parentContentControlOrNullObject;
+        cc.load("title");
+        await context.sync();
+        var range = (!cc.isNullObject && cc.title === "Ashaar Poem") ? cc.getRange() : sel;
+        range.font.load("name");
+        await context.sync();
+        fontName = range.font.name || "";
+      });
+    } catch (e) { /* ignore */ }
+    if (!fontName) { setQaseedaFontStatus("No font found at the cursor.", "warn"); return; }
+    if (document.fonts && document.fonts.load) { try { await document.fonts.load("16pt \"" + fontName + "\""); } catch (e) {} }
+    if (fontAvailable(fontName)) setQaseedaFontStatus("“" + fontName + "” resolves — metrics are accurate.", "ok");
+    else setQaseedaFontStatus("“" + fontName + "” is NOT resolvable here — metrics are approximate. Bundle it as a webfont for accuracy.", "warn");
   }
 
   function wordAlignment(align) {
@@ -1377,10 +1491,17 @@
     document.getElementById("export-templates").addEventListener("click", exportTemplates);
     document.getElementById("import-templates").addEventListener("click", importTemplates);
     importFileInput.addEventListener("change", onImportFile);
+    // Qaseeda profile panel
+    qaseedaStrength.addEventListener("input", function () { qaseedaStrengthValue.textContent = qaseedaStrength.value; });
+    qaseedaName.addEventListener("change", loadQaseedaIntoPanel);
+    document.getElementById("qaseeda-assign").addEventListener("click", assignBlockToQaseeda);
+    document.getElementById("qaseeda-apply").addEventListener("click", saveAndApplyQaseeda);
+    document.getElementById("qaseeda-font-check").addEventListener("click", checkQaseedaFont);
     applyLayoutPreset();
     renderPreview();
     setMode("table");
     renderTemplateList();
+    populateQaseedaNames();
   }
 
   if (window.Office && Office.onReady) {
