@@ -33,7 +33,7 @@
 
   // Pick the separator that best explains the text, or null if none is confident.
   function detectSeparator(text) {
-    var lines = String(text == null ? "" : text).split(/\r?\n/);
+    var lines = String(text == null ? "" : text).split(/\r\n|\r|\n/);
     var content = contentLines(lines);
     if (!content.length) return null;
     var best = null;
@@ -62,7 +62,7 @@
 
   // Pair consecutive content lines into couplets, respecting stanza/poem breaks.
   function pairLineMode(text) {
-    var lines = String(text == null ? "" : text).split(/\r?\n/);
+    var lines = String(text == null ? "" : text).split(/\r\n|\r|\n/);
     var out = [];
     var buf = [];
     function flush() {
@@ -87,7 +87,9 @@
   // Returns { text, detected, changed }.
   function normalizeSeparators(text, opts) {
     opts = opts || {};
-    var input = String(text == null ? "" : text);
+    // Normalize line endings first (Word's Range.text uses CR) so detection,
+    // pairing, and the `changed` flag all work on canonical LF text.
+    var input = String(text == null ? "" : text).replace(/\r\n?/g, "\n");
 
     if (opts.pairLines) {
       var paired = pairLineMode(input);
@@ -115,7 +117,7 @@
       detected = sep;
     }
 
-    var result = input.split(/\r?\n/).map(function (line) {
+    var result = input.split(/\r\n|\r|\n/).map(function (line) {
       return normalizeLine(line, re);
     }).join("\n");
 

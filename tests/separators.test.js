@@ -62,6 +62,16 @@ assert.equal(norm("m1\nm2\n\nm3\nm4", { pairLines: true }), "m1 \\ m2\n\nm3 \\ m
   "pairing respects stanza breaks");
 assert.equal(norm("m1\nm2\nm3", { pairLines: true }), "m1 \\ m2\nm3", "odd leftover stays solo");
 
+// --- Word line endings: Range.text uses CR; multi-line selections must split ---
+assert.equal(norm("m1\rm2\rm3\rm4", { pairLines: true }), "m1 \\ m2\nm3 \\ m4",
+  "pairs across CR line breaks (Word range.text)");
+assert.equal(norm("m1\r\nm2\r\nm3\r\nm4", { pairLines: true }), "m1 \\ m2\nm3 \\ m4",
+  "pairs across CRLF line breaks");
+assert.equal(norm("m1\rm2\r\rm3\rm4", { pairLines: true }), "m1 \\ m2\n\nm3 \\ m4",
+  "a blank CR line is a stanza break when pairing");
+assert.equal(norm("a - b\rc - d"), "a \\ b\nc \\ d", "dash detected across CR lines; output normalized to LF");
+assert.equal(norm("a\tb\rc\td"), "a \\ b\nc \\ d", "tab across CR lines");
+
 // --- edges ---
 assert.equal(norm(""), "", "empty input");
 assert.equal(normalizeSeparators("").detected, null, "empty input detects nothing");
