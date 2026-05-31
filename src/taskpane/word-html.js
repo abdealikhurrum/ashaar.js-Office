@@ -83,10 +83,9 @@
 
   // Map tatweelCount slider (0–24) to targetFill:
   //   0  → off (return unchanged)
-  //   1–24 → 0.90 + count/24 * 0.08  (6 = 0.92, 24 = 0.98)
-  // This preserves the previous default behaviour at slider position 6.
+  //   1–24 → 0.90 + count/24 * 0.10  (6 ≈ 0.925, 24 = 1.0 — full fill, "living on the edge")
   function sliderToFill(count) {
-    return 0.90 + (Number(count) / 24) * 0.08;
+    return 0.90 + (Number(count) / 24) * 0.10;
   }
 
   function justifyText(text, opts, colWidthPx) {

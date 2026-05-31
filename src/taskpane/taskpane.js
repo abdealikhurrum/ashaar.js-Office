@@ -20,6 +20,7 @@
   var gapWidth = document.getElementById("gap-width");
   var tableWidth = document.getElementById("table-width");
   var tableWidthValue = document.getElementById("table-width-value");
+  var autoFitWidth = document.getElementById("auto-fit-width");
 
   // Table width as a fraction of the page text column (centred). 100% = full width.
   function tableWidthPct() {
@@ -27,6 +28,33 @@
   }
   function scaledTextWidth(twips) {
     return Math.max(1, Math.round(twips * tableWidthPct() / 100));
+  }
+
+  // Smallest table width (twips) that fits the widest misra in each column at the
+  // given font (ctx), leaving kashida headroom. Drives Auto-fit and the width nudge.
+  function neededTableTwips(source, ctx, opts, pageTwips) {
+    if (!ctx || typeof Ashaar === "undefined" || !Ashaar.parse) return pageTwips;
+    var maxByPos = [];
+    (Ashaar.parse(source) || []).forEach(function (p) {
+      (p.stanzas || []).forEach(function (s) {
+        (s.bayts || []).forEach(function (b) {
+          var texts = (b.type === "row" && b.misras) ? b.misras.map(function (m) { return m.text; })
+                    : (b.ajuz ? [b.sadr, b.ajuz] : [b.sadr]);
+          texts.forEach(function (t, i) {
+            var w = ctx.measureText(stripJustification(String(t || ""))).width;
+            if (!(maxByPos[i] >= w)) maxByPos[i] = w;
+          });
+        });
+      });
+    });
+    if (!maxByPos.length) return pageTwips;
+    var kashidaOn = (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") && Number(opts.tatweelCount || 0) > 0;
+    var headroom = kashidaOn ? 0.9 : 0.98;        // leave room for kashida to fill
+    var N = Math.max(maxByPos.length, 2);
+    var gapCols = Math.max(1, Math.round(Number(opts.gapWidth || 1)));
+    var GRID = N * 3 + (N - 1) * gapCols, contentCols = N * 3;
+    var sumContent = maxByPos.reduce(function (a, b) { return a + b; }, 0) / headroom;
+    return Math.round(sumContent * GRID / contentCols * 1440 / 96);
   }
   var templateNameInput = document.getElementById("template-name");
   var templateList = document.getElementById("template-list");
@@ -180,7 +208,8 @@
       fontMode: fontMode.value,
       tatweelCount: Number(tatweelCount.value || 0),
       gapWidth: Number(gapWidth.value || 4),
-      tableWidthPct: tableWidthPct()
+      tableWidthPct: tableWidthPct(),
+      autoFitWidth: !!(autoFitWidth && autoFitWidth.checked)
     };
   }
 
@@ -213,7 +242,7 @@
     if (tableWidthValue) tableWidthValue.textContent = String(opts.tableWidthPct);
     preview.className = "ashaar preview";
     // Mirror the chosen table width: a narrower, centred preview previews the insert.
-    preview.style.maxWidth = opts.tableWidthPct + "%";
+    preview.style.maxWidth = opts.autoFitWidth ? "100%" : (opts.tableWidthPct + "%");
     preview.style.marginInline = "auto";
     preview.style.setProperty("--ashaar-font-family", previewFontFamily(opts.fontMode));
     preview.innerHTML = Ashaar.renderText(String(input.value || ""), { gapWidth: opts.gapWidth + "%" });
@@ -333,6 +362,7 @@
   }
 
   async function insertPoem(replaceSelection) {
+    var pendingMsg = "";
     await withWord(async function (context) {
       var opts = options();
       var source = String(input.value || "");
@@ -345,23 +375,34 @@
 
       // pageLayout requires WordApi 1.5; fall back to US-Letter 6.5" on older builds
       var plP = sectionP.pageLayout;
-      var textWidthTwips = plP && plP.width
+      var pageTwips = plP && plP.width
         ? Math.round((plP.width - (plP.leftMargin || 0) - (plP.rightMargin || 0)) * 20)
         : 9360;
-      textWidthTwips = scaledTextWidth(textWidthTwips); // table width %, scales kashida target too
 
-      if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
-        opts._textWidthPx = textWidthTwips * 96 / 1440;
-        var fontSizeP = selFontP.font.size || 12;
-        var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                      : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                      : (selFontP.font.name || "Times New Roman");
-        var canvasP = document.createElement("canvas");
-        var ctxP = canvasP.getContext("2d");
-        if (ctxP) {
-          ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
-          opts._justifyCtx = ctxP;
+      // Measurement canvas at the selection's font — used for auto-fit, the nudge, and kashida.
+      var fontSizeP = selFontP.font.size || 12;
+      var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
+                    : opts.fontMode === "arabic-serif" ? "Scheherazade New"
+                    : (selFontP.font.name || "Times New Roman");
+      var ctxP = document.createElement("canvas").getContext("2d");
+      if (ctxP) ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
+
+      var neededTwips = ctxP ? neededTableTwips(source, ctxP, opts, pageTwips) : pageTwips;
+      var textWidthTwips;
+      if (opts.autoFitWidth) {
+        textWidthTwips = Math.min(pageTwips, neededTwips);
+      } else {
+        textWidthTwips = scaledTextWidth(pageTwips);
+        if (ctxP && textWidthTwips < neededTwips) {
+          pendingMsg = "Inserted — but this width is tight for " + fontSizeP +
+            "pt; widen to ~" + Math.min(100, Math.round(neededTwips / pageTwips * 100)) +
+            "% or turn on Auto-fit for full kashida.";
         }
+      }
+
+      if ((opts.justifyMode === "kashida" || opts.justifyMode === "spacing") && ctxP) {
+        opts._textWidthPx = textWidthTwips * 96 / 1440;
+        opts._justifyCtx = ctxP;
       }
 
       var ooxmlBody;
@@ -383,6 +424,8 @@
       control.appearance = "BoundingBox";
       await context.sync();
     });
+    // withWord sets "Done."; surface the width nudge after it if one was raised.
+    if (pendingMsg) setMessage(pendingMsg);
   }
 
   async function insertStructure() {
@@ -985,7 +1028,11 @@
   function bind() {
     if (isBound) return;
     isBound = true;
-    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, layoutPreset, layoutSpec, fontMode, tatweelCount, gapWidth, tableWidth].forEach(function (el) {
+    autoFitWidth.addEventListener("change", function () {
+      tableWidth.disabled = autoFitWidth.checked;
+      renderPreview();
+    });
+    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, layoutPreset, layoutSpec, fontMode, tatweelCount, gapWidth, tableWidth, autoFitWidth].forEach(function (el) {
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });

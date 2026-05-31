@@ -551,3 +551,16 @@ button:hover {
   line-height: 1.5;
   white-space: pre;
 }
+
+/* ── Auto-fit width toggle ─────────────────────────────────────────────── */
+.auto-fit-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.auto-fit-check input { width: 15px; height: 15px; accent-color: var(--accent); }
+input[type="range"][disabled] { opacity: 0.45; }
