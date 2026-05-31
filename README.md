@@ -2,6 +2,8 @@
 
 A Microsoft Word task pane add-in for entering Arabic, Urdu, and Persian poetry blocks with Ashaar.js formatting and kashida justification.
 
+📖 **User guide:** [Markdown](docs/USER_GUIDE.md) · [Word (.docx)](docs/USER_GUIDE.docx) — a journey-based walkthrough of every mode and control. (Regenerate the `.docx` from the Markdown with `npm run make-user-guide`.)
+
 ## What is included
 
 - Vendored Ashaar.js browser renderer in `src/vendor`.
