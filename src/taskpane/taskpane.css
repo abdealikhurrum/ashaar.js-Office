@@ -124,9 +124,12 @@ textarea {
   padding: 12px;
   background: var(--panel);
   color: var(--ink);
-  font-family: "Noto Nastaliq Urdu", "Scheherazade New", "Amiri", serif;
+  /* Editing face: a legible naskh, never calligraphic Nastaliq (which overlaps
+     and crowds in an editable, fixed-line-height box). Nastaliq stays available
+     for the rendered preview / output when explicitly chosen. */
+  font-family: "Scheherazade New", "Amiri", "Noto Naskh Arabic", "Times New Roman", serif;
   font-size: 18px;
-  line-height: 2.1;
+  line-height: 1.9;
 }
 
 .layout-spec {
