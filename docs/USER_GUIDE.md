@@ -11,6 +11,8 @@ kashida (tatweel) justification and flexible table layouts.
 3. The pane has two modes, selected by the tabs at the top:
    - **Table Input** — draw a layout first, then type poetry into the cells (composing in Word).
    - **Ashaar.js Convert** — paste or load poetry text and convert it into a formatted block.
+4. For testing the different modes, you can use test-documents/adopt-test.docx This file has a myriad of different bandhs to illustrate
+how existing poetry can be converted and enhanced using the add-in.
 
 **Which mode do I want?** If you already have the poem as text, use **Convert**. If you are
 composing from scratch inside Word, use **Table Input**.
