@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260530-adopt">
-    <link rel="stylesheet" href="./taskpane.css?v=20260530-adopt">
+    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-grid">
+    <link rel="stylesheet" href="./taskpane.css?v=20260531-grid">
   </head>
   <body>
     <main class="pane">
@@ -78,9 +78,16 @@
         </section>
 
         <section class="editor">
-          <label for="layout-spec">Layout spec</label>
+          <div class="layout-head">
+            <label for="layout-spec">Layout spec</label>
+            <div class="lg-toggle" role="tablist" aria-label="Layout spec view">
+              <button type="button" id="layout-view-grid" class="lg-toggle-btn" aria-pressed="false">Grid</button>
+              <button type="button" id="layout-view-numbers" class="lg-toggle-btn is-active" aria-pressed="true">Numbers</button>
+            </div>
+          </div>
           <textarea id="layout-spec" class="layout-spec" spellcheck="false" dir="ltr">2 - 1
 4 - 3</textarea>
+          <div id="layout-grid" class="layout-grid" hidden></div>
         </section>
 
         <section class="actions two-col" aria-label="Table input actions">
@@ -211,13 +218,14 @@
       <div id="message" role="status" aria-live="polite"></div>
     </main>
 
-    <script src="../vendor/ashaar-justify.js?v=20260530-adopt"></script>
-    <script src="../vendor/ashaar.js?v=20260530-adopt"></script>
-    <script src="../vendor/ashaar-autotune.js?v=20260530-adopt"></script>
-    <script src="./word-html.js?v=20260530-adopt"></script>
-    <script src="./word-tabstop.js?v=20260530-adopt"></script>
-    <script src="./table-adopt.js?v=20260530-adopt"></script>
-    <script src="./separators.js?v=20260530-adopt"></script>
-    <script src="./taskpane.js?v=20260530-adopt"></script>
+    <script src="../vendor/ashaar-justify.js?v=20260531-grid"></script>
+    <script src="../vendor/ashaar.js?v=20260531-grid"></script>
+    <script src="../vendor/ashaar-autotune.js?v=20260531-grid"></script>
+    <script src="./word-html.js?v=20260531-grid"></script>
+    <script src="./word-tabstop.js?v=20260531-grid"></script>
+    <script src="./table-adopt.js?v=20260531-grid"></script>
+    <script src="./separators.js?v=20260531-grid"></script>
+    <script src="./layout-grid.js?v=20260531-grid"></script>
+    <script src="./taskpane.js?v=20260531-grid"></script>
   </body>
 </html>

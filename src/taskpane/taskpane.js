@@ -24,6 +24,13 @@
   var sepMode = document.getElementById("sep-mode");
   var sepCustom = document.getElementById("sep-custom");
   var sepPair = document.getElementById("sep-pair");
+  var layoutGridEl = document.getElementById("layout-grid");
+  var layoutViewGridBtn = document.getElementById("layout-view-grid");
+  var layoutViewNumbersBtn = document.getElementById("layout-view-numbers");
+
+  var GRID_COLS = 12;
+  var layoutView = "numbers";   // "grid" | "numbers"
+  var gridMatrix = [];          // rows of 12 booleans, reading order (index 0 = visual right)
 
   var SEP_LABELS = {
     backslash: "\\", asterisk: "*", pipe: "|", dash: "dash",
@@ -45,6 +52,85 @@
       setMessage("Converted separators (" + (SEP_LABELS[res.detected] || res.detected) + ") to standard \\ form.");
     }
     renderPreview();
+  }
+
+  // ── Visual layout grid (Grid mode) ──────────────────────────────────────────
+
+  // Default row: a paired couplet — 5 on / 2 gap / 5 on (reading order).
+  function defaultGridRow() {
+    var r = [];
+    for (var i = 0; i < 5; i++) r.push(true);
+    for (i = 0; i < 2; i++) r.push(false);
+    for (i = 0; i < 5; i++) r.push(true);
+    return r;
+  }
+
+  function renderLayoutGrid() {
+    if (!layoutGridEl || typeof AshaarLayoutGrid === "undefined") return;
+    var html = "";
+    gridMatrix.forEach(function (row, ri) {
+      html += '<div class="lg-row">';
+      html += '<button type="button" class="lg-rm" data-row="' + ri + '" title="Remove row" aria-label="Remove row">✕</button>';
+      html += '<span class="lg-bubbles">';
+      for (var c = 0; c < GRID_COLS; c++) {
+        html += '<span class="lg-b' + (row[c] ? " on" : "") + '" data-row="' + ri + '" data-col="' + c + '"></span>';
+      }
+      html += "</span></div>";
+    });
+    html += '<button type="button" class="lg-add" id="lg-add-row">+ Add row</button>';
+
+    var tpl = AshaarLayoutGrid.gridToTemplate(gridMatrix);
+    html += '<div class="lg-prev"><span class="lg-prev-label">Preview</span>';
+    tpl.rows.forEach(function (cells) {
+      html += '<div class="lg-prev-row">';
+      cells.forEach(function (cell) {
+        if (cell.role === "gap") html += '<span class="lg-prev-gap" style="flex:' + cell.span + '"></span>';
+        else html += '<span class="lg-prev-cell" style="flex:' + cell.span + '">·</span>';
+      });
+      html += "</div>";
+    });
+    html += "</div>";
+    layoutGridEl.innerHTML = html;
+  }
+
+  function onLayoutGridClick(e) {
+    var t = e.target;
+    if (!t) return;
+    if (t.id === "lg-add-row") { gridMatrix.push(defaultGridRow()); renderLayoutGrid(); return; }
+    if (t.classList.contains("lg-rm")) {
+      var ri = Number(t.getAttribute("data-row"));
+      if (gridMatrix.length > 1) gridMatrix.splice(ri, 1); else gridMatrix = [defaultGridRow()];
+      renderLayoutGrid();
+      return;
+    }
+    if (t.classList.contains("lg-b")) {
+      var r = Number(t.getAttribute("data-row"));
+      var c = Number(t.getAttribute("data-col"));
+      if (gridMatrix[r]) { gridMatrix[r][c] = !gridMatrix[r][c]; renderLayoutGrid(); }
+    }
+  }
+
+  // Toggle between the visual Grid and the Numbers (text) view of the layout spec.
+  // The two are kept in sync best-effort: Numbers→Grid parses the spec into bubbles;
+  // Grid→Numbers serializes the bubbles back to the text spec.
+  function setLayoutView(view) {
+    if (typeof AshaarLayoutGrid === "undefined") return;
+    layoutView = view === "grid" ? "grid" : "numbers";
+    var grid = layoutView === "grid";
+    layoutViewGridBtn.classList.toggle("is-active", grid);
+    layoutViewNumbersBtn.classList.toggle("is-active", !grid);
+    layoutViewGridBtn.setAttribute("aria-pressed", String(grid));
+    layoutViewNumbersBtn.setAttribute("aria-pressed", String(!grid));
+    layoutGridEl.hidden = !grid;
+    layoutSpec.hidden = grid;
+    if (grid) {
+      var m = AshaarLayoutGrid.specToGrid(layoutSpec.value);
+      gridMatrix = m.length ? m : [defaultGridRow()];
+      renderLayoutGrid();
+    } else {
+      layoutSpec.value = AshaarLayoutGrid.gridToSpec(gridMatrix);
+      renderPreview();
+    }
   }
 
   function options() {
@@ -263,6 +349,32 @@
   async function insertStructure() {
     await withWord(async function (context) {
       var opts = options();
+
+      // Grid mode: build the 12-column span template from the bubble grid and
+      // insert it (repeated per bandh) via the existing template-OOXML path.
+      if (layoutView === "grid" && typeof AshaarLayoutGrid !== "undefined") {
+        var sectionG = context.document.sections.getFirst();
+        sectionG.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+        await context.sync();
+        var plG = sectionG.pageLayout;
+        var twG = plG && plG.width
+          ? Math.round((plG.width - (plG.leftMargin || 0) - (plG.rightMargin || 0)) * 20)
+          : 9360;
+        var tmplG = AshaarLayoutGrid.gridToTemplate(gridMatrix);
+        if (!tmplG.rows.length) { setMessage("Draw at least one row of bubbles in the grid."); return; }
+        var countG = Math.max(1, Math.min(20, Number(opts.bandhCount || 1)));
+        var bodyG = [];
+        for (var bi = 0; bi < countG; bi++) bodyG.push(AshaarWord.templateToOoxml(tmplG, twG, opts));
+        var selG = context.document.getSelection();
+        var insG = selG.insertOoxml(AshaarWord.wrapOoxml(bodyG.join("<w:p/>")), Word.InsertLocation.end);
+        var ccG = insG.insertContentControl();
+        ccG.title = "Ashaar Poem";
+        ccG.tag = AshaarWord.contentControlTag("grid", opts);
+        ccG.appearance = "BoundingBox";
+        await context.sync();
+        return;
+      }
+
       var tables = AshaarWord.layoutTablesForTemplate(opts);
 
       if (tables.length && tables.some(function (t) { return t.spanBased; })) {
@@ -826,6 +938,9 @@
     sepPair.addEventListener("change", applyImportNormalization);
     document.getElementById("sep-apply").addEventListener("click", applyImportNormalization);
     document.getElementById("drop-grid").addEventListener("click", insertBareGrid);
+    layoutViewGridBtn.addEventListener("click", function () { setLayoutView("grid"); });
+    layoutViewNumbersBtn.addEventListener("click", function () { setLayoutView("numbers"); });
+    layoutGridEl.addEventListener("click", onLayoutGridClick);
     document.getElementById("adopt-table").addEventListener("click", adoptTable);
     document.getElementById("capture-template").addEventListener("click", captureSelectedTableLayout);
     document.getElementById("apply-template").addEventListener("click", applyTemplate);
