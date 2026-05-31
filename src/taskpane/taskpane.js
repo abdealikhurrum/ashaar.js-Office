@@ -521,16 +521,15 @@
             && Office.context.requirements.isSetSupported
             && Office.context.requirements.isSetSupported("WordApiDesktop", "1.3"));
 
-        // Resize: one shared table width = the largest a block's tightest cell
-        // needs (with headroom), applied to every block. Capped at the page.
+        // Resize. Each block's tightest cell gives the scale it needs for kashida
+        // headroom. When every block has the same column count we equalise PER
+        // COLUMN (column j identical across all blocks); otherwise we fall back to
+        // an equal total width with proportional columns. Capped at the page.
         if (canResize) {
           var headroom = doKashida ? 0.9 : 0.98;
           var colColls = tableInfos.map(function (info) { var c = info.tbl.columns; c.load("items/width"); return c; });
           await context.sync();
-          var perTable = tableInfos.map(function (info, idx) {
-            var cols = colColls[idx];
-            var tableWpt = 0;
-            cols.items.forEach(function (col) { tableWpt += (col.width || 0); });
+          var needScales = tableInfos.map(function (info) {
             var needScale = 1;
             info.cells.forEach(function (c) {
               if (!c.measure) return;
@@ -542,18 +541,43 @@
               var measured = AshaarProfiles.applyFontCorrection(canvasCtx.measureText(c.measure).width, fname, profile.fontCorrections);
               if (colWpx > 0) needScale = Math.max(needScale, measured / (headroom * colWpx));
             });
-            return { cols: cols, widthPt: tableWpt, needScale: needScale };
+            return needScale;
           });
-          var targetWidthPt = 0;
-          perTable.forEach(function (p) { targetWidthPt = Math.max(targetWidthPt, p.widthPt * p.needScale); });
-          if (targetWidthPt > pagePt) targetWidthPt = pagePt;
-          perTable.forEach(function (p) {
-            if (p.widthPt <= 0) return;
-            var scale = targetWidthPt / p.widthPt;
-            if (Math.abs(scale - 1) < 0.005) return;
-            p.cols.items.forEach(function (col) { col.width = Math.round(col.width * scale * 100) / 100; });
-          });
+          var colCounts = colColls.map(function (c) { return c.items.length; });
+          var sameShape = colCounts[0] > 0 && colCounts.every(function (n) { return n === colCounts[0]; });
+
+          if (sameShape) {
+            // Per-column equality: column j width = max over blocks of (its width × that
+            // block's needed scale). Every block then gets the identical width vector.
+            var N = colCounts[0];
+            var sharedCol = [];
+            for (var j = 0; j < N; j++) {
+              var m = 0;
+              colColls.forEach(function (c, idx) { m = Math.max(m, (c.items[j].width || 0) * needScales[idx]); });
+              sharedCol.push(m);
+            }
+            var total = sharedCol.reduce(function (a, b) { return a + b; }, 0);
+            if (total > pagePt && total > 0) { var k = pagePt / total; sharedCol = sharedCol.map(function (w) { return w * k; }); }
+            colColls.forEach(function (c) {
+              c.items.forEach(function (col, jj) { col.width = Math.round(sharedCol[jj] * 100) / 100; });
+            });
+          } else {
+            // Mixed shapes: equalise total width, scale each block's columns proportionally.
+            var perTotal = colColls.map(function (c, idx) {
+              var t = 0; c.items.forEach(function (col) { t += (col.width || 0); });
+              return t * needScales[idx];
+            });
+            var targetWidthPt = Math.min(pagePt, Math.max.apply(null, perTotal.concat([0])));
+            colColls.forEach(function (c, idx) {
+              var cur = 0; c.items.forEach(function (col) { cur += (col.width || 0); });
+              if (cur <= 0 || targetWidthPt <= 0) return;
+              var scale = targetWidthPt / cur;
+              if (Math.abs(scale - 1) < 0.005) return;
+              c.items.forEach(function (col) { col.width = Math.round(col.width * scale * 100) / 100; });
+            });
+          }
           await context.sync();
+          // Re-read columnWidth on the captured proxies (justifySelection-proven).
           // Re-read columnWidth on the captured proxies (justifySelection-proven).
           tableInfos.forEach(function (info) { info.tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); }); });
           await context.sync();
@@ -942,6 +966,15 @@
 
   async function justifySelection() {
     var opts = options();
+
+    // Hybrid qaseeda trigger: if the cursor's block belongs to a qaseeda that has
+    // a stored profile, justify by applying that profile across ALL its blocks so
+    // they stay consistent — instead of the free-form local justify below. Only
+    // fires for tagged blocks; untagged blocks justify exactly as before.
+    try {
+      var qname = await getQaseedaAtSelection();
+      if (qname && loadProfileStore()[qname]) { await applyProfileToQaseeda(qname); return; }
+    } catch (e) { /* fall through to normal justify */ }
 
     // Fallback font from the pane — used only when a cell reports no explicit font.
     var fallbackName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"

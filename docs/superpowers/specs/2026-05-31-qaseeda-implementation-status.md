@@ -66,15 +66,23 @@ justify snippets rather than refactoring the shared function. **Verify in Word.*
     profile's params (`AshaarJustify.justifyLine`, targetFill from strength). Falls back to
     re-justify-only when resize isn't supported. Caches via `putProfile`.
 
-**Scope notes / deferred refinements (do in P4 or later, with in-Word testing):**
-- Shared sizing is **one table width per qaseeda** (proportional column scaling), not yet a
-  per-grid-column absolute vector — `deriveSharedWidths` exists and is tested for when we
-  move to per-column equality (needs gridSpan-aware column mapping).
-- **Hybrid auto-refresh on justify** (re-apply to siblings when a block outgrows cached
-  widths) is **not** wired into `justifySelection` yet — kept out to protect that path.
-  Fold it into P4's "Apply to all" flow / a guarded justify hook once testable in Word.
-- The measure+justify loop duplicates ~70 lines of `justifySelection`; consolidate into a
-  shared `justifyWorkRange(context, range, opts, cfg)` helper once it can be verified live.
+**Refinements — done on `feature/qaseeda-refine` (verify in Word):**
+- **Per-column width equality** — when every block of a qaseeda has the same column count,
+  `applyProfileToQaseeda` now equalises PER COLUMN: column *j* width = max over blocks of
+  (its width × that block's needed scale), and every block is set to the identical vector
+  (capped at the page). Mixed-shape qaseedas fall back to equal total width + proportional
+  columns. Replaces the earlier one-shared-total-width behaviour.
+- **Hybrid auto-refresh on justify** — `justifySelection` now begins with a guard: if the
+  cursor's block belongs to a qaseeda with a stored profile, it delegates to
+  `applyProfileToQaseeda(name)` (sizes + justifies all the qaseeda's blocks together) and
+  returns. Untagged blocks justify exactly as before, so the proven path is untouched.
+
+**Still deferred:**
+- **OOXML symbol/debug run-colouring** in the `word-html.js` generator. Intentionally left
+  out: its UI fields were removed in the P4 simplification, and the colouring is cosmetic +
+  unverifiable without a live .docx. Revisit with the colour UI re-added if wanted.
+- The measure+justify loop still duplicates ~70 lines of `justifySelection`; consolidate into
+  a shared `justifyWorkRange(context, range, opts, cfg)` helper once it can be verified live.
 
 ## P4 — profile UI + correction + warning (done; colouring deferred)
 
