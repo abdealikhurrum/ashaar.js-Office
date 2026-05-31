@@ -910,19 +910,50 @@
       .replace(/"/g, "&quot;");
   }
 
-  // Compute proportional column spans for misra texts summing to contentCols.
-  // Pass a canvas 2D context as ctx for accurate font-metric measurement; falls back to visibleWeight.
-  function misraSpans(texts, contentCols, ctx) {
-    var weights = texts.map(function (t) {
-      return ctx ? Math.max(1, ctx.measureText(String(t || "")).width) : visibleWeight(t);
-    });
-    var total = weights.reduce(function (a, b) { return a + b; }, 0);
+  // Distribute contentCols across positions proportional to their weights (≥1 each).
+  function allocateSpans(weights, contentCols) {
+    var total = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
     var spans = weights.map(function (w) {
       return Math.max(1, Math.round(w / total * contentCols));
     });
     var delta = contentCols - spans.reduce(function (a, b) { return a + b; }, 0);
     spans[spans.length - 1] = Math.max(1, spans[spans.length - 1] + delta);
     return spans;
+  }
+
+  function textWeight(text, ctx) {
+    return ctx ? Math.max(1, ctx.measureText(String(text || "")).width) : visibleWeight(text);
+  }
+
+  // Compute proportional column spans for misra texts summing to contentCols.
+  // Pass a canvas 2D context as ctx for accurate font-metric measurement; falls back to visibleWeight.
+  function misraSpans(texts, contentCols, ctx) {
+    return allocateSpans(texts.map(function (t) { return textWeight(t, ctx); }), contentCols);
+  }
+
+  // Compute ONE column-span vector for a whole stanza, shared by every full row
+  // (rows that have exactly N misras). Each position's span is proportional to the
+  // WIDEST misra in that position across the stanza — so every sadr column is the
+  // same width and every ajuz column is the same width, while the sadr>ajuz
+  // asymmetry is preserved. Returns null when no full rows exist.
+  function stanzaColSpans(stanza, si, opts) {
+    var N = si.N;
+    var ctx = (opts || {})._justifyCtx || null;
+    var maxW = [];
+    for (var j = 0; j < N; j++) maxW.push(0);
+    var found = false;
+    stanza.bayts.forEach(function (b) {
+      var texts = null;
+      if (b.type === "row" && b.misras) texts = b.misras.map(function (m) { return m.text; });
+      else if (b.ajuz) texts = [b.sadr, b.ajuz];
+      if (!texts || texts.length !== N) return;
+      found = true;
+      for (var i = 0; i < N; i++) {
+        var w = textWeight(texts[i], ctx);
+        if (w > maxW[i]) maxW[i] = w;
+      }
+    });
+    return found ? allocateSpans(maxW, si.contentCols) : null;
   }
 
   function stanzaGridInfo(stanza, opts, textWidthTwips) {
@@ -1018,7 +1049,11 @@
       // Full available content width (GRID minus gaps) so partial rows fill the table width.
       // The gap boundary lands on a gridCol boundary, giving Word layout flexibility.
       var kContentCols = si.GRID - (K - 1) * gapCols;
-      var spans = misraSpans(texts, kContentCols, (opts || {})._justifyCtx || null);
+      // Full rows (K === N) use the stanza-wide shared spans so columns align across
+      // rows; partial rows fall back to their own proportional split.
+      var spans = (K === si.N && si.colSpans)
+        ? si.colSpans
+        : misraSpans(texts, kContentCols, (opts || {})._justifyCtx || null);
       var cells = "";
       for (var i = 0; i < K; i++) {
         var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
@@ -1064,6 +1099,7 @@
 
   function stanzaTableOoxml(stanza, opts, textWidthTwips) {
     var si = stanzaGridInfo(stanza, opts, textWidthTwips);
+    si.colSpans = stanzaColSpans(stanza, si, opts); // shared spans → columns align across rows
     // Fixed layout + a definite width make the shared grid rigid: Word uses the
     // gridCol widths verbatim instead of auto-fitting columns to content across
     // rows. Without this, a wide solo misra widens the centre columns and drags

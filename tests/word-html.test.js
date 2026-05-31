@@ -358,6 +358,23 @@ assert.equal(
   "spreadTatweels is idempotent (no compounding)"
 );
 
+// ── Column consistency across rows of a stanza ──────────────────────────────
+// Every sadr column must be the same width, and every ajuz column the same width,
+// even when rows have different-length hemistichs (the sadr>ajuz asymmetry stays).
+{
+  const src =
+    "هل مظهر ذي العرش سوى صنو الرسول \\ في کل ظہور\n" +
+    "أم هل للورى معط سواه \\ في کل ظہور";
+  const o = AshaarWord.renderForWordOoxml(src, { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
+  const rows = o.match(/<w:tr>[\s\S]*?<\/w:tr>/g);
+  const spansOf = (r) => [...r.matchAll(/<w:gridSpan w:val="(\d+)"\/>/g)].map((m) => Number(m[1]));
+  const r1 = spansOf(rows[0]);
+  const r2 = spansOf(rows[1]);
+  assert.equal(r1[0], r2[0], "sadr column width is consistent across rows");
+  assert.equal(r1[r1.length - 1], r2[r2.length - 1], "ajuz column width is consistent across rows");
+  assert.ok(r1[0] > r1[r1.length - 1], "sadr column stays wider than ajuz (asymmetry preserved)");
+}
+
 // ── Table width scaling (taskpane scales textWidthTwips; generators must honor it) ──
 const wFull = AshaarWord.renderForWordOoxml("a \\ b", { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
 const wHalf = AshaarWord.renderForWordOoxml("a \\ b", { justifyMode: "none", gapWidth: 1 }, Ashaar, 4680);
