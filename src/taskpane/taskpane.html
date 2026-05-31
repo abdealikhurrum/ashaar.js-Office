@@ -173,6 +173,29 @@
           <button id="load-selection" type="button">Load Selection</button>
         </section>
 
+        <details class="import-panel">
+          <summary>Import options (separators)</summary>
+          <div class="import-body">
+            <p class="adopt-hint">Pasted or loaded text is auto-converted to standard <code>\</code> form. Override here if a poem didn't split correctly.</p>
+            <div class="field">
+              <label for="sep-mode">Split hemistichs on</label>
+              <select id="sep-mode">
+                <option value="auto" selected>Auto-detect</option>
+                <option value="backslash">\ backslash</option>
+                <option value="asterisk">* asterisk</option>
+                <option value="pipe">| pipe</option>
+                <option value="dash">– dash</option>
+                <option value="tab">Tab</option>
+                <option value="spaces">Double space</option>
+                <option value="custom">Custom…</option>
+              </select>
+            </div>
+            <input id="sep-custom" type="text" class="template-name-input" placeholder="custom separator, e.g. //" hidden>
+            <label class="adopt-check"><input type="checkbox" id="sep-pair"> Pair every 2 lines (no separator)</label>
+            <button id="sep-apply" type="button" class="button--secondary">Apply to editor</button>
+          </div>
+        </details>
+
         <section class="preview-shell">
           <div class="preview-header">
             <h2>Conversion Preview</h2>
@@ -194,6 +217,7 @@
     <script src="./word-html.js?v=20260530-adopt"></script>
     <script src="./word-tabstop.js?v=20260530-adopt"></script>
     <script src="./table-adopt.js?v=20260530-adopt"></script>
+    <script src="./separators.js?v=20260530-adopt"></script>
     <script src="./taskpane.js?v=20260530-adopt"></script>
   </body>
 </html>

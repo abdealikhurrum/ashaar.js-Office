@@ -399,3 +399,25 @@ button:hover {
   font-size: 13px;
   color: var(--ink);
 }
+
+/* ── Import options (separator flexibility) ────────────────────────────── */
+.import-panel {
+  margin-top: 10px;
+}
+.import-panel > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.import-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.import-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: rgba(31, 111, 104, 0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+}

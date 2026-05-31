@@ -21,6 +21,31 @@
   var templateNameInput = document.getElementById("template-name");
   var templateList = document.getElementById("template-list");
   var importFileInput = document.getElementById("import-file");
+  var sepMode = document.getElementById("sep-mode");
+  var sepCustom = document.getElementById("sep-custom");
+  var sepPair = document.getElementById("sep-pair");
+
+  var SEP_LABELS = {
+    backslash: "\\", asterisk: "*", pipe: "|", dash: "dash",
+    tab: "tab", spaces: "double space", custom: "custom", pairLines: "paired lines"
+  };
+
+  // Apply separator normalization to the current editor text using the import
+  // options. Auto-detects by default; explicit choices and pair-lines override.
+  // Re-renders the preview and notes what changed.
+  function applyImportNormalization() {
+    if (typeof AshaarSeparators === "undefined") { renderPreview(); return; }
+    var res = AshaarSeparators.normalizeSeparators(input.value, {
+      separator: sepMode ? sepMode.value : "auto",
+      customPattern: sepCustom ? sepCustom.value : "",
+      pairLines: sepPair ? sepPair.checked : false
+    });
+    if (res.changed) {
+      input.value = res.text;
+      setMessage("Converted separators (" + (SEP_LABELS[res.detected] || res.detected) + ") to standard \\ form.");
+    }
+    renderPreview();
+  }
 
   function options() {
     return {
@@ -325,13 +350,16 @@
   }
 
   async function loadSelection() {
+    var picked = null;
     await withWord(async function (context) {
       var selection = context.document.getSelection();
       selection.load("text");
       await context.sync();
-      input.value = selection.text || input.value;
-      renderPreview();
+      picked = selection.text || "";
     });
+    if (picked) { setMode("convert"); input.value = picked; }
+    // Run after withWord (which sets "Done.") so the conversion note is visible.
+    applyImportNormalization();
   }
 
   // Kashida (U+0640) and the micro-spaces inserted by spacing justification
@@ -788,6 +816,15 @@
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
+    // Import-options (separator flexibility): auto-normalize on paste; manual overrides.
+    input.addEventListener("paste", function () { setTimeout(applyImportNormalization, 0); });
+    sepMode.addEventListener("change", function () {
+      sepCustom.hidden = sepMode.value !== "custom";
+      applyImportNormalization();
+    });
+    sepCustom.addEventListener("change", applyImportNormalization);
+    sepPair.addEventListener("change", applyImportNormalization);
+    document.getElementById("sep-apply").addEventListener("click", applyImportNormalization);
     document.getElementById("drop-grid").addEventListener("click", insertBareGrid);
     document.getElementById("adopt-table").addEventListener("click", adoptTable);
     document.getElementById("capture-template").addEventListener("click", captureSelectedTableLayout);
