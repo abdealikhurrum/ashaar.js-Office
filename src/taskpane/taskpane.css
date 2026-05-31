@@ -1,3 +1,14 @@
+/* Bundled font (vendored via the font-fatemi submodule, synced to assets/fonts).
+   family-name matches exactly what Word reports (name table nameID 1) so the
+   WebView resolves it and the justify canvas measures the same outlines Word renders. */
+@font-face {
+  font-family: "FatemiMaqala";
+  src: url("../../assets/fonts/FatemiMaqala-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   --surface: #fbfaf7;
@@ -124,9 +135,12 @@ textarea {
   padding: 12px;
   background: var(--panel);
   color: var(--ink);
-  font-family: "Noto Nastaliq Urdu", "Scheherazade New", "Amiri", serif;
+  /* Editing face: a legible naskh, never calligraphic Nastaliq (which overlaps
+     and crowds in an editable, fixed-line-height box). Nastaliq stays available
+     for the rendered preview / output when explicitly chosen. */
+  font-family: "Scheherazade New", "Amiri", "Noto Naskh Arabic", "Times New Roman", serif;
   font-size: 18px;
-  line-height: 2.1;
+  line-height: 1.9;
 }
 
 .layout-spec {
@@ -363,3 +377,244 @@ button:hover {
     grid-column: auto;
   }
 }
+
+/* ── Adopt existing table ──────────────────────────────────────────────── */
+.adopt-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.adopt-panel > #adopt-table {
+  width: 100%;
+}
+.adopt-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.adopt-advanced {
+  margin-top: 8px;
+}
+.adopt-advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.adopt-advanced-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.adopt-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* ── Import options (separator flexibility) ────────────────────────────── */
+.import-panel {
+  margin-top: 10px;
+}
+.import-panel > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.import-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.import-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: rgba(31, 111, 104, 0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* ── Layout grid (Grid mode) ────────────────────────────────────────────── */
+.layout-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.lg-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.lg-toggle-btn {
+  border: 0;
+  background: var(--panel);
+  color: var(--muted);
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lg-toggle-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+.layout-grid {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px;
+  background: var(--panel);
+}
+.lg-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.lg-rm {
+  border: 0;
+  background: transparent;
+  color: var(--refrain);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px;
+}
+.lg-bubbles {
+  display: flex;
+  flex-direction: row-reverse;  /* index 0 = rightmost (sadr) */
+  gap: 5px;
+}
+.lg-b {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #c9b27a;
+  cursor: pointer;
+  transition: background .1s;
+}
+.lg-b.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.lg-add {
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.lg-prev {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.lg-prev-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.lg-prev-row {
+  display: flex;
+  flex-direction: row-reverse;  /* sadr on the right */
+  gap: 5px;
+  margin: 4px 0;
+}
+.lg-prev-cell {
+  height: 22px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: rgba(31, 111, 104, .1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.lg-prev-gap { height: 22px; }
+
+/* ── Debug panel ───────────────────────────────────────────────────────── */
+.debug-panel {
+  margin-top: 4px;
+}
+.debug-panel > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.debug-output {
+  margin-top: 8px;
+  max-height: 200px;
+  overflow: auto;
+  background: #0d1117;
+  color: #c9d1d9;
+  border-radius: 6px;
+  padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* ── Qaseeda profile panel ─────────────────────────────────────────────── */
+.qaseeda-panel {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.qaseeda-panel > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+.qaseeda-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qaseeda-assign-row {
+  display: flex;
+  gap: 8px;
+}
+.qaseeda-assign-row > button {
+  flex: 1;
+}
+.qaseeda-font-status {
+  font-size: 12px;
+  min-height: 16px;
+}
+.qaseeda-font-status.is-ok { color: var(--accent); }
+.qaseeda-font-status.is-warn { color: var(--refrain); }
+.qaseeda-advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.qaseeda-advanced-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Auto-fit width toggle ─────────────────────────────────────────────── */
+.auto-fit-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.auto-fit-check input { width: 15px; height: 15px; accent-color: var(--accent); }
+input[type="range"][disabled] { opacity: 0.45; }

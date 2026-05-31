@@ -6,6 +6,8 @@
   "scripts": {
     "start": "office-addin-debugging start manifest.xml desktop --app word --dev-server \"npm run dev-server\" --dev-server-port 3000 --document test-documents/marsiya-test.docx",
     "make-test-doc": "node scripts/make-test-doc.mjs",
+    "make-adopt-doc": "node scripts/make-adopt-test-doc.mjs",
+    "make-user-guide": "python3 scripts/make-user-guide-docx.py",
     "stop": "office-addin-debugging stop manifest.xml desktop",
     "dev-server": "node server.mjs",
     "serve": "node server.mjs",
@@ -13,7 +15,7 @@
     "update:ashaar": "node scripts/update-ashaar-vendor.mjs",
     "certs": "office-addin-dev-certs install --days 365",
     "certs:verify": "office-addin-dev-certs verify",
-    "test": "node tests/word-html.test.js && node tests/word-tabstop.test.js && node tests/poetry-corpus.test.js"
+    "test": "node tests/word-html.test.js && node tests/word-tabstop.test.js && node tests/poetry-corpus.test.js && node tests/table-adopt.test.js && node tests/separators.test.js && node tests/layout-grid.test.js && node tests/profiles.test.js"
   },
   "dependencies": {
     "office-addin-debugging": "^6.1.1"

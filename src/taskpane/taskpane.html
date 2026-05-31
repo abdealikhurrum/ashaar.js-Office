@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260530-rejustify2">
-    <link rel="stylesheet" href="./taskpane.css?v=20260530-rejustify2">
+    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-color">
+    <link rel="stylesheet" href="./taskpane.css?v=20260531-color">
   </head>
   <body>
     <main class="pane">
@@ -48,6 +48,11 @@
           <label for="gap-width">Middle gap</label>
           <input id="gap-width" type="number" min="0" max="20" value="4">
         </div>
+        <div class="field">
+          <label for="table-width">Table width <span id="table-width-value">50</span>%</label>
+          <input id="table-width" type="range" min="25" max="100" step="5" value="50">
+          <label class="auto-fit-check"><input type="checkbox" id="auto-fit-width"> Auto-fit to text</label>
+        </div>
       </section>
 
       <section id="table-mode-panel" class="mode-panel is-active" role="tabpanel" aria-labelledby="mode-table">
@@ -78,14 +83,47 @@
         </section>
 
         <section class="editor">
-          <label for="layout-spec">Layout spec</label>
+          <div class="layout-head">
+            <label for="layout-spec">Layout spec</label>
+            <div class="lg-toggle" role="tablist" aria-label="Layout spec view">
+              <button type="button" id="layout-view-grid" class="lg-toggle-btn" aria-pressed="false">Grid</button>
+              <button type="button" id="layout-view-numbers" class="lg-toggle-btn is-active" aria-pressed="true">Numbers</button>
+            </div>
+          </div>
           <textarea id="layout-spec" class="layout-spec" spellcheck="false" dir="ltr">2 - 1
 4 - 3</textarea>
+          <div id="layout-grid" class="layout-grid" hidden></div>
         </section>
 
         <section class="actions two-col" aria-label="Table input actions">
           <button id="insert-structure" type="button">Draw Table</button>
           <button id="drop-grid" type="button" class="button--secondary">Drop Grid</button>
+        </section>
+
+        <section class="adopt-panel" aria-label="Adopt existing table">
+          <button id="adopt-table" type="button">Adopt Existing Table</button>
+          <p class="adopt-hint">Cursor in a table of poetry? Adopt it into a clean, justifiable Ashaar block.</p>
+          <details class="adopt-advanced">
+            <summary>Adopt options</summary>
+            <div class="adopt-advanced-body">
+              <label class="adopt-check"><input type="checkbox" id="adopt-review"> Review before replacing</label>
+              <div class="field">
+                <label for="adopt-direction">Reading direction</label>
+                <select id="adopt-direction">
+                  <option value="auto" selected>Auto (right-to-left)</option>
+                  <option value="rtl">Right-to-left</option>
+                  <option value="ltr">Left-to-right</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="adopt-scope">Scope</label>
+                <select id="adopt-scope">
+                  <option value="cursor" selected>Table at cursor</option>
+                  <option value="selection">All tables in selection</option>
+                </select>
+              </div>
+            </div>
+          </details>
         </section>
 
         <details class="templates-panel">
@@ -147,6 +185,29 @@
           <button id="load-selection" type="button">Load Selection</button>
         </section>
 
+        <details class="import-panel">
+          <summary>Import options (separators)</summary>
+          <div class="import-body">
+            <p class="adopt-hint">Pasted or loaded text is auto-converted to standard <code>\</code> form. Override here if a poem didn't split correctly.</p>
+            <div class="field">
+              <label for="sep-mode">Split hemistichs on</label>
+              <select id="sep-mode">
+                <option value="auto" selected>Auto-detect</option>
+                <option value="backslash">\ backslash</option>
+                <option value="asterisk">* asterisk</option>
+                <option value="pipe">| pipe</option>
+                <option value="dash">– dash</option>
+                <option value="tab">Tab</option>
+                <option value="spaces">Double space</option>
+                <option value="custom">Custom…</option>
+              </select>
+            </div>
+            <input id="sep-custom" type="text" class="template-name-input" placeholder="custom separator, e.g. //" hidden>
+            <label class="adopt-check"><input type="checkbox" id="sep-pair"> Pair every 2 lines (no separator)</label>
+            <button id="sep-apply" type="button" class="button--secondary">Apply to editor</button>
+          </div>
+        </details>
+
         <section class="preview-shell">
           <div class="preview-header">
             <h2>Conversion Preview</h2>
@@ -159,14 +220,84 @@
         <button id="justify-selection" type="button">Justify Selected Text</button>
       </section>
 
+      <details class="qaseeda-panel">
+        <summary>Qaseeda profile</summary>
+        <div class="qaseeda-body">
+          <p class="adopt-hint">Name a poem, tag its blocks, then size &amp; justify them all the same with one click.</p>
+          <div class="field">
+            <label for="qaseeda-name">Qaseeda name</label>
+            <input id="qaseeda-name" type="text" class="template-name-input" placeholder="e.g. Karbala" list="qaseeda-names">
+            <datalist id="qaseeda-names"></datalist>
+          </div>
+          <div class="field">
+            <label for="qaseeda-width-mode">Width</label>
+            <select id="qaseeda-width-mode">
+              <option value="auto-fit" selected>Auto-fit to text</option>
+              <option value="fixed">Fixed %</option>
+            </select>
+            <input id="qaseeda-width-pct" type="number" min="25" max="100" step="5" value="50">
+          </div>
+          <div class="field">
+            <label for="qaseeda-strength">Kashida strength <span id="qaseeda-strength-value">6</span></label>
+            <input id="qaseeda-strength" type="range" min="0" max="24" value="6">
+          </div>
+          <div class="qaseeda-assign-row">
+            <button id="qaseeda-assign" type="button" class="button--secondary">Assign block at cursor</button>
+            <button id="qaseeda-apply" type="button">Save &amp; Apply to all</button>
+          </div>
+          <details class="qaseeda-advanced">
+            <summary>Advanced</summary>
+            <div class="qaseeda-advanced-body">
+              <div class="field">
+                <label for="qaseeda-justify-mode">Justification mode</label>
+                <select id="qaseeda-justify-mode">
+                  <option value="kashida" selected>Kashida</option>
+                  <option value="spacing">Spacing</option>
+                  <option value="css">Word justify</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="qaseeda-corr-font">Per-font width correction</label>
+                <input id="qaseeda-corr-font" type="text" class="template-name-input" placeholder="font name">
+                <input id="qaseeda-corr-factor" type="number" min="0.5" max="2" step="0.01" value="1">
+              </div>
+              <div class="field">
+                <label for="qaseeda-debug-tatweel">Highlight kashida</label>
+                <input id="qaseeda-debug-tatweel" type="color" value="#a7352a">
+                <label class="adopt-check"><input type="checkbox" id="qaseeda-debug-tatweel-on"> on</label>
+              </div>
+              <div class="field">
+                <label for="qaseeda-debug-space">Highlight spaces</label>
+                <input id="qaseeda-debug-space" type="color" value="#1f6f68">
+                <label class="adopt-check"><input type="checkbox" id="qaseeda-debug-space-on"> on</label>
+              </div>
+              <p class="adopt-hint">Colours the tatweels / micro-spaces inserted by justification so you can see where they landed. Applied on “Save &amp; Apply to all”.</p>
+              <button id="qaseeda-font-check" type="button" class="button--secondary">Check font at cursor</button>
+              <div id="qaseeda-font-status" class="qaseeda-font-status" aria-live="polite"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+
       <div id="message" role="status" aria-live="polite"></div>
+
+      <details class="debug-panel">
+        <summary>Debug</summary>
+        <label class="adopt-check"><input type="checkbox" id="debug-mode"> Capture justification metrics</label>
+        <pre id="debug-output" class="debug-output" aria-live="polite"></pre>
+      </details>
     </main>
 
-    <script src="../vendor/ashaar-justify.js?v=20260530-rejustify2"></script>
-    <script src="../vendor/ashaar.js?v=20260530-rejustify2"></script>
-    <script src="../vendor/ashaar-autotune.js?v=20260530-rejustify2"></script>
-    <script src="./word-html.js?v=20260530-rejustify2"></script>
-    <script src="./word-tabstop.js?v=20260530-rejustify2"></script>
-    <script src="./taskpane.js?v=20260530-rejustify2"></script>
+    <script src="../vendor/ashaar-justify.js?v=20260531-color"></script>
+    <script src="../vendor/ashaar.js?v=20260531-color"></script>
+    <script src="../vendor/ashaar-autotune.js?v=20260531-color"></script>
+    <script src="./profiles.js?v=20260531-color"></script>
+    <script src="./word-html.js?v=20260531-color"></script>
+    <script src="./word-tabstop.js?v=20260531-color"></script>
+    <script src="./table-adopt.js?v=20260531-color"></script>
+    <script src="./separators.js?v=20260531-color"></script>
+    <script src="./layout-grid.js?v=20260531-color"></script>
+    <script src="./taskpane.js?v=20260531-color"></script>
   </body>
 </html>

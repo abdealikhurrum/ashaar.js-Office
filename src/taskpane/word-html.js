@@ -83,10 +83,9 @@
 
   // Map tatweelCount slider (0–24) to targetFill:
   //   0  → off (return unchanged)
-  //   1–24 → 0.90 + count/24 * 0.08  (6 = 0.92, 24 = 0.98)
-  // This preserves the previous default behaviour at slider position 6.
+  //   1–24 → 0.90 + count/24 * 0.10  (6 ≈ 0.925, 24 = 1.0 — full fill, "living on the edge")
   function sliderToFill(count) {
-    return 0.90 + (Number(count) / 24) * 0.08;
+    return 0.90 + (Number(count) / 24) * 0.10;
   }
 
   function justifyText(text, opts, colWidthPx) {
@@ -886,8 +885,34 @@
       misraPattern: opts.misraPattern || "paired",
       misraCount: Number(opts.misraCount || 4),
       fontMode: opts.fontMode || "document",
+      tableWidthPct: Number(opts.tableWidthPct || 100),
+      qaseeda: opts.qaseeda || "",
       sourceHash: (hash >>> 0).toString(16)
     };
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // Decode an "ashaar:" content-control tag back into its payload object.
+  // Returns null for empty/non-ashaar/malformed tags. Guarantees a string
+  // `qaseeda` field so callers can read it without a presence check.
+  function parseContentControlTag(tag) {
+    if (typeof tag !== "string" || tag.indexOf("ashaar:") !== 0) return null;
+    try {
+      var payload = JSON.parse(decodeURIComponent(tag.slice("ashaar:".length)));
+      if (!payload || typeof payload !== "object") return null;
+      if (typeof payload.qaseeda !== "string") payload.qaseeda = "";
+      return payload;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Return a copy of an "ashaar:" tag with only its qaseeda name replaced.
+  // Non-ashaar / malformed tags are returned unchanged.
+  function setTagQaseeda(tag, name) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    payload.qaseeda = name || "";
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
@@ -909,19 +934,50 @@
       .replace(/"/g, "&quot;");
   }
 
-  // Compute proportional column spans for misra texts summing to contentCols.
-  // Pass a canvas 2D context as ctx for accurate font-metric measurement; falls back to visibleWeight.
-  function misraSpans(texts, contentCols, ctx) {
-    var weights = texts.map(function (t) {
-      return ctx ? Math.max(1, ctx.measureText(String(t || "")).width) : visibleWeight(t);
-    });
-    var total = weights.reduce(function (a, b) { return a + b; }, 0);
+  // Distribute contentCols across positions proportional to their weights (≥1 each).
+  function allocateSpans(weights, contentCols) {
+    var total = weights.reduce(function (a, b) { return a + b; }, 0) || 1;
     var spans = weights.map(function (w) {
       return Math.max(1, Math.round(w / total * contentCols));
     });
     var delta = contentCols - spans.reduce(function (a, b) { return a + b; }, 0);
     spans[spans.length - 1] = Math.max(1, spans[spans.length - 1] + delta);
     return spans;
+  }
+
+  function textWeight(text, ctx) {
+    return ctx ? Math.max(1, ctx.measureText(String(text || "")).width) : visibleWeight(text);
+  }
+
+  // Compute proportional column spans for misra texts summing to contentCols.
+  // Pass a canvas 2D context as ctx for accurate font-metric measurement; falls back to visibleWeight.
+  function misraSpans(texts, contentCols, ctx) {
+    return allocateSpans(texts.map(function (t) { return textWeight(t, ctx); }), contentCols);
+  }
+
+  // Compute ONE column-span vector for a whole stanza, shared by every full row
+  // (rows that have exactly N misras). Each position's span is proportional to the
+  // WIDEST misra in that position across the stanza — so every sadr column is the
+  // same width and every ajuz column is the same width, while the sadr>ajuz
+  // asymmetry is preserved. Returns null when no full rows exist.
+  function stanzaColSpans(stanza, si, opts) {
+    var N = si.N;
+    var ctx = (opts || {})._justifyCtx || null;
+    var maxW = [];
+    for (var j = 0; j < N; j++) maxW.push(0);
+    var found = false;
+    stanza.bayts.forEach(function (b) {
+      var texts = null;
+      if (b.type === "row" && b.misras) texts = b.misras.map(function (m) { return m.text; });
+      else if (b.ajuz) texts = [b.sadr, b.ajuz];
+      if (!texts || texts.length !== N) return;
+      found = true;
+      for (var i = 0; i < N; i++) {
+        var w = textWeight(texts[i], ctx);
+        if (w > maxW[i]) maxW[i] = w;
+      }
+    });
+    return found ? allocateSpans(maxW, si.contentCols) : null;
   }
 
   function stanzaGridInfo(stanza, opts, textWidthTwips) {
@@ -1017,7 +1073,11 @@
       // Full available content width (GRID minus gaps) so partial rows fill the table width.
       // The gap boundary lands on a gridCol boundary, giving Word layout flexibility.
       var kContentCols = si.GRID - (K - 1) * gapCols;
-      var spans = misraSpans(texts, kContentCols, (opts || {})._justifyCtx || null);
+      // Full rows (K === N) use the stanza-wide shared spans so columns align across
+      // rows; partial rows fall back to their own proportional split.
+      var spans = (K === si.N && si.colSpans)
+        ? si.colSpans
+        : misraSpans(texts, kContentCols, (opts || {})._justifyCtx || null);
       var cells = "";
       for (var i = 0; i < K; i++) {
         var align = i === 0 ? "right" : i === K - 1 ? "left" : "center";
@@ -1063,6 +1123,7 @@
 
   function stanzaTableOoxml(stanza, opts, textWidthTwips) {
     var si = stanzaGridInfo(stanza, opts, textWidthTwips);
+    si.colSpans = stanzaColSpans(stanza, si, opts); // shared spans → columns align across rows
     // Fixed layout + a definite width make the shared grid rigid: Word uses the
     // gridCol widths verbatim instead of auto-fitting columns to content across
     // rows. Without this, a wide solo misra widens the centre columns and drags
@@ -1173,6 +1234,8 @@
     parseLayoutSpec: parseLayoutSpec,
     tableColumns: tableColumns,
     contentControlTag: contentControlTag,
+    parseContentControlTag: parseContentControlTag,
+    setTagQaseeda: setTagQaseeda,
     justifyPlainTextBlock: justifyPlainTextBlock,
     renderForWordOoxml: renderForWordOoxml,
     wrapOoxml: wrapOoxml,

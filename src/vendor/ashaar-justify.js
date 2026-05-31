@@ -254,7 +254,9 @@
     if (!slots.length) return text;
 
     // Binary search the number of tatweels that fit within the target width.
-    var lo = 1, hi = text.replace(/\s/g, '').length, best = text;
+    // The upper bound allows several tatweels per joining slot so a line can fill a
+    // wide column (the search still stops at `target`, so it never over-stretches).
+    var lo = 1, hi = text.replace(/\s/g, '').length * 8, best = text;
     while (lo <= hi) {
       var mid = (lo + hi) >> 1;
       var candidate = applySlots(text, slots, mid);
