@@ -886,6 +886,7 @@
       misraPattern: opts.misraPattern || "paired",
       misraCount: Number(opts.misraCount || 4),
       fontMode: opts.fontMode || "document",
+      tableWidthPct: Number(opts.tableWidthPct || 100),
       sourceHash: (hash >>> 0).toString(16)
     };
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));

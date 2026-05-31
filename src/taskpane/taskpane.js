@@ -18,6 +18,16 @@
   var tatweelCount = document.getElementById("tatweel-count");
   var tatweelValue = document.getElementById("tatweel-value");
   var gapWidth = document.getElementById("gap-width");
+  var tableWidth = document.getElementById("table-width");
+  var tableWidthValue = document.getElementById("table-width-value");
+
+  // Table width as a fraction of the page text column (centred). 100% = full width.
+  function tableWidthPct() {
+    return Math.max(25, Math.min(100, Number((tableWidth && tableWidth.value) || 50)));
+  }
+  function scaledTextWidth(twips) {
+    return Math.max(1, Math.round(twips * tableWidthPct() / 100));
+  }
   var templateNameInput = document.getElementById("template-name");
   var templateList = document.getElementById("template-list");
   var importFileInput = document.getElementById("import-file");
@@ -146,7 +156,8 @@
       layoutSpec: (!tablePanel.hidden) ? layoutSpec.value : "",
       fontMode: fontMode.value,
       tatweelCount: Number(tatweelCount.value || 0),
-      gapWidth: Number(gapWidth.value || 4)
+      gapWidth: Number(gapWidth.value || 4),
+      tableWidthPct: tableWidthPct()
     };
   }
 
@@ -176,7 +187,11 @@
   function renderPreview() {
     var opts = options();
     tatweelValue.textContent = String(opts.tatweelCount);
+    if (tableWidthValue) tableWidthValue.textContent = String(opts.tableWidthPct);
     preview.className = "ashaar preview";
+    // Mirror the chosen table width: a narrower, centred preview previews the insert.
+    preview.style.maxWidth = opts.tableWidthPct + "%";
+    preview.style.marginInline = "auto";
     preview.style.setProperty("--ashaar-font-family", previewFontFamily(opts.fontMode));
     preview.innerHTML = Ashaar.renderText(String(input.value || ""), { gapWidth: opts.gapWidth + "%" });
     Ashaar.applyRenderOptions(preview, { gapWidth: opts.gapWidth + "%" });
@@ -310,6 +325,7 @@
       var textWidthTwips = plP && plP.width
         ? Math.round((plP.width - (plP.leftMargin || 0) - (plP.rightMargin || 0)) * 20)
         : 9360;
+      textWidthTwips = scaledTextWidth(textWidthTwips); // table width %, scales kashida target too
 
       if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
         opts._textWidthPx = textWidthTwips * 96 / 1440;
@@ -364,7 +380,8 @@
         if (!tmplG.rows.length) { setMessage("Draw at least one row of bubbles in the grid."); return; }
         var countG = Math.max(1, Math.min(20, Number(opts.bandhCount || 1)));
         var bodyG = [];
-        for (var bi = 0; bi < countG; bi++) bodyG.push(AshaarWord.templateToOoxml(tmplG, twG, opts));
+        var twGs = scaledTextWidth(twG);
+        for (var bi = 0; bi < countG; bi++) bodyG.push(AshaarWord.templateToOoxml(tmplG, twGs, opts));
         var selG = context.document.getSelection();
         var insG = selG.insertOoxml(AshaarWord.wrapOoxml(bodyG.join("<w:p/>")), Word.InsertLocation.end);
         var ccG = insG.insertContentControl();
@@ -386,7 +403,7 @@
           ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
           : 9360;
         var ooxmlBody = tables.map(function (t) {
-          return AshaarWord.templateToOoxml(t, textWidthTwips, opts);
+          return AshaarWord.templateToOoxml(t, scaledTextWidth(textWidthTwips), opts);
         }).join("<w:p/>");
         var selection = context.document.getSelection();
         var inserted = selection.insertOoxml(AshaarWord.wrapOoxml(ooxmlBody), Word.InsertLocation.end);
@@ -744,7 +761,7 @@
       var textWidthTwips = pl && pl.width
         ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
         : 9360;
-      var ooxml = AshaarWord.wrapOoxml(AshaarWord.generateBareGrid12Ooxml(textWidthTwips));
+      var ooxml = AshaarWord.wrapOoxml(AshaarWord.generateBareGrid12Ooxml(scaledTextWidth(textWidthTwips)));
       var selection = context.document.getSelection();
       var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
       var control = inserted.insertContentControl();
@@ -836,7 +853,7 @@
         : 9360;
 
       var opts = options();
-      var ooxml = AshaarWord.wrapOoxml(AshaarWord.templateToOoxml(tmpl, textWidthTwips, opts));
+      var ooxml = AshaarWord.wrapOoxml(AshaarWord.templateToOoxml(tmpl, scaledTextWidth(textWidthTwips), opts));
       var selection = context.document.getSelection();
       var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
       var control = inserted.insertContentControl();
@@ -914,7 +931,7 @@
   function bind() {
     if (isBound) return;
     isBound = true;
-    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, layoutPreset, layoutSpec, fontMode, tatweelCount, gapWidth].forEach(function (el) {
+    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, layoutPreset, layoutSpec, fontMode, tatweelCount, gapWidth, tableWidth].forEach(function (el) {
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });

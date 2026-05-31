@@ -358,4 +358,21 @@ assert.equal(
   "spreadTatweels is idempotent (no compounding)"
 );
 
+// ── Table width scaling (taskpane scales textWidthTwips; generators must honor it) ──
+const wFull = AshaarWord.renderForWordOoxml("a \\ b", { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
+const wHalf = AshaarWord.renderForWordOoxml("a \\ b", { justifyMode: "none", gapWidth: 1 }, Ashaar, 4680);
+const colFull = Number(wFull.match(/<w:gridCol w:w="(\d+)"/)[1]);
+const colHalf = Number(wHalf.match(/<w:gridCol w:w="(\d+)"/)[1]);
+assert.ok(Math.abs(colHalf * 2 - colFull) <= 2, "gridCol width scales with textWidthTwips");
+const tblFull = Number(wFull.match(/<w:tblW w:w="(\d+)"/)[1]);
+const tblHalf = Number(wHalf.match(/<w:tblW w:w="(\d+)"/)[1]);
+assert.ok(tblHalf < tblFull && Math.abs(tblHalf * 2 - tblFull) <= 14, "tblW scales with textWidthTwips");
+
+// Content-control tag carries the chosen table width
+const tagW = AshaarWord.contentControlTag("x", { tableWidthPct: 50 });
+assert.equal(
+  JSON.parse(decodeURIComponent(tagW.replace(/^ashaar:/, ""))).tableWidthPct, 50,
+  "tag carries tableWidthPct"
+);
+
 console.log("word-html tests passed");
