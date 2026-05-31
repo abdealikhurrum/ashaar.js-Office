@@ -55,9 +55,11 @@ correctly; fonts the WebView can't see — not installed (Arabic Typesetting on 
 user-installed but not exposed to the sandboxed WKWebView (FatemiMaqala) — fall back and the
 fill % is meaningless.
 
-- **Availability check:** use `document.fonts.check(font)` (already surfaced in the Debug
-  panel's `res` column). When a font is **not** resolved, warn that justify metrics are
-  approximate for it.
+- **Availability check:** **canvas width-comparison** — measure a test string in the font
+  layered over generic families; if the width changes vs the generic baseline the font
+  resolved, otherwise it fell back. (`document.fonts.check` is unreliable here: it returns
+  true for unknown system-font names.) Surfaced in the Debug panel's `res` column. When a font
+  is **not** resolved, warn that justify metrics are approximate for it.
 - **Bundled fonts (preferred fix for owned/redistributable fonts):** vendor the font as a git
   submodule (`vendor/<font>/`, mirroring `vendor/ashaar-js`), sync its web file into
   `assets/fonts/`, and declare an `@font-face` whose `font-family` matches the document's font

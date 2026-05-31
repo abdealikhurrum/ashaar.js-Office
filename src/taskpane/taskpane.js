@@ -90,6 +90,29 @@
     debugOutput.textContent = head + "\n" + rows.join("\n");
   }
 
+  // Whether the WebView can actually render `name` vs silently falling back.
+  // document.fonts.check is unreliable for system fonts (true for unknown names),
+  // so compare measured widths against generic families — if the font changes the
+  // width over a generic baseline, it resolved; if it matches all three, it fell back.
+  var _fontProbeCtx = null;
+  function fontAvailable(name) {
+    if (!name) return false;
+    try {
+      if (!_fontProbeCtx) _fontProbeCtx = document.createElement("canvas").getContext("2d");
+      var ctx = _fontProbeCtx;
+      if (!ctx) return true;
+      var test = "mMgwiحيبٹكطولِ ظہور";
+      var generics = ["monospace", "sans-serif", "serif"];
+      for (var i = 0; i < generics.length; i++) {
+        ctx.font = "72px " + generics[i];
+        var base = ctx.measureText(test).width;
+        ctx.font = "72px '" + name + "'," + generics[i];
+        if (Math.abs(ctx.measureText(test).width - base) > 0.5) return true;
+      }
+      return false;
+    } catch (e) { return true; }
+  }
+
   var GRID_COLS = 12;
   var layoutView = "numbers";   // "grid" | "numbers"
   var gridMatrix = [];          // rows of 12 booleans, reading order (index 0 = visual right)
@@ -707,8 +730,7 @@
           diags.push({
             i: diags.length,
             font: (((dCf && dCf.size) || repSize)) + "pt " + (((dCf && dCf.name) || repName)),
-            res: (typeof document !== "undefined" && document.fonts && document.fonts.check)
-              ? (document.fonts.check(canvasCtx.font) ? "yes" : "NO") : "?",
+            res: fontAvailable((dCf && dCf.name) || repName) ? "yes" : "NO",
             colPx: Math.round(colPx),
             colIn: (colPx / 96).toFixed(2),
             nat: Math.round(canvasCtx.measureText(base).width),
