@@ -72,11 +72,12 @@
   function renderDebug(diags) {
     if (!debugOutput) return;
     if (!diags.length) { debugOutput.textContent = "(no kashida cells measured)"; return; }
-    var head = "cell  font        col(in)   nat  target  final  fill  tw/cap  text";
+    var head = "cell  font        res  col(in)   nat  target  final  fill  tw/cap  text";
     var rows = diags.map(function (d) {
       return [
         String(d.i).padEnd(4),
         d.font.padEnd(11),
+        String(d.res || "?").padStart(3),
         (d.colPx + "(" + d.colIn + ")").padEnd(9),
         String(d.nat).padStart(4),
         String(d.target).padStart(6),
@@ -706,6 +707,8 @@
           diags.push({
             i: diags.length,
             font: (((dCf && dCf.size) || repSize)) + "pt " + (((dCf && dCf.name) || repName)),
+            res: (typeof document !== "undefined" && document.fonts && document.fonts.check)
+              ? (document.fonts.check(canvasCtx.font) ? "yes" : "NO") : "?",
             colPx: Math.round(colPx),
             colIn: (colPx / 96).toFixed(2),
             nat: Math.round(canvasCtx.measureText(base).width),
