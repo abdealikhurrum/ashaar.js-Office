@@ -460,6 +460,8 @@
         await context.sync();
         var allTables = [];
         blockTables.forEach(function (t) { t.items.forEach(function (tbl) { allTables.push(tbl); }); });
+        if (!allTables.length) { summary = "Qaseeda “" + name + "” has no tables to size."; return; }
+
         // Stage 1: load each row's cells (must sync before reading cells.items).
         allTables.forEach(function (tbl) {
           tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
@@ -473,24 +475,46 @@
         });
         await context.sync();
 
-        if (!allTables.length) { summary = "Qaseeda “" + name + "” has no tables to size."; return; }
+        // Capture cell proxies + their text/font as plain values ONCE. Later
+        // collection reloads (for the resized columnWidth) drop body.text from
+        // freshly-derived items, so we never re-read body.* — only columnWidth
+        // (which survives on the captured proxy) and insertText (a method).
+        var tableInfos = allTables.map(function (tbl) {
+          var cells = [];
+          tbl.rows.items.forEach(function (row) {
+            row.cells.items.forEach(function (cell) {
+              var f = cell.body.font;
+              var current = (cell.body.text || "").trim();
+              var base = stripJustification(current);
+              cells.push({
+                cell: cell,
+                current: current,
+                base: base,
+                measure: base.replace(/\s+/g, " ").trim(),
+                fontName: (f && f.name) || "",
+                fontSize: (f && f.size) || 0
+              });
+            });
+          });
+          return { tbl: tbl, cells: cells };
+        });
 
         var pl = section.pageLayout;
         var pagePt = pl && pl.width ? (pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) : 468;
 
-        // Representative font for the canvas baseline (first cell that reports one).
-        var repName = fallbackName, repSize = 16, gotRep = false;
-        allTables.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) {
-          if (gotRep) return; var f = cell.body.font; if (f && f.name) { repName = f.name; if (f.size) repSize = f.size; gotRep = true; }
-        }); }); });
+        // Representative font for the canvas baseline (first captured cell with one).
+        var repName = fallbackName, repSize = 16;
+        for (var ti = 0; ti < tableInfos.length && repName === fallbackName; ti++) {
+          var cs0 = tableInfos[ti].cells;
+          for (var ci = 0; ci < cs0.length; ci++) {
+            if (cs0[ci].fontName) { repName = cs0[ci].fontName; if (cs0[ci].fontSize) repSize = cs0[ci].fontSize; break; }
+          }
+        }
 
         var canvasCtx = document.createElement("canvas").getContext("2d");
         if (!canvasCtx) { summary = "Canvas unavailable; cannot measure."; return; }
         canvasCtx.font = repSize + "pt \"" + repName + "\"";
         if (document.fonts && document.fonts.load) { try { await document.fonts.load(repSize + "pt \"" + repName + "\""); } catch (e) {} }
-
-        function contentPx(cell) { return Math.max(1, (cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72; }
-        function cellText(cell) { return stripJustification(cell.body.text || "").replace(/\s+/g, " ").trim(); }
 
         var canResize = profile.width.mode === "auto-fit"
           && (typeof Office !== "undefined" && Office.context && Office.context.requirements
@@ -501,62 +525,57 @@
         // needs (with headroom), applied to every block. Capped at the page.
         if (canResize) {
           var headroom = doKashida ? 0.9 : 0.98;
-          var perTable = allTables.map(function (tbl) {
-            var tableWpt = 0, needScale = 1;
-            tbl.rows.items.forEach(function (row, ri) {
-              row.cells.items.forEach(function (cell) {
-                if (ri === 0) tableWpt += (cell.columnWidth || 0);
-                var t = cellText(cell); if (!t) return;
-                var cf = cell.body.font;
-                var fname = (cf && cf.name) || repName;
-                canvasCtx.font = ((cf && cf.size) || repSize) + "pt \"" + fname + "\"";
-                var colWpx = (cell.columnWidth || 0) * 96 / 72;
-                // Per-font correction nudges the measured width for fonts that the
-                // WebView can't resolve accurately (see profile.fontCorrections).
-                var measured = AshaarProfiles.applyFontCorrection(canvasCtx.measureText(t).width, fname, profile.fontCorrections);
-                if (colWpx > 0) needScale = Math.max(needScale, measured / (headroom * colWpx));
-              });
+          var colColls = tableInfos.map(function (info) { var c = info.tbl.columns; c.load("items/width"); return c; });
+          await context.sync();
+          var perTable = tableInfos.map(function (info, idx) {
+            var cols = colColls[idx];
+            var tableWpt = 0;
+            cols.items.forEach(function (col) { tableWpt += (col.width || 0); });
+            var needScale = 1;
+            info.cells.forEach(function (c) {
+              if (!c.measure) return;
+              var fname = c.fontName || repName;
+              canvasCtx.font = (c.fontSize || repSize) + "pt \"" + fname + "\"";
+              var colWpx = (c.cell.columnWidth || 0) * 96 / 72;
+              // Per-font correction nudges the measured width for fonts the WebView
+              // can't resolve accurately (see profile.fontCorrections).
+              var measured = AshaarProfiles.applyFontCorrection(canvasCtx.measureText(c.measure).width, fname, profile.fontCorrections);
+              if (colWpx > 0) needScale = Math.max(needScale, measured / (headroom * colWpx));
             });
-            return { tbl: tbl, widthPt: tableWpt, needScale: needScale };
+            return { cols: cols, widthPt: tableWpt, needScale: needScale };
           });
           var targetWidthPt = 0;
           perTable.forEach(function (p) { targetWidthPt = Math.max(targetWidthPt, p.widthPt * p.needScale); });
           if (targetWidthPt > pagePt) targetWidthPt = pagePt;
-          var colSets = perTable.map(function (p) {
-            if (p.widthPt <= 0) return null;
-            var cols = p.tbl.columns; cols.load("items/width"); return { cols: cols, scale: targetWidthPt / p.widthPt };
+          perTable.forEach(function (p) {
+            if (p.widthPt <= 0) return;
+            var scale = targetWidthPt / p.widthPt;
+            if (Math.abs(scale - 1) < 0.005) return;
+            p.cols.items.forEach(function (col) { col.width = Math.round(col.width * scale * 100) / 100; });
           });
           await context.sync();
-          colSets.forEach(function (cs) {
-            if (!cs || Math.abs(cs.scale - 1) < 0.005) return;
-            cs.cols.items.forEach(function (col) { col.width = Math.round(col.width * cs.scale * 100) / 100; });
-          });
-          await context.sync();
-          allTables.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); }); });
+          // Re-read columnWidth on the captured proxies (justifySelection-proven).
+          tableInfos.forEach(function (info) { info.tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); }); });
           await context.sync();
         }
 
-        // Re-justify every cell with the profile's params.
+        // Re-justify every cell with the profile's params (captured values only).
         var changed = 0;
         var calibParams = { targetFill: targetFill };
-        allTables.forEach(function (tbl) {
-          tbl.rows.items.forEach(function (row) {
-            row.cells.items.forEach(function (cell) {
-              var current = (cell.body.text || "").trim();
-              var base = stripJustification(current);
-              if (!base) return;
-              var colPx = contentPx(cell);
-              var justified = base;
-              if (doKashida && colPx > 0) {
-                var cf = cell.body.font;
-                canvasCtx.font = ((cf && cf.size) || repSize) + "pt \"" + ((cf && cf.name) || repName) + "\"";
-                justified = AshaarJustify.justifyLine(base, colPx, canvasCtx, calibParams, null);
-              }
-              if (justified !== current) {
-                cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
-                changed++;
-              }
-            });
+        tableInfos.forEach(function (info) {
+          info.cells.forEach(function (c) {
+            if (!c.base) return;
+            var colPx = Math.max(1, (c.cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
+            var justified = c.base;
+            if (doKashida && colPx > 0) {
+              var fname = c.fontName || repName;
+              canvasCtx.font = (c.fontSize || repSize) + "pt \"" + fname + "\"";
+              justified = AshaarJustify.justifyLine(c.base, colPx, canvasCtx, calibParams, null);
+            }
+            if (justified !== c.current) {
+              c.cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
+              changed++;
+            }
           });
         });
         await context.sync();
