@@ -503,27 +503,12 @@
   async function justifySelection() {
     var opts = options();
 
-    // Build canvas context for kashida measurement
-    var canvasCtx = null;
-    var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                 : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                 : "Times New Roman";
-    if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
-      var c = document.createElement("canvas").getContext("2d");
-      if (c) {
-        c.font = "16pt \"" + fontName + "\"";
-        canvasCtx = c;
-        opts._justifyCtx = c;
-      }
-    }
-
-    // Probe font once for quality-aware kashida slot selection
-    var fontProfile = null;
-    if (canvasCtx && typeof AshaarTune !== "undefined") {
-      try { fontProfile = await AshaarTune.probeFont({ fontFamily: fontName, fontSize: 64 }); }
-      catch (e) { /* degrade gracefully */ }
-    }
-    if (fontProfile) opts._fontProfile = fontProfile;
+    // Fallback font from the pane — used only when a cell reports no explicit font.
+    var fallbackName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
+                     : opts.fontMode === "arabic-serif" ? "Scheherazade New"
+                     : "Times New Roman";
+    var doKashida = opts.justifyMode === "kashida" || opts.justifyMode === "spacing";
+    var CELL_MARGIN_PT = 5.76; // Word default cell side margin (0.08") reserved for text
 
     setMessage("Justifying…");
 
@@ -535,26 +520,32 @@
       cc.load("title");
       await context.sync();
 
-      // Determine the range to work on: content control if we're inside one, else selection
       var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem")
         ? cc.getRange() : selection;
 
-      // Gather tables in the work range
       var tables = workRange.tables;
       tables.load("items");
       await context.sync();
 
       if (!tables.items.length) {
-        // No tables — justify plain selection text
+        // No tables — justify plain selection text, measuring with the selection's own font.
         selection.load("text");
+        selection.font.load("name,size");
         await context.sync();
+        if (doKashida) {
+          var pc = document.createElement("canvas").getContext("2d");
+          if (pc) {
+            pc.font = (selection.font.size || 16) + "pt \"" + (selection.font.name || fallbackName) + "\"";
+            opts._justifyCtx = pc;
+          }
+        }
         var justifiedText = AshaarWord.justifyPlainTextBlock(stripJustification(selection.text), opts);
         selection.insertText(justifiedText, Word.InsertLocation.replace);
         await context.sync();
         return;
       }
 
-      // Load rows → cells (columnWidth + body text) across all tables
+      // Load rows → cells, including each cell's REAL font name/size (not a guess).
       tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
       await context.sync();
       tables.items.forEach(function (tbl) {
@@ -568,35 +559,55 @@
           row.cells.items.forEach(function (cell) {
             allCells.push(cell);
             cell.body.load("text");
+            cell.body.font.load("name,size");
           });
         });
       });
       await context.sync();
 
-      // Calibrate params treating the whole poem as one unit (using AshaarTune)
+      // Representative font taken from the cells themselves (fall back to the pane).
+      var repName = fallbackName, repSize = 16;
+      for (var ci = 0; ci < allCells.length; ci++) {
+        var rf = allCells[ci].body.font;
+        if (rf && rf.name) { repName = rf.name; if (rf.size) repSize = rf.size; break; }
+      }
+
+      // Content width = cell width minus the side margins Word reserves for text.
+      function contentPx(cell) {
+        return Math.max(1, (cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
+      }
+
+      // Build the measurement canvas with the REAL font + size.
+      var canvasCtx = null;
+      if (doKashida) {
+        var c = document.createElement("canvas").getContext("2d");
+        if (c) { c.font = repSize + "pt \"" + repName + "\""; canvasCtx = c; opts._justifyCtx = c; }
+      }
+
+      // Probe + calibrate using the real font/size and content widths.
+      var fontProfile = null;
+      if (canvasCtx && typeof AshaarTune !== "undefined") {
+        try { fontProfile = await AshaarTune.probeFont({ fontFamily: repName, fontSize: 64 }); }
+        catch (e) { /* degrade gracefully */ }
+      }
+      if (fontProfile) opts._fontProfile = fontProfile;
+
       var calibParams = { targetFill: 0.92 };
       if (fontProfile) calibParams.fontQualityBoost = 1.8;
-
       if (canvasCtx && typeof AshaarTune !== "undefined") {
         var lineTexts = [];
-        var totalColPx = 0, colCount = 0;
+        var totalPx = 0, n = 0;
         allCells.forEach(function (cell) {
           var t = stripJustification(cell.body.text || "").replace(/[\r\n]+/g, " ").trim();
           if (t) lineTexts.push(t);
-          if (cell.columnWidth > 0) { totalColPx += cell.columnWidth * 96 / 72; colCount++; }
+          if (cell.columnWidth > 0) { totalPx += contentPx(cell); n++; }
         });
-        var avgColPx = colCount ? totalColPx / colCount : 300;
-
+        var avgPx = n ? totalPx / n : 300;
         if (lineTexts.length) {
           try {
             var session = await AshaarTune.calibrate({
-              texts: lineTexts,
-              fontFamily: fontName,
-              fontSize: 16,
-              containerWidth: avgColPx,
-              mode: "poetry",
-              fontProfile: fontProfile,
-              iterations: 50
+              texts: lineTexts, fontFamily: repName, fontSize: repSize,
+              containerWidth: avgPx, mode: "poetry", fontProfile: fontProfile, iterations: 50
             });
             calibParams = Object.assign({}, session.params);
             if (fontProfile) calibParams.fontQualityBoost = calibParams.fontQualityBoost || 1.8;
@@ -604,13 +615,17 @@
         }
       }
 
-      // Apply justified text back to each cell
+      // Apply, measuring each cell with ITS OWN font/size and content width.
       var changed = 0;
       allCells.forEach(function (cell) {
         var current = (cell.body.text || "").trim();
         var base = stripJustification(current); // re-justify from the bare line, not prior kashidas
         if (!base) return;
-        var colPx = (cell.columnWidth || 0) * 96 / 72;
+        var colPx = contentPx(cell);
+        if (canvasCtx) {
+          var cf = cell.body.font;
+          canvasCtx.font = ((cf && cf.size) || repSize) + "pt \"" + ((cf && cf.name) || repName) + "\"";
+        }
         var justified;
         if (canvasCtx && colPx > 0 && opts.justifyMode === "kashida") {
           justified = AshaarJustify.justifyLine(base, colPx, canvasCtx, calibParams, fontProfile || null);
@@ -621,10 +636,7 @@
         // Compare against the CURRENT cell text so a reduction (fewer or zero
         // kashidas) is written back even when the result equals the bare base.
         if (justified !== current) {
-          // Use paragraph.insertText rather than body.insertText so paragraph-level
-          // properties (jc, spacing, indents — including jc="both" for spacing mode)
-          // are preserved. body.insertText replaces the entire cell content including
-          // those properties.
+          // paragraph.insertText preserves paragraph properties (jc, spacing, indents).
           cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
           changed++;
         }
