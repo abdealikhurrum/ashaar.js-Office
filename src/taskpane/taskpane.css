@@ -9,6 +9,22 @@
   font-display: swap;
 }
 
+/* Use the user's LOCALLY-INSTALLED AL-KANZ (an Al-Fatemi derivative) if present,
+   so justification metrics match Word without redistributing the font file.
+   local() is the standards-defined way to reference an installed font by name;
+   WebKit (Mac Word's WKWebView) restricts arbitrary installed-font access for
+   anti-fingerprinting, but an explicit local() request may still resolve where
+   bare family matching does not. Falls back silently when the font is absent.
+   The listed names cover this font's family/full/PostScript name-table entries. */
+@font-face {
+  font-family: "AL-KANZ";
+  src: local("AL-KANZ"), local("Al-Kanz"), local("AL-KANZ Regular"),
+       local("Al-Kanz Regular"), local("Al-Kanz for Windows");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   --surface: #fbfaf7;
