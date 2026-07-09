@@ -9,6 +9,8 @@
     "make-adopt-doc": "node scripts/make-adopt-test-doc.mjs",
     "make-user-guide": "python3 scripts/make-user-guide-docx.py",
     "stop": "office-addin-debugging stop manifest.xml desktop",
+    "install:manifest": "bash scripts/install-manifest.sh dev",
+    "install:manifest:prod": "bash scripts/install-manifest.sh prod --restart",
     "dev-server": "node server.mjs",
     "serve": "node server.mjs",
     "sync:ashaar": "node scripts/sync-ashaar-vendor.mjs",
