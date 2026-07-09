@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Ashaar Poetry for Word</title>
+<style>
+  :root {
+    --bg:#ffffff; --fg:#1a1a1a; --muted:#666; --card:#f6f6f7; --border:#e2e2e5;
+    --accent:#4a5cff; --code:#f0f0f2; --codefg:#1a1a1a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#16161a; --fg:#eaeaec; --muted:#9a9aa2; --card:#1f1f25; --border:#33333c;
+      --accent:#8b95ff; --code:#0f0f13; --codefg:#eaeaec;
+    }
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--fg);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  .wrap { max-width:720px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-size:1.7rem; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 28px; }
+  .tabs { display:flex; gap:8px; margin-bottom:20px; }
+  .tab {
+    flex:1; padding:12px; border:1px solid var(--border); border-radius:10px;
+    background:var(--card); color:var(--fg); font-size:1rem; cursor:pointer; font-weight:600;
+  }
+  .tab[aria-selected="true"] { border-color:var(--accent); color:var(--accent); }
+  .panel { display:none; }
+  .panel.active { display:block; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .btn {
+    display:inline-block; background:var(--accent); color:#fff; text-decoration:none;
+    padding:12px 20px; border-radius:10px; font-weight:600; margin:4px 0;
+  }
+  ol { padding-left:22px; margin:8px 0; }
+  li { margin:8px 0; }
+  h2 { font-size:1.1rem; margin:0 0 10px; }
+  h3 { font-size:0.95rem; margin:22px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .code {
+    position:relative; background:var(--code); color:var(--codefg); border:1px solid var(--border);
+    border-radius:10px; padding:14px 44px 14px 14px; margin:6px 0;
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    white-space:pre-wrap; word-break:break-all; overflow-x:auto;
+  }
+  .copy {
+    position:absolute; top:8px; right:8px; border:1px solid var(--border);
+    background:var(--bg); color:var(--fg); border-radius:7px; padding:5px 9px; cursor:pointer; font-size:12px;
+  }
+  .note { color:var(--muted); font-size:0.88rem; }
+  .divider { text-align:center; color:var(--muted); margin:18px 0 10px; font-size:0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Install Ashaar Poetry for Word</h1>
+  <p class="sub">One-time setup. Pick your operating system.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tab-mac" role="tab" aria-selected="true"  onclick="pick('mac')">🍎 macOS</button>
+    <button class="tab" id="tab-win" role="tab" aria-selected="false" onclick="pick('win')">🪟 Windows</button>
+  </div>
+
+  <!-- ── macOS ───────────────────────────────────────────────────────────── -->
+  <section class="panel active" id="panel-mac">
+    <div class="card">
+      <h2>Easiest — download &amp; open</h2>
+      <ol>
+        <li><a class="btn" href="Install-Ashaar.command" download>Download installer</a></li>
+        <li>In <b>Downloads</b>, <b>right-click</b> the file → <b>Open</b> → <b>Open</b> (needed the first time so macOS allows it).</li>
+        <li>It closes Word, installs the pane, and reopens Word. Done.</li>
+      </ol>
+      <p class="note">Open the pane from <b>Home ▸ Add-ins ▸ Ashaar Poetry</b>.</p>
+    </div>
+
+    <div class="divider">— or, if that's blocked —</div>
+
+    <div class="card">
+      <h2>Paste one line into Terminal</h2>
+      <p class="note">Open <b>Terminal</b> (press ⌘-Space, type “Terminal”), paste this, press Return:</p>
+      <div class="code" id="mac-cmd">mkdir -p ~/Library/Containers/com.microsoft.Word/Data/Documents/wef && curl -fsSL "https://abdealikhurrum.github.io/ashaar.js-Office/manifest.prod.xml" -o ~/Library/Containers/com.microsoft.Word/Data/Documents/wef/a03d69e0-06d9-47c9-8995-06d3bdb5b197.manifest.xml && rm -rf ~/Library/Containers/com.microsoft.Word/Data/Library/Caches/* && echo "Done — quit Word (Cmd+Q) and reopen it."<button class="copy" onclick="cp('mac-cmd',this)">Copy</button></div>
+    </div>
+  </section>
+
+  <!-- ── Windows ─────────────────────────────────────────────────────────── -->
+  <section class="panel" id="panel-win">
+    <div class="card">
+      <h2>Easiest — download &amp; run</h2>
+      <ol>
+        <li><a class="btn" href="Install-Ashaar.bat" download>Download installer</a></li>
+        <li><b>Double-click</b> the downloaded file. If Windows shows “Windows protected your PC”, click <b>More info ▸ Run anyway</b>.</li>
+        <li>Click <b>Yes</b> when asked for administrator permission (needed to register the add-in).</li>
+        <li>Open Word → <b>Insert ▸ Add-ins ▸ My Add-ins ▸ Shared Folder</b> → pick <b>Ashaar Poetry</b>.</li>
+      </ol>
+    </div>
+
+    <div class="divider">— or, if that's blocked —</div>
+
+    <div class="card">
+      <h2>Run in PowerShell</h2>
+      <p class="note">Click <b>Start</b>, type “PowerShell”, right-click it → <b>Run as administrator</b>, paste this, press Enter:</p>
+      <div class="code" id="win-cmd">iwr 'https://abdealikhurrum.github.io/ashaar.js-Office/install/Install-Ashaar.ps1' -UseBasicParsing | iex<button class="copy" onclick="cp('win-cmd',this)">Copy</button></div>
+      <p class="note">Then restart Word and open it from the <b>Shared Folder</b> tab under My Add-ins.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+  function pick(os){
+    var isMac = os==='mac';
+    document.getElementById('tab-mac').setAttribute('aria-selected', isMac);
+    document.getElementById('tab-win').setAttribute('aria-selected', !isMac);
+    document.getElementById('panel-mac').classList.toggle('active', isMac);
+    document.getElementById('panel-win').classList.toggle('active', !isMac);
+  }
+  function cp(id, btn){
+    var el = document.getElementById(id).cloneNode(true);
+    var b = el.querySelector('.copy'); if(b) b.remove();
+    navigator.clipboard.writeText(el.textContent.trim()).then(function(){
+      var t = btn.textContent; btn.textContent='Copied!'; setTimeout(function(){btn.textContent=t;},1400);
+    });
+  }
+  // Default to the visitor's OS.
+  if (/Win/i.test(navigator.platform || navigator.userAgent)) pick('win');
+</script>
+</body>
+</html>
