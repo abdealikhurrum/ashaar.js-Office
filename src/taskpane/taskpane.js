@@ -732,7 +732,113 @@
     if (!fontName) { setQaseedaFontStatus("No font found at the cursor.", "warn"); return; }
     if (document.fonts && document.fonts.load) { try { await document.fonts.load("16pt \"" + fontName + "\""); } catch (e) {} }
     if (fontAvailable(fontName)) setQaseedaFontStatus("“" + fontName + "” resolves — metrics are accurate.", "ok");
-    else setQaseedaFontStatus("“" + fontName + "” is NOT resolvable here — metrics are approximate. Bundle it as a webfont for accuracy.", "warn");
+    else setQaseedaFontStatus("“" + fontName + "” is NOT resolvable here — metrics are approximate. Add its font file under Custom fonts.", "warn");
+  }
+
+  // ── Custom fonts (AshaarFontStore) ─────────────────────────────────────────
+  // Let the user load a font from their machine so the justify canvas measures
+  // the real outlines (see font-store.js). Registered under the exact name Word
+  // reports for the text; persisted in IndexedDB and re-registered on startup.
+  var fontUpload = document.getElementById("font-upload");
+  var fontUploadName = document.getElementById("font-upload-name");
+  var fontUploadStatus = document.getElementById("font-upload-status");
+  var fontList = document.getElementById("font-list");
+
+  function setFontUploadStatus(text, kind) {
+    if (!fontUploadStatus) return;
+    fontUploadStatus.textContent = text;
+    fontUploadStatus.className = "qaseeda-font-status" + (kind === "ok" ? " is-ok" : kind === "warn" ? " is-warn" : "");
+  }
+
+  function renderFontList(fonts) {
+    if (!fontList) return;
+    fontList.innerHTML = "";
+    (fonts || []).forEach(function (f) {
+      var li = document.createElement("li");
+      var span = document.createElement("span");
+      span.textContent = f.family + (f.filename ? " (" + f.filename + ")" : "");
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "button--secondary font-remove";
+      btn.textContent = "×";
+      btn.setAttribute("aria-label", "Remove " + f.family);
+      btn.addEventListener("click", function () { removeFont(f.family); });
+      li.appendChild(span);
+      li.appendChild(btn);
+      fontList.appendChild(li);
+    });
+  }
+
+  function refreshFontList() {
+    if (typeof AshaarFontStore === "undefined") return Promise.resolve();
+    return AshaarFontStore.listFonts().then(renderFontList, function () {});
+  }
+
+  // Auto-detect the family from the picked file and prefill the name field.
+  function onFontFilePicked() {
+    setFontUploadStatus("", "");
+    var file = fontUpload && fontUpload.files && fontUpload.files[0];
+    if (!file || typeof AshaarFontStore === "undefined") return;
+    file.arrayBuffer().then(function (buf) {
+      var names = AshaarFontStore.parseNames(buf);
+      if (names && names.family) {
+        fontUploadName.value = names.family;
+      } else if (!fontUploadName.value) {
+        fontUploadName.value = (file.name || "").replace(/\.[^.]+$/, "");
+        setFontUploadStatus("Couldn’t read the font’s name — confirm it matches what Word shows (Verify at cursor).", "warn");
+      }
+    }, function () {});
+  }
+
+  async function addFont() {
+    if (typeof AshaarFontStore === "undefined") return;
+    var file = fontUpload && fontUpload.files && fontUpload.files[0];
+    var family = (fontUploadName.value || "").trim();
+    if (!file) { setFontUploadStatus("Choose a font file first.", "warn"); return; }
+    if (!family) { setFontUploadStatus("Enter the name Word uses for this font.", "warn"); return; }
+    try {
+      var res = await AshaarFontStore.addUserFont(family, file);
+      setFontUploadStatus("Loaded “" + family + "”" +
+        (res.persisted ? " — saved for future sessions." : " — this session only (storage unavailable)."), "ok");
+      fontUpload.value = "";
+      await refreshFontList();
+    } catch (e) {
+      setFontUploadStatus("Couldn’t load that file — is it a valid .ttf/.otf/.woff?", "warn");
+    }
+  }
+
+  function removeFont(family) {
+    if (typeof AshaarFontStore === "undefined") return;
+    AshaarFontStore.deleteFont(family).then(function () {
+      setFontUploadStatus("Removed “" + family + "”. Reload the add-in to fully unload it.", "");
+      return refreshFontList();
+    }, function () {});
+  }
+
+  // Compare the registered name against the font Word applies at the cursor.
+  async function verifyFontAtCursor() {
+    if (typeof Word === "undefined") { setFontUploadStatus("Open in Word to verify.", "warn"); return; }
+    var want = (fontUploadName.value || "").trim();
+    var fontName = "";
+    try {
+      await Word.run(async function (context) {
+        var sel = context.document.getSelection();
+        sel.font.load("name");
+        await context.sync();
+        fontName = sel.font.name || "";
+      });
+    } catch (e) { /* ignore */ }
+    if (!fontName) { setFontUploadStatus("Put the cursor in the styled text, then Verify.", "warn"); return; }
+    if (document.fonts && document.fonts.load) { try { await document.fonts.load("16pt \"" + fontName + "\""); } catch (e) {} }
+    var resolves = fontAvailable(fontName);
+    if (want !== fontName) {
+      fontUploadName.value = fontName;
+      setFontUploadStatus("Word uses “" + fontName + "” here — I set the name to match. Pick its file and click Add.", "warn");
+    } else if (resolves) {
+      setFontUploadStatus("✓ “" + fontName + "” matches and resolves — justify will be accurate.", "ok");
+    } else {
+      setFontUploadStatus("“" + fontName + "” isn’t resolvable yet — pick its font file above and click Add.", "warn");
+    }
   }
 
   async function insertPoem(replaceSelection) {
@@ -1523,6 +1629,17 @@
     document.getElementById("qaseeda-assign").addEventListener("click", assignBlockToQaseeda);
     document.getElementById("qaseeda-apply").addEventListener("click", saveAndApplyQaseeda);
     document.getElementById("qaseeda-font-check").addEventListener("click", checkQaseedaFont);
+
+    // Custom fonts: register any stored fonts before measurement, wire the UI.
+    if (typeof AshaarFontStore !== "undefined") {
+      AshaarFontStore.registerAll().then(refreshFontList, function () {});
+    }
+    if (fontUpload) fontUpload.addEventListener("change", onFontFilePicked);
+    var fontAddBtn = document.getElementById("font-upload-add");
+    if (fontAddBtn) fontAddBtn.addEventListener("click", addFont);
+    var fontVerifyBtn = document.getElementById("font-upload-verify");
+    if (fontVerifyBtn) fontVerifyBtn.addEventListener("click", verifyFontAtCursor);
+
     applyLayoutPreset();
     renderPreview();
     setMode("table");

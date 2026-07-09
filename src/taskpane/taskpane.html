@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260709";
+      window.ASHAAR_ASSET_VERSION = "20260709-fonts";
     </script>
     <script>
       (function (v) {
@@ -67,6 +67,18 @@
           <label for="table-width">Table width <span id="table-width-value">50</span>%</label>
           <input id="table-width" type="range" min="25" max="100" step="5" value="50">
           <label class="auto-fit-check"><input type="checkbox" id="auto-fit-width"> Auto-fit to text</label>
+        </div>
+        <div class="field font-store">
+          <label for="font-upload">Custom fonts</label>
+          <input id="font-upload" type="file" accept=".ttf,.otf,.woff,.woff2">
+          <input id="font-upload-name" type="text" class="template-name-input" placeholder="Register as (name Word uses)">
+          <div class="font-store-actions">
+            <button id="font-upload-add" type="button" class="button--secondary">Add font</button>
+            <button id="font-upload-verify" type="button" class="button--secondary">Verify at cursor</button>
+          </div>
+          <div id="font-upload-status" class="qaseeda-font-status" aria-live="polite"></div>
+          <ul id="font-list" class="font-list"></ul>
+          <p class="adopt-hint">Load a font from your computer so kashida metrics match Word. Stored on this machine for future sessions — nothing is uploaded to a server.</p>
         </div>
       </section>
 
@@ -316,6 +328,7 @@
           "./table-adopt.js",
           "./separators.js",
           "./layout-grid.js",
+          "./font-store.js",
           "./taskpane.js"
         ];
         // Parser-inserted, non-async document.write preserves load+exec order —
