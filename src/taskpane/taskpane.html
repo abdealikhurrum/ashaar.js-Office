@@ -5,8 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Ashaar Poetry</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="../vendor/ashaar.css?v=20260531-color">
-    <link rel="stylesheet" href="./taskpane.css?v=20260531-color">
+    <script>
+      // ── Cache-busting: single source of truth ──────────────────────────────
+      // Bump this ONE value on each release (e.g. the deploy date). It is appended
+      // as ?v=… to every local stylesheet and script below, so Word's embedded
+      // webview and GitHub Pages' ~10-min cache fetch the new files instead of
+      // serving stale copies. Office add-ins reload their web assets each time the
+      // pane opens, but the webview caches JS aggressively — this defeats that.
+      window.ASHAAR_ASSET_VERSION = "20260709";
+    </script>
+    <script>
+      (function (v) {
+        document.write(
+          '<link rel="stylesheet" href="../vendor/ashaar.css?v=' + v + '">' +
+          '<link rel="stylesheet" href="./taskpane.css?v=' + v + '">'
+        );
+      })(window.ASHAAR_ASSET_VERSION);
+    </script>
   </head>
   <body>
     <main class="pane">
@@ -289,15 +304,27 @@
       </details>
     </main>
 
-    <script src="../vendor/ashaar-justify.js?v=20260531-color"></script>
-    <script src="../vendor/ashaar.js?v=20260531-color"></script>
-    <script src="../vendor/ashaar-autotune.js?v=20260531-color"></script>
-    <script src="./profiles.js?v=20260531-color"></script>
-    <script src="./word-html.js?v=20260531-color"></script>
-    <script src="./word-tabstop.js?v=20260531-color"></script>
-    <script src="./table-adopt.js?v=20260531-color"></script>
-    <script src="./separators.js?v=20260531-color"></script>
-    <script src="./layout-grid.js?v=20260531-color"></script>
-    <script src="./taskpane.js?v=20260531-color"></script>
+    <script>
+      (function (v) {
+        var srcs = [
+          "../vendor/ashaar-justify.js",
+          "../vendor/ashaar.js",
+          "../vendor/ashaar-autotune.js",
+          "./profiles.js",
+          "./word-html.js",
+          "./word-tabstop.js",
+          "./table-adopt.js",
+          "./separators.js",
+          "./layout-grid.js",
+          "./taskpane.js"
+        ];
+        // Parser-inserted, non-async document.write preserves load+exec order —
+        // the UMD globals (AshaarJustify, Ashaar, AshaarWord, …) must load in
+        // sequence before taskpane.js runs.
+        for (var i = 0; i < srcs.length; i++) {
+          document.write('<script src="' + srcs[i] + '?v=' + v + '"><\/script>');
+        }
+      })(window.ASHAAR_ASSET_VERSION);
+    </script>
   </body>
 </html>

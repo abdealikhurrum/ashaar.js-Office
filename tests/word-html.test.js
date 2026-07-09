@@ -302,6 +302,25 @@ assert.match(ooxml3misra, /شاه كے اصحاب تھے/);
 assert.match(ooxml3misra, /هو گئے شہ پر فدا/); // solo row (padded, centered)
 assert.match(ooxml3misra, /<w:jc w:val="center"\/>/); // solo paragraph centered
 
+// ── layoutTableToOoxml: non-span (Numbers-view) tables must be RTL ─────────
+// The "Numbers" layout used to be inserted via the native Word.insertTable API,
+// which yields an LTR table (cell/tab order runs left-to-right) even when the
+// content is arranged to look right. Routing it through OOXML with a
+// <w:bidiVisual/> flag makes it a genuine RTL table, matching the Grid path.
+const layoutOoxml = AshaarWord.layoutTableToOoxml(
+  { columnCount: 2, widths: [50, 50], rows: [[{ text: "١", align: "right" }, { text: "٢", align: "left" }]] },
+  9360, {}
+);
+assert.match(layoutOoxml, /<w:tbl>/);
+assert.match(layoutOoxml, /<w:bidiVisual\/>/, "non-span layout table must be a visually RTL table");
+assert.equal((layoutOoxml.match(/<w:gridCol /g) || []).length, 2, "one gridCol per column");
+assert.match(layoutOoxml, /<w:gridCol w:w="4680"\/>/, "50% column of a 9360-twip width = 4680");
+// Cells stay in LOGICAL order (col 0 first); bidiVisual flips them visually, not the source.
+const firstMisraAt = layoutOoxml.indexOf("١");
+const secondMisraAt = layoutOoxml.indexOf("٢");
+assert.ok(firstMisraAt !== -1 && secondMisraAt !== -1 && firstMisraAt < secondMisraAt,
+  "logical-first cell (visual right in RTL) is emitted first");
+
 // misraSpans: proportional allocation
 const spans = AshaarWord.misraSpans(["abc", "abcdef"], 6); // weights 3:6 → 2:4
 assert.equal(spans[0] + spans[1], 6, "spans must sum to contentCols");

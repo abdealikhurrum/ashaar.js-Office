@@ -735,66 +735,6 @@
     else setQaseedaFontStatus("“" + fontName + "” is NOT resolvable here — metrics are approximate. Bundle it as a webfont for accuracy.", "warn");
   }
 
-  function wordAlignment(align) {
-    if (align === "left") return "Left";
-    if (align === "right") return "Right";
-    return "Centered";
-  }
-
-  function formatNativeLayoutTable(table, layoutTable, source, opts) {
-    table.alignment = "Centered";
-    table.horizontalAlignment = "Centered";
-    table.styleFirstColumn = false;
-    table.styleLastColumn = false;
-    table.styleBandedColumns = false;
-    table.styleBandedRows = false;
-
-    layoutTable.widths.forEach(function (width, columnIndex) {
-      var cell = table.getCell(0, columnIndex);
-      cell.columnWidth = Math.max(8, 468 * width / 100);
-    });
-
-    layoutTable.rows.forEach(function (row, rowIndex) {
-      row.forEach(function (layoutCell, columnIndex) {
-        var cell = table.getCell(rowIndex, columnIndex);
-        cell.horizontalAlignment = wordAlignment(layoutCell.align);
-      });
-    });
-
-    var control = table.insertContentControl();
-    control.title = "Ashaar Poem";
-    control.tag = AshaarWord.contentControlTag(source, opts);
-    control.appearance = "BoundingBox";
-  }
-
-  async function insertNativeLayoutTables(context, tables, opts, source, replaceSelection) {
-    if (!tables.length) return false;
-
-    var selection = context.document.getSelection();
-    if (replaceSelection) {
-      selection.insertText("", Word.InsertLocation.replace);
-      await context.sync();
-      selection = context.document.getSelection();
-    }
-
-    var anchor = selection;
-    tables.forEach(function (layoutTable, index) {
-      var values = layoutTable.rows.map(function (row) {
-        return row.map(function (cell, colIdx) {
-          var colWidthPx = opts._textWidthPx && layoutTable.widths && layoutTable.widths[colIdx]
-            ? layoutTable.widths[colIdx] / 100 * opts._textWidthPx : 0;
-          return AshaarWord.justifyPlainTextBlock(cell.text || "", opts, colWidthPx);
-        });
-      });
-      var insertLocation = index === 0 ? Word.InsertLocation.after : Word.InsertLocation.after;
-      var table = anchor.insertTable(layoutTable.rows.length, layoutTable.columnCount, insertLocation, values);
-      formatNativeLayoutTable(table, layoutTable, source, opts);
-      anchor = table.insertParagraph("", Word.InsertLocation.after);
-    });
-    await context.sync();
-    return true;
-  }
-
   async function insertPoem(replaceSelection) {
     var pendingMsg = "";
     await withWord(async function (context) {
@@ -894,7 +834,12 @@
 
       var tables = AshaarWord.layoutTablesForTemplate(opts);
 
-      if (tables.length && tables.some(function (t) { return t.spanBased; })) {
+      // Both span-based and plain (Numbers-view) layouts go through OOXML so
+      // every table carries <w:bidiVisual/> and is a genuine RTL table. (The
+      // native Word.insertTable API has no per-table RTL flag, so it always
+      // yields an LTR table whose cell/tab order runs left-to-right even when
+      // the content looks right — hence OOXML for every layout.)
+      if (tables.length) {
         var section = context.document.sections.getFirst();
         section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
         await context.sync();
@@ -902,8 +847,11 @@
         var textWidthTwips = pl && pl.width
           ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
           : 9360;
+        var scaled = scaledTextWidth(textWidthTwips);
         var ooxmlBody = tables.map(function (t) {
-          return AshaarWord.templateToOoxml(t, scaledTextWidth(textWidthTwips), opts);
+          return t.spanBased
+            ? AshaarWord.templateToOoxml(t, scaled, opts)
+            : AshaarWord.layoutTableToOoxml(t, scaled, opts);
         }).join("<w:p/>");
         var selection = context.document.getSelection();
         var inserted = selection.insertOoxml(AshaarWord.wrapOoxml(ooxmlBody), Word.InsertLocation.end);
@@ -915,7 +863,6 @@
         return;
       }
 
-      if (tables.length && await insertNativeLayoutTables(context, tables, opts, "template", false)) return;
       var html = AshaarWord.renderTemplateForWord(opts);
       var selection = context.document.getSelection();
       var inserted = selection.insertHtml(html, Word.InsertLocation.end);

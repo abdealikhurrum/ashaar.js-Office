@@ -1188,6 +1188,47 @@
     return "<w:tbl>" + tblPr + tblGridXml(GRID, cwt) + rows + "</w:tbl>";
   }
 
+  // Non-span layout table (the "Numbers" view and other plain, non-indented
+  // layouts). Mirrors the fixed-width RTL builder above but honours per-column
+  // widths and fills each cell with its (placeholder) text. The <w:bidiVisual/>
+  // makes this a genuine right-to-left table: cell/tab order runs right-to-left
+  // and the logical-first cell (column 0) is displayed on the right — unlike the
+  // native Word.insertTable path, which produces an LTR table whose cell order
+  // (and tab order) runs left-to-right even when the content looks correct.
+  function layoutTableToOoxml(layoutTable, textWidthTwips, opts) {
+    var twips = textWidthTwips > 0 ? textWidthTwips : 9360;
+    var GRID = layoutTable.columnCount || 1;
+    var pct = (layoutTable.widths && layoutTable.widths.length === GRID)
+      ? layoutTable.widths
+      : layoutColumnWidths(GRID, opts);
+    var colTwips = pct.map(function (p) { return Math.max(8, Math.round(twips * p / 100)); });
+    var totalW = colTwips.reduce(function (a, b) { return a + b; }, 0);
+    var tblPr = "<w:tblPr>" +
+      '<w:tblW w:w="' + totalW + '" w:type="dxa"/>' +
+      '<w:jc w:val="center"/>' +
+      '<w:tblLayout w:type="fixed"/>' +
+      tblBordersXml() +
+      "<w:bidiVisual/>" +
+      "</w:tblPr>";
+    var grid = "<w:tblGrid>" + colTwips.map(function (w) {
+      return '<w:gridCol w:w="' + w + '"/>';
+    }).join("") + "</w:tblGrid>";
+    var rpr = "<w:rPr><w:rtl/>";
+    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
+    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    rpr += "</w:rPr>";
+    var rows = (layoutTable.rows || []).map(function (row) {
+      var cells = row.map(function (cell, cIdx) {
+        var jc = cell.align || (cIdx === 0 ? "right" : cIdx === row.length - 1 ? "left" : "center");
+        var para = "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" +
+          "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(blankMisraLabel(cell.text)) + "</w:t></w:r></w:p>";
+        return tcXml(1, colTwips[cIdx] || colTwips[0], para);
+      }).join("");
+      return "<w:tr>" + cells + "</w:tr>";
+    }).join("");
+    return "<w:tbl>" + tblPr + grid + rows + "</w:tbl>";
+  }
+
   function renderForWordOoxml(text, opts, Ashaar, textWidthTwips) {
     opts = opts || {};
     var twips = (textWidthTwips > 0) ? textWidthTwips : 9360;
@@ -1241,6 +1282,7 @@
     wrapOoxml: wrapOoxml,
     misraSpans: misraSpans,
     generateBareGrid12Ooxml: generateBareGrid12Ooxml,
-    templateToOoxml: templateToOoxml
+    templateToOoxml: templateToOoxml,
+    layoutTableToOoxml: layoutTableToOoxml
   };
 }));
