@@ -8,6 +8,7 @@
     "make-test-doc": "node scripts/make-test-doc.mjs",
     "make-adopt-doc": "node scripts/make-adopt-test-doc.mjs",
     "make-user-guide": "python3 scripts/make-user-guide-docx.py",
+    "make-kashida-test": "python3 scripts/make-kashida-word-test.py",
     "stop": "office-addin-debugging stop manifest.xml desktop",
     "install:manifest": "bash scripts/install-manifest.sh dev",
     "install:manifest:prod": "bash scripts/install-manifest.sh prod --restart",
