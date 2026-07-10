@@ -41,7 +41,7 @@ A stable panel below the **Justify Selected Text** button. Populated only *after
 | Capped by stretch strength | "78% — capped by stretch strength" | Focus/raise the Stretch-strength slider (see §4). |
 | Font not resolvable | "71% — font "X" not loaded (measuring is a guess)" | Open the Add-font flow (§2) with X's name prefilled. |
 | No stretch joins in this line | "Kashida can't stretch this line" | Suggest **Space out the words** or **Let Word fill it** (§5). |
-| Hit column / page width | "Already as wide as the column allows" | Turn on **Auto-fit to text** / widen the table. |
+| Hit the page boundary | "Filled as wide as the page allows" | Reduce the font size, or shorten the line — the expressive stretch already widened the columns qaseeda-proportionally to the page (§4); the page is the hard ceiling. |
 
 **Empty state (covers the "what do I select?" confusion, stably):** if Justify runs with no valid target (not inside a poem table/content control), the same panel shows `Nothing to justify — click inside a poem table, then Justify again.` No live pre-action button state (rejected as a "magical staircase").
 
@@ -95,9 +95,12 @@ Today `justifyMode:"css"` never reaches the document. Rework the mode to emit re
   - **Let Word fill it:** the strength picks the Word **kashida level** (`low → medium → high`, §3).
 - **Ashaar.js-engine two regimes (0–24 slider):**
   - **0–15:** today's fill behavior, now slider-driven (fills toward the column edge).
-  - **15–24 (expressive):** raise the **tatweel cap** from **1× → 3×** the engine's normal limit along an **exponential** curve (eases in just past 15, then accelerates to 3× at 24). Extra tatweels distribute across **legal joins only** (illegal joins always skipped). Tick shown on the slider at 15; the slider reads its multiplier (e.g. "24 · 3×").
-  - **Bounded by the cell edge — no auto-resize.** The tatweel cap is usually the first barrier (not column width), so lifting it fills lines that fell short *within the existing cell*. The table is **never** auto-widened. If a line still can't fit, that is the separate, user-initiated **Auto-fit** recourse (§1 "hit column/page width").
-- Not word spacing anywhere in engine mode; not a column resize.
+  - **15–24 (expressive):** two levers work **together** to fill dramatically:
+    1. **Tatweel cap 1× → 3×** the engine's normal limit along an **exponential** curve (eases in just past 15, then accelerates to 3× at 24); extra tatweels distribute across **legal joins only** (illegal joins always skipped).
+    2. **Column widening**, up to the **page boundary**.
+    Ceiling = **whichever binds first — page width or 3× tatweels.** Tick shown at 15; slider reads its multiplier (e.g. "24 · 3×").
+  - **Widening is qaseeda-proportional (preserves balance + bandh shape).** Never widen a single cell freely. Scale the **whole qaseeda's** column widths up together so the band grid proportions stay intact (e.g. marsiya 4+4+4/12, a bayt's 5+2+5) and every block stays balanced to the others (the existing balance-to-longest / uniform-profile logic). Expressive stretch effectively scales the qaseeda's columns toward the page, uniformly, then fills the new room with tatweels.
+- Not word spacing anywhere in engine mode. This **supersedes** the earlier "no auto-resize" note — widening is now part of the expressive regime, but only qaseeda-proportional and page-bounded.
 
 ### 5. Mode chooser — plain language, Ashaar.js engine as the hero
 
@@ -119,8 +122,17 @@ The Ashaar.js-engine framing is also what *motivates* loading a font (§2): the 
   - **tatweels** (engine mode) — strip (`stripJustification`);
   - **micro-spaces** (spacing mode) — strip;
   - **uniform font scale** (spacing/scale) — reset run sizes to their originals;
+  - **expressive column widening (§4)** — restore the qaseeda's column widths to their pre-stretch values;
   - **Word-fill artifacts (§3)** — remove the auto-inserted trailing `<w:br/>` **and** reset the paragraph's `w:jc` from the kashida/`distribute` value back to its natural alignment (right/left/center by column position).
   So `stripJustification` alone is insufficient for Word-fill mode; Reset is a mode-complete cleanup. (Native ⌘Z is unaffected — Word's own history reverses all of this regardless.)
+
+### 7. Per-qaseeda parameters, surfaced at the top
+
+**Problem:** the justification parameters (mode, strength, width) are effectively **per-qaseeda** — a named qaseeda stores its own settings and applies them uniformly across all its blocks (existing qaseeda-profile behavior, `taskpane.js:447` `strengthToTargetFill`, apply-to-all). But today the controls read as **global** at the top of the pane, while the qaseeda scoping hides in a **collapsed "Qaseeda profile" `<details>` panel at the bottom** (`taskpane.html:250`). So users don't realize settings belong to a qaseeda.
+
+**Change:** make the per-qaseeda scoping **apparent** and move the options **to the top**. The pane leads with the qaseeda identity + its parameters, framed as "settings for *this* qaseeda," so it's obvious that mode/strength/width are scoped to (and saved with) a named qaseeda and applied across its blocks. The mode chooser (§5) and Stretch strength (§4) become the qaseeda's parameters, not free-floating globals. Exact top-of-pane layout designed with the visual companion.
+
+**Interplay with §4/§5:** the expressive stretch's **qaseeda-proportional** widening is coherent precisely because parameters are per-qaseeda — one set of params, balance preserved across the whole qaseeda's bands.
 
 ---
 
@@ -132,7 +144,11 @@ Ordered so honesty-fixes land before the guidance that points at them:
 2. **§4 Stretch strength wired + mode-specific fill + expressive tatweel cap (1×→3× exponential, cell-bounded)** — engine/behavior; makes the slider and the "raise strength" recourse real.
 3. **§1 Justification Result panel** (+ empty state, recourse wiring, undo hint) — the centerpiece; depends on 3 & 4 for accurate recourse.
 4. **§2 Font-loading flow** (why, detect/prefill, dropzone, OS locate, caveats, fallback) — links from §1's font recourse.
-5. **§5 Mode chooser rename/reframe** + **§6 Reset action** — presentation + the reset button.
+5. **§5 Mode chooser rename/reframe** + **§7 per-qaseeda options at top** + **§6 Reset action** — presentation, information architecture, and the reset button.
+
+### Separate sub-project (own spec, same branch)
+
+- **Side-by-side ↔ stacked couplet converter** — a layout transform that restacks existing side-by-side bayts (sadr | ajuz) into stacked form (sadr over ajuz) in place, reusing the app's `stacked` layout. Not justification guidance; gets its own brainstorm → spec → plan when we reach it.
 
 ## Out of scope
 
@@ -143,7 +159,7 @@ Ordered so honesty-fixes land before the guidance that points at them:
 
 ## Resolved during design (was open)
 
-- **§4 expressive mapping:** tick at **15**; 15→24 raises the tatweel cap **1×→3× on an exponential curve**; **cell-bounded, no auto-resize**; the fill lever is **mode-specific** (tatweels / spaces / Word kashida level).
+- **§4 expressive mapping:** tick at **15**; 15→24 raises the tatweel cap **1×→3× on an exponential curve** **and** widens columns **qaseeda-proportionally up to the page** (ceiling = page width or 3×, whichever binds); preserves band shape + balance; fill lever is **mode-specific** (tatweels / spaces / Word kashida level).
 - **§3 Word fill:** native **kashida levels** + **auto trailing `<w:br/>`** (not plain `distribute`, which is spacing); `distribute` only as a non-Arabic fallback.
 - **§6 Reset** must also remove the trailing break and reset `w:jc`.
 
