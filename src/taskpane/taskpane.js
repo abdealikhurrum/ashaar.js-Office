@@ -1098,6 +1098,11 @@
           row.cells.items.forEach(function (cell) {
             allCells.push(cell);
             cell.body.load("text");
+            // Capture the cell's REAL font+size before the OOXML rebuild below —
+            // a full-paragraph insertOoxml replace does not inherit the previous
+            // run's font, so without this the cell would revert to Word's
+            // document default (Arial) and lose its size.
+            cell.body.font.load("name,size,bold,italic");
           });
         });
       });
@@ -1172,8 +1177,24 @@
         var base = stripJustification(cell.body.text || "").trim();
         if (!base) continue;
         // opts.justifyMode === "css" here, so misraParaXml returns the
-        // word-fill jc + shrunk break (no rFonts override — keep the cell's own font).
-        var paraXml = AshaarWord.misraParaXml(base, "center", false, opts, 0);
+        // word-fill jc + shrunk break. Pass this cell's REAL captured font+size
+        // through wordFillFont so the rebuild bakes it into the text run instead
+        // of losing it to Word's document default (Arial) — see misraParaXml.
+        // If the cell reports no name (mixed-font selection), omit wordFillFont
+        // rather than emit an empty rFonts; misraParaXml falls back to its
+        // existing fontMode behavior in that case.
+        var cf = cell.body.font;
+        var cellOpts = (cf && cf.name)
+          ? Object.assign({}, opts, {
+              wordFillFont: {
+                name: cf.name,
+                size: cf.size || undefined,
+                bold: !!cf.bold,
+                italic: !!cf.italic
+              }
+            })
+          : opts;
+        var paraXml = AshaarWord.misraParaXml(base, "center", false, cellOpts, 0);
         try {
           cell.body.insertOoxml(AshaarWord.wrapOoxml(paraXml), Word.InsertLocation.replace);
           await context.sync();

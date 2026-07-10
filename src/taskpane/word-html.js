@@ -1129,8 +1129,25 @@
     }
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
-    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    // wordFillFont carries the cell's REAL font+size (captured before the OOXML
+    // rebuild) so a full-paragraph insertOoxml replace — which does NOT inherit
+    // the previous run's font — doesn't revert the cell to Word's document
+    // default (Arial). When present it wins over the generic fontMode rFonts.
+    var wff = opts.wordFillFont;
+    if (wff && wff.name) {
+      var wfFontName = escapeXml(wff.name);
+      rpr += '<w:rFonts w:ascii="' + wfFontName + '" w:hAnsi="' + wfFontName + '" w:cs="' + wfFontName + '"/>';
+      if (wff.size) {
+        var wfSz = Math.round(Number(wff.size) * 2);
+        rpr += '<w:sz w:val="' + wfSz + '"/><w:szCs w:val="' + wfSz + '"/>';
+      }
+      if (wff.bold) rpr += "<w:b/><w:bCs/>";
+      if (wff.italic) rpr += "<w:i/><w:iCs/>";
+    } else if ((opts || {}).fontMode === "nastaliq") {
+      rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
+    } else if ((opts || {}).fontMode === "arabic-serif") {
+      rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    }
     rpr += "</w:rPr>";
     var ind = indTwips ? '<w:ind w:left="' + indTwips + '"/>' : "";
     return "<w:p>" +
