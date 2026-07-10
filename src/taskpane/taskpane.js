@@ -1054,16 +1054,25 @@
   }
 
   // "Let Word fill it" mode: no probe/calibrate/tatweel — Word's own kashida
-  // renderer does the work via the paragraph's jc (justification) value. We
-  // (1) qaseeda-proportionally widen the table's columns so kashida has
-  // headroom, then (2) rebuild each cell's single paragraph as OOXML carrying
-  // the word-fill jc + shrunk trailing break, using the SAME misraParaXml/
-  // wrapOoxml emitters insertPoem/insertTabStopPoem already use (DRY — no
-  // second XML builder). The Office.js alignment enum has no kashida values,
-  // so a plain `paragraph.alignment = ...` assignment cannot express this;
-  // insertOoxml is the only way to set jc="mediumKashida" etc.
+  // renderer does the work via the paragraph's jc (justification) value.
+  //
+  // A per-cell insertOoxml replace (the original approach) is WRONG: verified
+  // in Word that it drops the kashida jc — Word resets a cell paragraph's
+  // alignment to the cell's own positional value on a body-scope replace.
+  // insertOoxml at SELECTION scope, by contrast, preserves jc (that's exactly
+  // what insertPoem/adoptTable already rely on). So instead of rebuilding
+  // OOXML per cell, we reconstruct the poem's plain-text SOURCE from the
+  // table(s)' cells (mirrors adoptTable's AshaarTableAdopt.adoptTableToSource
+  // reconstruction) and re-run the normal insertPoem(true) pipeline — which
+  // renders via renderForWordOoxml → wrapOoxml → selection.insertOoxml(...,
+  // replace) and re-wraps the "Ashaar Poem" content control. Because the
+  // justify-mode dropdown is "Word justify" (opts.justifyMode === "css") on
+  // this path, that re-render emits the word-fill kashida jc + shrunk break
+  // (misraParaXml), with width %/gap/strength/fontMode flowing through
+  // exactly as they do for a fresh insert.
   async function justifySelectionWordFill(opts) {
     setMessage("Justifying…");
+    var source = "";
 
     await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -1081,141 +1090,47 @@
       await context.sync();
 
       if (!tables.items.length) {
-        setMessage("Select an Ashaar table to fill with Word kashida.");
+        setMessage("Select an Ashaar table to fill.");
         return;
       }
 
       tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
       await context.sync();
       tables.items.forEach(function (tbl) {
-        tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+        tbl.rows.items.forEach(function (row) { row.cells.load("items"); });
       });
       await context.sync();
-
-      var allCells = [];
       tables.items.forEach(function (tbl) {
         tbl.rows.items.forEach(function (row) {
-          row.cells.items.forEach(function (cell) {
-            allCells.push(cell);
-            cell.body.load("text");
-            // Capture the cell's REAL font+size before the OOXML rebuild below —
-            // a full-paragraph insertOoxml replace does not inherit the previous
-            // run's font, so without this the cell would revert to Word's
-            // document default (Arial) and lose its size.
-            cell.body.font.load("name,size,bold,italic");
-          });
+          row.cells.items.forEach(function (cell) { cell.body.load("text"); });
         });
       });
       await context.sync();
 
-      // Column expansion (qaseeda-proportional): scale every column of every
-      // table by 1+frac, capped so the table doesn't exceed page width. Reuses
-      // the same canResize gate + page-width computation as the kashida/spacing
-      // auto-fit block above (desktop-only TableColumn API, WordApiDesktop 1.3).
-      var canResize = (typeof Office !== "undefined" && Office.context && Office.context.requirements
-        && Office.context.requirements.isSetSupported
-        && Office.context.requirements.isSetSupported("WordApiDesktop", "1.3"));
-      var frac = AshaarWord.kashidaExpansionFraction(opts.tatweelCount);
-      if (frac > 0 && canResize) {
-        var sectionA = context.document.sections.getFirst();
-        sectionA.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
-        await context.sync();
-        var plA = sectionA.pageLayout;
-        var pagePt = plA && plA.width ? (plA.width - (plA.leftMargin || 0) - (plA.rightMargin || 0)) : 468;
-
-        // Per table: current width (first row's cells) scaled by 1+frac, capped at page width.
-        var scaleByTable = tables.items.map(function (tbl) {
-          var tableWpt = 0;
-          if (tbl.rows.items.length) {
-            tbl.rows.items[0].cells.items.forEach(function (cell) { tableWpt += (cell.columnWidth || 0); });
-          }
-          var s = 1 + frac;
-          if (tableWpt > 0 && tableWpt * s > pagePt) s = pagePt / tableWpt;
-          return Math.max(1, s);
+      // Each table → one stanza; multiple tables in scope → stanza-separated.
+      // Same reconstruction adoptTable uses, so the round-trip parsing rules
+      // (misra/bayt/refrain detection from row layout) stay in one place.
+      source = tables.items.map(function (tbl) {
+        var rows = tbl.rows.items.map(function (row) {
+          return row.cells.items.map(function (cell) { return cell.body.text || ""; });
         });
+        return AshaarTableAdopt.adoptTableToSource(rows, { direction: "rtl" });
+      }).filter(function (s) { return s.trim(); }).join("\n\n");
 
-        // Widen each table's columns independently and non-fatally. Table.columns
-        // (TableColumnCollection) is only valid for UNIFORM tables — Word throws
-        // "Cannot access individual columns in this collection because the table
-        // has mixed cell widths" at context.sync() for any table with mixed cell
-        // widths (e.g. a marsiya stanza mixing a 3-cell row, a 1-cell solo row,
-        // and a 2-cell refrain row). Isolating the load+resize per table in its
-        // own try/catch means a mixed-width table just skips widening instead of
-        // aborting the whole justify — the kashida rebuild below always runs.
-        for (var t = 0; t < tables.items.length; t++) {
-          if (scaleByTable[t] <= 1.001) continue;
-          try {
-            var cols = tables.items[t].columns;
-            cols.load("items/width");
-            await context.sync();
-            cols.items.forEach(function (col) {
-              col.width = Math.round(col.width * scaleByTable[t] * 100) / 100;
-            });
-            await context.sync();
-          } catch (eExpand) {
-            // Mixed cell widths or unsupported API for this table: skip
-            // widening it and continue with the rest.
-          }
-        }
+      if (!source.trim()) {
+        setMessage("That table didn't contain any text to fill.");
+        return;
       }
 
-      // Rebuild each cell's paragraph as word-fill OOXML: native kashida jc (or
-      // "distribute" for non-Arabic) plus the shrunk trailing break that lets a
-      // single (last) line actually stretch — same emitter used by insertPoem.
-      // One context.sync() per cell (inside try/catch) so a failure on one cell
-      // degrades gracefully instead of aborting the whole batch, mirroring the
-      // run-aware fallback pattern in justifySelection's kashida/spacing path.
-      //
-      // NOT verified in Word yet (Task 7 does that): if a wrapOoxml-wrapped
-      // single paragraph is rejected by Word at cell-body scope, the first
-      // catch retries with the bare paraXml fragment (no package wrapper); if
-      // that also fails, the second catch degrades to plain justified
-      // alignment (jc="both", no kashida) so the cell is at least readable.
-      var changed = 0;
-      for (var i = 0; i < allCells.length; i++) {
-        var cell = allCells[i];
-        var base = stripJustification(cell.body.text || "").trim();
-        if (!base) continue;
-        // opts.justifyMode === "css" here, so misraParaXml returns the
-        // word-fill jc + shrunk break. Pass this cell's REAL captured font+size
-        // through wordFillFont so the rebuild bakes it into the text run instead
-        // of losing it to Word's document default (Arial) — see misraParaXml.
-        // If the cell reports no name (mixed-font selection), omit wordFillFont
-        // rather than emit an empty rFonts; misraParaXml falls back to its
-        // existing fontMode behavior in that case.
-        var cf = cell.body.font;
-        var cellOpts = (cf && cf.name)
-          ? Object.assign({}, opts, {
-              wordFillFont: {
-                name: cf.name,
-                size: cf.size || undefined,
-                bold: !!cf.bold,
-                italic: !!cf.italic
-              }
-            })
-          : opts;
-        var paraXml = AshaarWord.misraParaXml(base, "center", false, cellOpts, 0);
-        try {
-          cell.body.insertOoxml(AshaarWord.wrapOoxml(paraXml), Word.InsertLocation.replace);
-          await context.sync();
-          changed++;
-        } catch (eWrapped) {
-          try {
-            cell.body.insertOoxml(paraXml, Word.InsertLocation.replace);
-            await context.sync();
-            changed++;
-          } catch (eBare) {
-            try {
-              cell.body.paragraphs.getFirst().alignment = Word.Alignment.justified;
-              await context.sync();
-              changed++;
-            } catch (eDegraded) { /* leave this cell untouched */ }
-          }
-        }
-      }
-
-      setMessage("Filled " + changed + " cell(s) with Word kashida.");
+      // Put the selection on the content insertPoem(true) will replace.
+      workRange.select();
+      await context.sync();
     });
+
+    if (!source.trim()) return; // a friendly message was already shown
+
+    input.value = source;
+    await insertPoem(true);
   }
 
   async function justifySelection() {
