@@ -1222,6 +1222,14 @@
       if (canvasCtx && mechanism === "font-swap" && typeof document !== "undefined" && document.fonts && document.fonts.load) {
         var kName = AshaarFonts.kasheedaNameOf(fontId);
         if (kName) { try { await document.fonts.load(repSize + "pt \"" + kName + "\""); } catch (e) {} }
+        // The base face is normally loaded incidentally via the repName
+        // preload above, but repName is the cell's reported font.name
+        // (usually the Latin/hAnsi face), not the Arabic w:cs base face
+        // that baseCss below actually measures with — so force-load it
+        // explicitly, or measureText silently falls back to a substitute
+        // font and corrupts widthsBase / the gain ranking in selectSwapRuns.
+        var bName = AshaarFonts.wordNameOf(fontId);
+        if (bName) { try { await document.fonts.load(repSize + "pt \"" + bName + "\""); } catch (e) {} }
       }
 
       // Auto-fit (in place): widen each table's columns so the widest misra has

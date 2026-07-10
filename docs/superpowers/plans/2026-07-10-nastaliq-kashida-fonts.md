@@ -6,6 +6,8 @@
 
 **Architecture:** A pure font registry (`fonts.js`) tags each font with a `mechanism`. All the scattered `Noto Nastaliq Urdu` literals read from it. Justify dispatch branches on the tag: Mehr rides the existing canvas-tatweel engine with a per-font tatweel whitelist injected via `params.priorityTable` (no vendor edit); Jameel gets a new add-in module `kashida-italic.js` doing discrete connected-segment (fasl) subset-selection emitted as per-run italic OOXML; Gulzar/Noto are guarded off the tatweel path entirely (they shatter under injected tatweels) and fall back to spacing.
 
+> **Update (Gate G2):** Jameel's italic-run mechanism was cut — Word doesn't honor the italic→kasheeda swap; Jameel now uses **font-swap** (see the Gate section + ADDENDUM Tasks 7–8).
+
 **Tech Stack:** Vanilla ES5 / UMD modules (no build step, no transpilation), Office.js v1, Node `assert` tests. Runs in Word's WebView (WKWebView on Mac, WebView2 on Windows) and Node for tests.
 
 ## Global Constraints

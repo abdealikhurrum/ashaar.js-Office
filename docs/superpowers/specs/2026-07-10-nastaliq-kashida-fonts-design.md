@@ -5,6 +5,8 @@
 **Branch:** `worktree-nastaliq-kashida-fonts` (worktree, based on `feat/guided-justification-ux`)
 **Scope:** Add first-class support for the Nastaliq fonts that can actually fill a line — **Mehr Nastaliq** (tatweel), **Jameel Noori Kasheeda** (italic-run elongation), and **Gulzar** (whitespace-only) — and make the justification engine choose the *right mechanism per font* instead of assuming every "Nastaliq" font kashidas. Introduces a font registry that drives preview, Word run naming, and — critically — which justification modes are valid for a given font.
 
+> **Update (Gate G2, 2026-07-10):** Jameel is **font-swap**, not italic-run — see the Gate G/G2 results below.
+
 ## Problem
 
 The task pane has a single `nastaliq` font mode that maps to **Noto Nastaliq Urdu** with `Jameel Noori Nastaleeq` as a CSS fallback string (`word-html.js:142`, `taskpane.js:256`), and emits `<w:rFonts w:cs="Noto Nastaliq Urdu"/>` into Word (`word-html.js:1093,1230,1271`, `word-tabstop.js:68`). But **Noto Nastaliq Urdu has no kashida** — it does not elongate on U+0640 tatweel. So the canvas tatweel engine (`AshaarJustify.justifyLine`) and the probe scorer (`AshaarTune.probeFont`) have nothing to bite on: the "Nastaliq" option can never truly fill a line, and the guided-justification recourse "raise stretch strength" is meaningless for it.
