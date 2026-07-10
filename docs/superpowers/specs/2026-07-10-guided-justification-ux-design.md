@@ -80,7 +80,8 @@ Today `justifyMode:"css"` never reaches the document. Rework the mode to emit re
 - `distribute` — **spacing, not kashida**: "distribute all characters equally" (inter-character + inter-word spacing). Script-agnostic; fills every line including the last.
 
 **Mapping:**
-- **Arabic:** emit a **kashida level** (mapped from strength — see §4) for genuine stroke elongation.
+- **Arabic:** emit a **kashida level** for genuine stroke elongation, chosen from the Stretch-strength slider in **thirds** — `lowKashida` (0–⅓), `mediumKashida` (⅓–⅔), `highKashida` (⅔–full).
+- **Column expansion:** allow **up to ~15% column widening at full strength** (scaling to 0 at the low end) so Word's kashida has room to fill — qaseeda-proportional, like §4 but with this smaller 15% ceiling instead of the page boundary.
 - **Last-line problem + fix:** kashida (like `both`) does **not** stretch the last line of a paragraph, and each misra cell is a single line = the last line. So the app **auto-appends a trailing soft line break (`<w:br/>`)** to the misra paragraph, demoting it from last-line so Word kashidas it — the user presses nothing. The break run is shrunk (e.g. ~2pt) / line spacing tightened to minimize the trailing empty line's height.
 - **Non-Arabic fallback:** `distribute` (spacing) — the only value that fills a single last line without the break, for text kashida can't elongate. Not a kashida substitute for Arabic (it's loose spacing).
 
@@ -92,7 +93,7 @@ Today `justifyMode:"css"` never reaches the document. Rework the mode to emit re
 - **The fill lever is mode-specific** (the slider drives whatever the chosen mode uses):
   - **Ashaar.js engine (tatweel):** more **tatweels** at legal joins. Never word spacing.
   - **Space out the words:** more **spaces** (that mode's mechanism — spacing legitimately grows here).
-  - **Let Word fill it:** the strength picks the Word **kashida level** (`low → medium → high`, §3).
+  - **Let Word fill it:** the strength picks the Word **kashida level** in thirds (`low → medium → high`), with up to ~15% qaseeda-proportional column expansion at full strength (§3).
 - **Ashaar.js-engine two regimes (0–24 slider):**
   - **0–15:** today's fill behavior, now slider-driven (fills toward the column edge).
   - **15–24 (expressive):** two levers work **together** to fill dramatically:
@@ -122,7 +123,7 @@ The Ashaar.js-engine framing is also what *motivates* loading a font (§2): the 
   - **tatweels** (engine mode) — strip (`stripJustification`);
   - **micro-spaces** (spacing mode) — strip;
   - **uniform font scale** (spacing/scale) — reset run sizes to their originals;
-  - **expressive column widening (§4)** — restore the qaseeda's column widths to their pre-stretch values;
+  - **column widening** — restore the qaseeda's column widths to their pre-stretch values (from §4's page-bounded widening *or* §3's ~15% Word-fill expansion);
   - **Word-fill artifacts (§3)** — remove the auto-inserted trailing `<w:br/>` **and** reset the paragraph's `w:jc` from the kashida/`distribute` value back to its natural alignment (right/left/center by column position).
   So `stripJustification` alone is insufficient for Word-fill mode; Reset is a mode-complete cleanup. (Native ⌘Z is unaffected — Word's own history reverses all of this regardless.)
 
@@ -137,7 +138,7 @@ Rename the "Qaseeda profile" concept to **Profile** and make it a first-class, t
 - **A Profile saves:** mode (§5), stretch strength (§4), table width, font — the kashida/formatting preferences — **plus an optional link to a saved Template** (§ Templates feature) for the band **shape**. Applying a profile sets the look and, if a template is linked, the layout too — **without duplicating** the Templates system (the shape still lives as a template; the profile just references it).
 - **Extract shape into a profile in one step.** The existing **"Capture from Word"** (`captureSelectedTableLayout`) already reads a table's cell widths → infers the 12-col spans → saves a Template. Add a **"Save this table's shape into the current Profile"** action that runs capture **and** links the resulting template to the active profile in one click — so a shape can be pulled off any drawn/adopted/converted table and reused via the profile.
 - **Surface at the top:** the pane leads with the **Profile identity** (name selector + New) and the note "A saved set of preferences, applied to every band/bayt tagged with it — reuse across a whole nazam," then its parameters directly beneath. Mode (§5) and Stretch strength (§4) *are* the profile's parameters, not free-floating globals. Advanced settings (per-font correction, debug colors) collapse.
-- **Unnamed / one-off:** when no profile is chosen, default to **"Untitled — current selection"** so a plain Justify still works without forcing profile creation; the same top controls govern that one-off justify. *(Confirm during plan.)*
+- **Unnamed / one-off:** when no profile is chosen, the profile selector reads **"Current Selection"** so a plain Justify still works without forcing profile creation; the same top controls govern that one-off justify.
 
 **Interplay with §4/§5:** the expressive stretch's **qaseeda-proportional** widening is coherent precisely because a profile applies one parameter set across all the poem's bands — balance and band shape preserved poem-wide.
 
@@ -170,9 +171,9 @@ Ordered so honesty-fixes land before the guidance that points at them:
 - **§4 expressive mapping:** tick at **15**; 15→24 raises the tatweel cap **1×→3× on an exponential curve** **and** widens columns **qaseeda-proportionally up to the page** (ceiling = page width or 3×, whichever binds); preserves band shape + balance; fill lever is **mode-specific** (tatweels / spaces / Word kashida level).
 - **§3 Word fill:** native **kashida levels** + **auto trailing `<w:br/>`** (not plain `distribute`, which is spacing); `distribute` only as a non-Arabic fallback.
 - **§6 Reset** must also remove the trailing break and reset `w:jc`.
+- **§3 Word-fill strength→level:** thirds — low (0–⅓) / medium (⅓–⅔) / high (⅔–full); ~15% qaseeda-proportional column expansion at full strength.
+- **§7 one-off:** unnamed profile selector reads **"Current Selection."**
 
 ## Open questions for spec review
 
-- The exact strength→kashida-level thresholds in Word-fill mode (where low/medium/high switch on 0–24).
-- Whether unnamed one-off justify ("Untitled — current selection") is the right default (§7).
 - *(Deferred to the entry-point simplification sub-project: whether "Insert as Table" survives, and if so whether the result panel appears after it. For now the result panel is Justify-scoped.)*
