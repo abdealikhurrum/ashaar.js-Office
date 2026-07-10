@@ -32,10 +32,10 @@ assert.strictEqual(AshaarFonts.kasheedaNameOf("mehr"), null);
 assert.ok(/Mehr Nastaliq Web/.test(AshaarFonts.cssFamilyOf("mehr")));
 assert.strictEqual(AshaarFonts.cssFamilyOf("document"), null);
 
-// Mehr whitelist verbatim
+// Mehr whitelist verbatim — allowed tatweel letters by shaping form
 const r = AshaarFonts.tatweelRulesOf("mehr");
-assert.deepStrictEqual(r.medialInto, ["ب","پ","ت","ٹ","ث","س","ش","ف","ک","گ"]);
-assert.deepStrictEqual(r.finalInto,  ["ب","پ","ت","ٹ","ث","ف","ک","گ"]);
+assert.deepStrictEqual(r.isolatedInto, ["ب","پ","ت","ٹ","ث","س","ش","ف","ک","گ"]);
+assert.deepStrictEqual(r.finalInto,    ["ب","پ","ت","ٹ","ث","ف","ک","گ"]);
 assert.strictEqual(AshaarFonts.tatweelRulesOf("gulzar"), null);
 
 console.log("fonts tests passed");
