@@ -126,13 +126,19 @@ The Ashaar.js-engine framing is also what *motivates* loading a font (§2): the 
   - **Word-fill artifacts (§3)** — remove the auto-inserted trailing `<w:br/>` **and** reset the paragraph's `w:jc` from the kashida/`distribute` value back to its natural alignment (right/left/center by column position).
   So `stripJustification` alone is insufficient for Word-fill mode; Reset is a mode-complete cleanup. (Native ⌘Z is unaffected — Word's own history reverses all of this regardless.)
 
-### 7. Per-qaseeda parameters, surfaced at the top
+### 7. Profiles — reusable saved preferences, surfaced at the top
 
-**Problem:** the justification parameters (mode, strength, width) are effectively **per-qaseeda** — a named qaseeda stores its own settings and applies them uniformly across all its blocks (existing qaseeda-profile behavior, `taskpane.js:447` `strengthToTargetFill`, apply-to-all). But today the controls read as **global** at the top of the pane, while the qaseeda scoping hides in a **collapsed "Qaseeda profile" `<details>` panel at the bottom** (`taskpane.html:250`). So users don't realize settings belong to a qaseeda.
+Rename the "Qaseeda profile" concept to **Profile** and make it a first-class, top-of-pane element. (A *qaseeda/nazam* is the poem; a *Profile* is a reusable named preset you apply to its bands.)
 
-**Change:** make the per-qaseeda scoping **apparent** and move the options **to the top**. The pane leads with the qaseeda identity + its parameters, framed as "settings for *this* qaseeda," so it's obvious that mode/strength/width are scoped to (and saved with) a named qaseeda and applied across its blocks. The mode chooser (§5) and Stretch strength (§4) become the qaseeda's parameters, not free-floating globals. Exact top-of-pane layout designed with the visual companion.
+**Problem:** the formatting parameters (mode, strength, width, font) read as **global** controls at the top, while the saved-preset scoping hides in a **collapsed "Qaseeda profile" `<details>` panel at the bottom** (`taskpane.html:250`). Users don't realize these are savable, reusable, per-profile settings applied across many blocks.
 
-**Interplay with §4/§5:** the expressive stretch's **qaseeda-proportional** widening is coherent precisely because parameters are per-qaseeda — one set of params, balance preserved across the whole qaseeda's bands.
+**Change:**
+- **Rename Qaseeda → Profile** throughout the UI. Builds on the existing profile store (`AshaarProfiles`, `strengthToTargetFill`, `taskpane.js:447`, apply-to-all) — the machinery exists; this is naming + IA.
+- **A Profile saves:** mode (§5), stretch strength (§4), table width, font — the kashida/formatting preferences — **plus an optional link to a saved Template** (§ Templates feature) for the band **shape**. Applying a profile sets the look and, if a template is linked, the layout too — **without duplicating** the Templates system (the shape still lives as a template; the profile just references it).
+- **Surface at the top:** the pane leads with the **Profile identity** (name selector + New) and the note "A saved set of preferences, applied to every band/bayt tagged with it — reuse across a whole nazam," then its parameters directly beneath. Mode (§5) and Stretch strength (§4) *are* the profile's parameters, not free-floating globals. Advanced settings (per-font correction, debug colors) collapse.
+- **Unnamed / one-off:** when no profile is chosen, default to **"Untitled — current selection"** so a plain Justify still works without forcing profile creation; the same top controls govern that one-off justify. *(Confirm during plan.)*
+
+**Interplay with §4/§5:** the expressive stretch's **qaseeda-proportional** widening is coherent precisely because a profile applies one parameter set across all the poem's bands — balance and band shape preserved poem-wide.
 
 ---
 
@@ -144,7 +150,7 @@ Ordered so honesty-fixes land before the guidance that points at them:
 2. **§4 Stretch strength wired + mode-specific fill + expressive tatweel cap (1×→3× exponential, cell-bounded)** — engine/behavior; makes the slider and the "raise strength" recourse real.
 3. **§1 Justification Result panel** (+ empty state, recourse wiring, undo hint) — the centerpiece; depends on 3 & 4 for accurate recourse.
 4. **§2 Font-loading flow** (why, detect/prefill, dropzone, OS locate, caveats, fallback) — links from §1's font recourse.
-5. **§5 Mode chooser rename/reframe** + **§7 per-qaseeda options at top** + **§6 Reset action** — presentation, information architecture, and the reset button.
+5. **§5 Mode chooser rename/reframe** + **§7 Profiles (rename Qaseeda→Profile, options at top, optional template link)** + **§6 Reset action** — presentation, information architecture, and the reset button.
 
 ### Separate sub-project (own spec, same branch)
 
