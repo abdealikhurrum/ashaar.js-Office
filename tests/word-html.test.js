@@ -441,4 +441,62 @@ assert.equal(parsedSet.tableWidthPct, 60, "setTagQaseeda preserves other payload
 assert.equal(AshaarWord.setTagQaseeda("not-ashaar", "X"), "not-ashaar", "non-ashaar tag returned unchanged");
 assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase, "")).qaseeda, "", "clearing the name yields empty string");
 
+// ── coalesceRuns ────────────────────────────────────────────────────────────
+{
+  // Two words, same style → one run; refs keep both source words in order.
+  const w = [
+    { text: "درد", name: "Amiri", size: 16, bold: false, italic: false },
+    { text: "دل",  name: "Amiri", size: 16, bold: false, italic: false },
+  ];
+  const r = AshaarWord.coalesceRuns(w);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].text, "درد دل");
+  assert.equal(r[0].name, "Amiri");
+  assert.deepEqual(r[0].refs, w);
+}
+{
+  // Style change (bold) splits into two runs, order preserved, one ref each.
+  const r = AshaarWord.coalesceRuns([
+    { text: "درد", name: "Amiri", size: 16, bold: false, italic: false },
+    { text: "دل",  name: "Amiri", size: 16, bold: true,  italic: false },
+  ]);
+  assert.equal(r.length, 2);
+  assert.equal(r[0].text, "درد");
+  assert.equal(r[1].text, "دل");
+  assert.equal(r[1].bold, true);
+  assert.equal(r[0].refs.length, 1);
+  assert.equal(r[1].refs.length, 1);
+}
+{
+  // Size change splits; the second run coalesces its two same-size words.
+  const r = AshaarWord.coalesceRuns([
+    { text: "الف", name: "Amiri", size: 24, bold: false, italic: false },
+    { text: "ب",   name: "Amiri", size: 16, bold: false, italic: false },
+    { text: "ج",   name: "Amiri", size: 16, bold: false, italic: false },
+  ]);
+  assert.deepEqual(r.map(x => x.text), ["الف", "ب ج"]);
+  assert.equal(r[1].refs.length, 2);
+  assert.deepEqual(AshaarWord.coalesceRuns([]), []);
+}
+
+// ── distributeMicroSpaces ───────────────────────────────────────────────────
+{
+  const HAIR = " ";
+  // Two runs; gaps: run0 "a b" (1), run1 "c d" (1) → 2 gaps. n=2 → 1 each.
+  const out = AshaarWord.distributeMicroSpaces(["a b", "c d"], 2, HAIR);
+  assert.deepEqual(out, ["a " + HAIR + "b", "c " + HAIR + "d"]);
+}
+{
+  const HAIR = " ";
+  // n=3 over 2 gaps → first gap 2, second gap 1 (round-robin).
+  const out = AshaarWord.distributeMicroSpaces(["a b", "c d"], 3, HAIR);
+  assert.deepEqual(out, ["a " + HAIR + HAIR + "b", "c " + HAIR + "d"]);
+}
+{
+  const HAIR = " ";
+  // No gaps (single words) or n<=0 → unchanged.
+  assert.deepEqual(AshaarWord.distributeMicroSpaces(["a", "b"], 5, HAIR), ["a", "b"]);
+  assert.deepEqual(AshaarWord.distributeMicroSpaces(["a b"], 0, HAIR), ["a b"]);
+}
+
 console.log("word-html tests passed");

@@ -922,6 +922,60 @@
     }).join("\n");
   }
 
+  // ── Run-aware justification consumers ────────────────────────────────────
+  // Merge adjacent words that share an identical style tuple into runs. A run's
+  // text is its words joined by a single space. Word-aligned (exact per the
+  // run-aware kashida foundation spec); mid-word style changes are not
+  // represented here — the caller reads one style per whole word.
+  function coalesceRuns(words) {
+    var runs = [];
+    (words || []).forEach(function (w) {
+      var prev = runs[runs.length - 1];
+      if (prev && prev.name === w.name && prev.size === w.size &&
+          prev.bold === w.bold && prev.italic === w.italic) {
+        prev.text += " " + w.text;
+        prev.refs.push(w);
+      } else {
+        runs.push({
+          text: w.text, name: w.name, size: w.size, bold: w.bold, italic: w.italic,
+          refs: [w] // source word objects in order — caller maps these back (e.g. to Word ranges)
+        });
+      }
+    });
+    return runs;
+  }
+
+  // Insert n micro-space glyphs across the intra-run word gaps, round-robin so
+  // distribution stays even. Each glyph is placed at a gap that belongs to one
+  // run, so it stays within that run's range on write-back. Inter-run gaps (the
+  // split delimiters between runs) are outside every run's text and are left
+  // unstretched — a documented limitation of the run-aware spacing path.
+  function distributeMicroSpaces(runTexts, n, spaceChar) {
+    var texts = (runTexts || []).map(String);
+    if (n <= 0) return texts;
+    var slots = [];
+    texts.forEach(function (t, ri) {
+      var gaps = t.split(" ").length - 1;
+      for (var g = 0; g < gaps; g++) slots.push({ ri: ri, gap: g });
+    });
+    if (!slots.length) return texts;
+    var counts = {}; // "ri:gap" -> extra glyphs
+    for (var i = 0; i < n; i++) {
+      var s = slots[i % slots.length];
+      var key = s.ri + ":" + s.gap;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return texts.map(function (t, ri) {
+      var parts = t.split(" ");
+      var out = parts[0] || "";
+      for (var g = 0; g < parts.length - 1; g++) {
+        var extra = counts[ri + ":" + g] || 0;
+        out += " " + new Array(extra + 1).join(spaceChar) + parts[g + 1];
+      }
+      return out;
+    });
+  }
+
   // ── OOXML table rendering ────────────────────────────────────────────────
 
   var BASE_CPM = 3; // baseline grid columns per misra
@@ -1278,6 +1332,8 @@
     parseContentControlTag: parseContentControlTag,
     setTagQaseeda: setTagQaseeda,
     justifyPlainTextBlock: justifyPlainTextBlock,
+    coalesceRuns: coalesceRuns,
+    distributeMicroSpaces: distributeMicroSpaces,
     renderForWordOoxml: renderForWordOoxml,
     wrapOoxml: wrapOoxml,
     misraSpans: misraSpans,

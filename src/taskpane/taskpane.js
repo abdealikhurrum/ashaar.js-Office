@@ -1129,6 +1129,21 @@
       });
       await context.sync();
 
+      // Split each cell into word-ranges so justify can read a font per word and
+      // rebuild the cell as an ordered list of runs (run-aware justification).
+      allCells.forEach(function (cell) {
+        cell.__wordRanges = cell.body.getRange().getTextRanges([" "], true);
+        cell.__wordRanges.load("items");
+      });
+      await context.sync();
+      allCells.forEach(function (cell) {
+        cell.__wordRanges.items.forEach(function (wr) {
+          wr.load("text");
+          wr.font.load("name,size,bold,italic");
+        });
+      });
+      await context.sync();
+
       // Representative font taken from the cells themselves (fall back to the pane).
       var repName = fallbackName, repSize = 16;
       for (var ci = 0; ci < allCells.length; ci++) {
@@ -1239,51 +1254,143 @@
         }
       }
 
-      // Apply, measuring each cell with ITS OWN font/size and content width.
-      var changed = 0;
+      // Canvas font shorthand for one run: "[italic] [bold] Npt \"Family\"".
+      function runFontStr(name, size, bold, italic) {
+        return (italic ? "italic " : "") + (bold ? "bold " : "") +
+          ((size || repSize)) + "pt \"" + (name || repName) + "\"";
+      }
+      // Micro-space glyph used to realize word-spacing in Word (text-mutating).
+      var MICRO_SPACE = " "; // hair space
+      if (canvasCtx) {
+        canvasCtx.font = runFontStr(repName, repSize, false, false);
+        if (canvasCtx.measureText(MICRO_SPACE).width <= 0) MICRO_SPACE = " "; // thin space
+      }
+
+      // Phase 1 (pure, no sync): rebuild each cell as an ordered list of style
+      // runs and justify measuring each run in its OWN font. Produces per-cell
+      // write plans consumed in phase 2.
+      var plans = [];
       allCells.forEach(function (cell) {
         var current = (cell.body.text || "").trim();
-        var base = stripJustification(current); // re-justify from the bare line, not prior kashidas
-        if (!base) return;
+        if (!stripJustification(current)) return;
         var colPx = contentPx(cell);
-        if (canvasCtx) {
-          var cf = cell.body.font;
-          canvasCtx.font = ((cf && cf.size) || repSize) + "pt \"" + ((cf && cf.name) || repName) + "\"";
+
+        // Per-word style tuples from the word ranges, then coalesce to runs.
+        var words = [];
+        (cell.__wordRanges.items || []).forEach(function (wr) {
+          var t = stripJustification(wr.text || "");
+          if (!t) return;
+          var f = wr.font;
+          words.push({
+            text: t,
+            name: (f && f.name) || repName,
+            size: (f && f.size) || repSize,
+            bold: !!(f && f.bold),
+            italic: !!(f && f.italic),
+            range: wr
+          });
+        });
+        if (!words.length) return;
+        var runs = AshaarWord.coalesceRuns(words);
+
+        // Fallback: without a measurement canvas we cannot do run-aware work —
+        // justify the flattened line as before (single-font behavior).
+        if (!canvasCtx || colPx <= 0) {
+          var flat = AshaarWord.justifyPlainTextBlock(stripJustification(current), opts, colPx);
+          if (flat !== current) plans.push({ cell: cell, flat: flat });
+          return;
         }
-        var justified;
-        if (canvasCtx && colPx > 0 && opts.justifyMode === "kashida") {
-          justified = AshaarJustify.justifyLine(base, colPx, canvasCtx, calibParams, fontProfile || null);
+
+        // Primitive runs: each carries a measure() bound to its own font.
+        var primRuns = runs.map(function (r) {
+          var fstr = runFontStr(r.name, r.size, r.bold, r.italic);
+          return {
+            text: r.text,
+            fontSize: r.size,
+            fontProfile: fontProfile || null,
+            measure: function (s) { canvasCtx.font = fstr; return canvasCtx.measureText(s).width; }
+          };
+        });
+
+        var outTexts; // per-run text to write back (null when spacing writes properties only)
+        var sp = null;
+        if (opts.justifyMode === "kashida") {
+          outTexts = AshaarJustify.justifyRuns(primRuns, colPx, calibParams).map(function (o) { return o.text; });
         } else {
-          // spacing mode: justifyText dispatches to justifyWordSpacing via justifyPlainTextBlock
-          justified = AshaarWord.justifyPlainTextBlock(base, opts, colPx);
+          // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
+          sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
+          var gaps = runs.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
+          canvasCtx.font = runFontStr(repName, repSize, false, false);
+          var spaceGlyphPx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+          var n = Math.max(0, Math.round(sp.wordSpacing * gaps / spaceGlyphPx));
+          outTexts = AshaarWord.distributeMicroSpaces(runs.map(function (r) { return r.text; }), n, MICRO_SPACE);
         }
-        if (debug && canvasCtx) {
-          var dCf = cell.body.font;
+
+        if (debug) {
+          var natSum = 0, finSum = 0, twCount = 0;
+          primRuns.forEach(function (pr, i) { natSum += pr.measure(runs[i].text); finSum += pr.measure(outTexts[i]); });
+          outTexts.forEach(function (t) { twCount += (t.match(/ـ/g) || []).length; });
           diags.push({
             i: diags.length,
-            font: (((dCf && dCf.size) || repSize)) + "pt " + (((dCf && dCf.name) || repName)),
-            res: fontAvailable((dCf && dCf.name) || repName) ? "yes" : "NO",
+            font: runs.length + " run(s), " + repSize + "pt " + repName,
+            res: fontAvailable(runs[0].name) ? "yes" : "NO",
             colPx: Math.round(colPx),
             colIn: (colPx / 96).toFixed(2),
-            nat: Math.round(canvasCtx.measureText(base).width),
+            nat: Math.round(natSum),
             target: Math.round(colPx * (calibParams.targetFill || 1)),
-            fin: Math.round(canvasCtx.measureText(justified).width),
-            fill: colPx ? Math.round(canvasCtx.measureText(justified).width / colPx * 100) : 0,
-            tw: (justified.match(/ـ/g) || []).length,
-            cap: base.replace(/\s/g, "").length,
-            text: base.slice(0, 14)
+            fin: Math.round(finSum),
+            fill: colPx ? Math.round(finSum / colPx * 100) : 0,
+            tw: twCount + (sp ? " ws" + sp.wordSpacing + " x" + sp.fontScale : ""),
+            cap: runs.reduce(function (a, r) { return a + r.text.replace(/\s/g, "").length; }, 0),
+            text: runs.map(function (r) { return r.text; }).join(" ").slice(0, 14)
           });
         }
-        // Compare against the CURRENT cell text so a reduction (fewer or zero
-        // kashidas) is written back even when the result equals the bare base.
-        if (justified !== current) {
-          // paragraph.insertText preserves paragraph properties (jc, spacing, indents).
-          cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
-          changed++;
-        }
+
+        // Each run's justified text must split 1:1 back onto its source word
+        // ranges (tatweels/micro-spaces never add ASCII spaces). If that ever
+        // fails, route the cell to the flattened path instead of a partial write.
+        var alignedOk = runs.every(function (r, i) {
+          return outTexts[i].split(" ").length === r.refs.length;
+        });
+        if (!alignedOk) { plans.push({ cell: cell, flat: outTexts.join(" ") }); return; }
+
+        plans.push({ cell: cell, runs: runs, outTexts: outTexts, sp: sp });
       });
 
-      await context.sync();
+      // Phase 2 (write): one context.sync() per cell so a range failure on one
+      // cell falls back to a flattened whole-cell replace without aborting the
+      // batch (the run-aware write can only error at sync, not synchronously).
+      var changed = 0;
+      for (var pi = 0; pi < plans.length; pi++) {
+        var p = plans[pi];
+        if (p.flat != null) {
+          p.cell.body.paragraphs.getFirst().insertText(p.flat, Word.InsertLocation.replace);
+          await context.sync();
+          changed++;
+          continue;
+        }
+        try {
+          var cellChanged = false;
+          p.runs.forEach(function (r, i) {
+            // outTexts[i] splits 1:1 onto the run's original word ranges
+            // (validated in phase 1) — write each word range independently
+            // (disjoint; no union/expand needed).
+            var pieces = p.outTexts[i].split(" ");
+            r.refs.forEach(function (w, j) {
+              if (p.sp && p.sp.fontScale !== 1) { w.range.font.size = r.size * p.sp.fontScale; cellChanged = true; }
+              if (pieces[j] !== w.text) { w.range.insertText(pieces[j], Word.InsertLocation.replace); cellChanged = true; }
+            });
+          });
+          if (cellChanged) { await context.sync(); changed++; }
+        } catch (e) {
+          // Queued range write failed at sync (or count mismatch) — flatten.
+          p.cell.body.paragraphs.getFirst().insertText(p.outTexts.join(" "), Word.InsertLocation.replace);
+          await context.sync();
+          changed++;
+          if (debug) diags.push({ i: diags.length, font: "RANGE-FALLBACK", text: (e && e.message || "").slice(0, 14) });
+        }
+      }
+
       setMessage("Justified " + changed + " cell(s) across " + tables.items.length + " table(s).");
       if (debug) renderDebug(diags);
     });

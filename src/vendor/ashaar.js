@@ -316,64 +316,132 @@
     return Math.min(max, Math.max(min, n));
   }
 
+  // Given one entry per misra child node, return the ordered run specs to
+  // justify, dropping whitespace-only nodes. DOM-free so it is unit-testable;
+  // the caller supplies computed-font identity (fontKey) and size per child.
+  function misraRunSpecs(childStyles) {
+    return (childStyles || []).filter(function (c) {
+      return c && typeof c.text === 'string' && c.text.trim();
+    }).map(function (c) {
+      return { text: c.text, fontKey: c.fontKey, fontSize: c.fontSize };
+    });
+  }
+
+  // Walk a misra span's child nodes into run objects. Each element child is one
+  // run styled by its own computed style; text nodes are styled by the parent.
+  // A plain-object style snapshot is captured so later restyling can't perturb
+  // the values used for measurement. Whitespace-only nodes are kept here but
+  // dropped by callers (they stay untouched in the DOM, preserving inter-run
+  // spacing); the run/no-run boundary rule itself is misraRunSpecs.
+  function discoverMisraRuns(spanEl) {
+    var runs = [];
+    var nodes = spanEl.childNodes;
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      var isEl = node.nodeType === 1;
+      var cs = window.getComputedStyle(isEl ? node : spanEl);
+      runs.push({
+        node: node,
+        isEl: isEl,
+        text: node.textContent != null ? node.textContent : '',
+        fontSize: parseFloat(cs.fontSize) || 16,
+        style: {
+          fontSize: cs.fontSize,
+          fontFamily: cs.fontFamily,
+          fontWeight: cs.fontWeight,
+          fontStyle: cs.fontStyle,
+          letterSpacing: cs.letterSpacing,
+          fontFeatureSettings: cs.fontFeatureSettings || cs.webkitFontFeatureSettings
+        }
+      });
+    }
+    return runs;
+  }
+
+  // Restyle the shared probe to a run's captured font before measuring it.
+  function styleProbeFrom(probe, style) {
+    probe.style.fontSize = style.fontSize;
+    probe.style.fontFamily = style.fontFamily;
+    probe.style.fontWeight = style.fontWeight;
+    probe.style.fontStyle = style.fontStyle;
+    probe.style.letterSpacing = style.letterSpacing;
+    probe.style.wordSpacing = '';
+    probe.style.fontFeatureSettings = (style.fontFeatureSettings && style.fontFeatureSettings !== 'normal')
+      ? style.fontFeatureSettings : '';
+  }
+
+  // Write justified text back into a run's node, preserving element styling.
+  function setNodeText(node, text) {
+    if (node.nodeType === 1) node.textContent = text;
+    else node.nodeValue = text;
+  }
+
+  // Kept (non-whitespace) runs for a span, each with a measure() bound to its
+  // own font via the shared probe. Mirrors misraRunSpecs' whitespace rule.
+  function primRunsFor(spanEl, probe) {
+    return discoverMisraRuns(spanEl)
+      .filter(function (r) { return typeof r.text === 'string' && r.text.trim(); })
+      .map(function (r) {
+        return {
+          node: r.node,
+          isEl: r.isEl,
+          fontSize: r.fontSize,
+          text: r.text,
+          fontProfile: null,
+          measure: (function (style) {
+            return function (s) { styleProbeFrom(probe, style); return probeWidth(probe, s); };
+          }(r.style))
+        };
+      });
+  }
+
   function justifyMisra(spanEl, probe, targetWidth, opts) {
     opts = opts || {};
-    var text = spanEl.dataset.ashaarOriginal;
-    if (text === undefined) {
-      text = spanEl.textContent;
-      spanEl.dataset.ashaarOriginal = text;
+    // Cache the styled markup once, then restore it before every pass so
+    // justification re-derives from the bare styled line and never compounds
+    // (reducible) — replaces the old plain-text ashaarOriginal cache, which
+    // flattened child styling.
+    if (spanEl.dataset.ashaarOriginalHtml === undefined) {
+      spanEl.dataset.ashaarOriginalHtml = spanEl.innerHTML;
+    } else {
+      spanEl.innerHTML = spanEl.dataset.ashaarOriginalHtml;
     }
-    if (!text.trim()) return;
-
     spanEl.style.fontSize = '';
     spanEl.style.wordSpacing = '';
-    probe.style.fontSize = '';
-    probe.style.wordSpacing = '';
+    if (!spanEl.textContent.trim()) return;
 
     var available = targetWidth || spanEl.getBoundingClientRect().width;
     if (!available) return;
-    var natural = probeWidth(probe, text);
-    var wordGaps = countWordGaps(text);
-    var cs = window.getComputedStyle(spanEl);
-    var fontSize = parseFloat(cs.fontSize) || 16;
-    var maxWordSpacing = typeof opts.maxWordSpacing === 'number' ? opts.maxWordSpacing : fontSize * 0.28;
-    var minWordSpacing = typeof opts.minWordSpacing === 'number' ? opts.minWordSpacing : -fontSize * 0.08;
-    var desiredWordSpacing = wordGaps ? (available - natural) / wordGaps : 0;
-    var wordSpacing = wordGaps ? clamp(desiredWordSpacing, minWordSpacing, maxWordSpacing) : 0;
-    if (wordSpacing) {
-      spanEl.style.wordSpacing = Math.round(wordSpacing * 100) / 100 + 'px';
-      probe.style.wordSpacing = spanEl.style.wordSpacing;
-      natural = probeWidth(probe, text);
-    }
 
-    var scale = 1;
-    var maxScaleDown = typeof opts.maxScaleDown === 'number' ? opts.maxScaleDown : 0.06;
-    if (natural > available && maxScaleDown > 0) {
-      scale = Math.max(1 - maxScaleDown, available / natural);
-      spanEl.style.fontSize = Math.round(scale * 1000) / 10 + '%';
-    }
-
-    var effectiveTarget = available / scale;
-    if (natural >= effectiveTarget - 1) { spanEl.textContent = text; return; }
-    if (opts.method === 'spacing' || opts.tatweel === false) { spanEl.textContent = text; return; }
-
-    // Re-check Justify in case it wasn't available at module load time
+    // Discover the misra's styled runs; each measures in its own font.
+    var runs = primRunsFor(spanEl, probe);
+    if (!runs.length) return;
     var currentJustify = Justify || getJustifyModule();
-    if (!currentJustify || typeof currentJustify.spreadTatweels !== 'function') {
-      spanEl.textContent = text;
+
+    // Kashida: fill to target with tatweels, measured per run. (Word-spacing and
+    // scale belong to the spacing mode below — the run-aware engine keeps the
+    // two methods separate, matching the shared primitive and the Word add-in.)
+    var spacingMode = opts.method === 'spacing' || opts.tatweel === false;
+    if (!spacingMode && currentJustify && typeof currentJustify.justifyRuns === 'function') {
+      var out = currentJustify.justifyRuns(runs, available, opts);
+      runs.forEach(function (r, i) { setNodeText(r.node, out[i].text); });
       return;
     }
 
-    var lo = 1, hi = text.replace(/\s/g, '').length, best = text;
-    while (lo <= hi) {
-      var mid = (lo + hi) >> 1;
-      // Pass the GSUB priority table so the DOM kashida path honors the ligature
-      // blocklist + tiers, matching the pure justifyLine path used off-DOM.
-      var candidate = currentJustify.spreadTatweels(text, mid, opts.priorityTable);
-      if (probeWidth(probe, candidate) <= effectiveTarget) { best = candidate; lo = mid + 1; }
-      else { hi = mid - 1; }
+    // Spacing/scale: one word-spacing value for the whole misra plus a uniform
+    // font scale, from run-aware natural widths. Also the graceful fallback when
+    // justifyRuns is unavailable.
+    if (currentJustify && typeof currentJustify.computeRunSpacing === 'function') {
+      var sp = currentJustify.computeRunSpacing(runs, available, opts);
+      if (sp.wordSpacing) spanEl.style.wordSpacing = sp.wordSpacing + 'px';
+      if (sp.fontScale !== 1) {
+        runs.forEach(function (r) {
+          // Scale each run's own font-size (robust to px/em units), so relative
+          // sizes are preserved — a parent font-size:% would miss absolute sizes.
+          (r.isEl ? r.node : spanEl).style.fontSize = (r.fontSize * sp.fontScale) + 'px';
+        });
+      }
     }
-    spanEl.textContent = best;
   }
 
   /** Create a hidden measurement probe styled after `referenceEl`. */
@@ -411,11 +479,14 @@
 
     for (var i = 0; i < spans.length; i++) {
       var span = spans[i];
-      var text = span.dataset.ashaarOriginal;
-      if (text === undefined) text = span.textContent;
+      // Restore the bare styled markup (if cached) so we measure the natural
+      // line, not a previously justified one; never flatten child styling.
+      if (span.dataset.ashaarOriginalHtml !== undefined) span.innerHTML = span.dataset.ashaarOriginalHtml;
       span.style.fontSize = '';
-      span.textContent = text;
-      var natural = probeWidth(probe, text);
+      span.style.wordSpacing = '';
+      // Natural width = sum of each styled run measured in its own font.
+      var natural = 0;
+      primRunsFor(span, probe).forEach(function (r) { natural += r.measure(r.text); });
       var available = span.getBoundingClientRect().width;
       if (natural > longest) longest = natural;
       metrics.push({ available: available, natural: natural });
@@ -503,5 +574,5 @@
     }
   }
 
-  return { parse: parse, render: render, renderText: renderText, init: init, justifyEl: justifyEl, applyAutoLayout: applyAutoLayout, applyRenderOptions: applyRenderOptions };
+  return { parse: parse, render: render, renderText: renderText, init: init, justifyEl: justifyEl, applyAutoLayout: applyAutoLayout, applyRenderOptions: applyRenderOptions, misraRunSpecs: misraRunSpecs };
 }));
