@@ -46,8 +46,8 @@ code { background:#f3f4f6; padding:1px 5px; border-radius:4px; font-size:12px; }
 <h1>Kashida fitting — live, on the real engine</h1>
 <p class="sub">
   Each couplet line is fit to the dashed column width using the actual add-in modules
-  (<code>AshaarJustify.justifyRuns</code>, <code>AshaarTatweel</code>, <code>AshaarKashidaFontswap</code>) and your real fonts.
-  <b>Mehr</b> fills by inserting tatweels only at its Beta-2.0 whitelisted joins; <b>Jameel</b> fills by swapping whole
+  (<code>AshaarFonts</code>, <code>AshaarKashidaFontswap.selectSwapRuns</code>) and your real fonts.
+  <b>Mehr</b> fills by appending one trailing tatweel to words ending in a Beta-2.0 whitelisted letter; <b>Jameel</b> fills by swapping whole
   connected segments (fasl) to the wider <span class="swapped">Kasheeda</span> face. Both then close any remaining
   gap with <em>capped</em> inter-word micro-spacing (the hybrid fill), and accept a slightly short line if the cap is hit.
   Drag the slider to watch the fit adapt.
@@ -67,9 +67,7 @@ code { background:#f3f4f6; padding:1px 5px; border-radius:4px; font-size:12px; }
 
 <div id="out"></div>
 
-<script src="../src/vendor/ashaar-justify.js"></script>
 <script src="../src/taskpane/fonts.js"></script>
-<script src="../src/taskpane/tatweel-whitelist.js"></script>
 <script src="../src/taskpane/kashida-fontswap.js"></script>
 <script>
 (function () {
@@ -209,7 +207,7 @@ code { background:#f3f4f6; padding:1px 5px; border-radius:4px; font-size:12px; }
     document.getElementById(id).addEventListener("input", render);
   });
 
-  if (typeof AshaarJustify === "undefined" || typeof AshaarKashidaFontswap === "undefined") {
+  if (typeof AshaarFonts === "undefined" || typeof AshaarKashidaFontswap === "undefined") {
     document.getElementById("banner").className = "banner show";
     document.getElementById("banner").textContent =
       "Engine modules failed to load — open this file so the relative paths ../src/... resolve (e.g. via the repo dev server), or check the console.";
