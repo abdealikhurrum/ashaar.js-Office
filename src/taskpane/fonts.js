@@ -28,16 +28,17 @@
         medialInto: ["ب","پ","ت","ٹ","ث","س","ش","ف","ک","گ"],
         finalInto:  ["ب","پ","ت","ٹ","ث","ف","ک","گ"]
       } },
-    // Jameel Kasheeda is render-only: Gate G (2026-07-10, manual Word test)
-    // found that Word only slants italic runs, it does not swap in the
-    // kasheeda glyph forms the way InPage does. The italic-run mechanism
-    // never got built; Jameel uses spacing like every other whitespace font.
+    // Gate G2 (2026-07-10, manual Word test) confirmed Jameel Noori Kasheeda's
+    // elongated forms are applied by FONT (the "Kasheeda" named style in the
+    // family), not by an italic-run or whitespace mechanism. Jameel fills a
+    // line by swapping whole fasls to the wider Kasheeda face; see
+    // kashida-fontswap.js for the pure selection logic.
     jameel: { id: "jameel", label: "Jameel Noori Kasheeda",
       css: "'Jameel Noori Nastaleeq Kasheeda','Jameel Noori Nastaleeq',serif",
-      wordName: "Jameel Noori Nastaleeq",
-      mechanism: "whitespace", bundled: true, private: true,
-      readerNote: true,
-      file: "JameelNooriNastaleeqKasheeda.ttf" },
+      wordName: "Jameel Noori Nastaleeq",                 // base face
+      kasheedaName: "Jameel Noori Nastaleeq Kasheeda",    // wider face (font-swap target)
+      mechanism: "font-swap", bundled: true, private: true, readerNote: true,
+      file: "JameelNooriNastaleeq-Regular.ttf", kasheedaFile: "JameelNooriNastaleeqKasheeda.ttf" },
     gulzar: { id: "gulzar", label: "Gulzar",
       css: "'Gulzar',serif", wordName: "Gulzar",
       mechanism: "whitespace", bundled: true, file: "Gulzar-Regular.woff2" }
@@ -46,9 +47,10 @@
   function get(id) { return LIST[id] || null; }
   function mechanismOf(id) { var d = get(id); return d ? d.mechanism : "whitespace"; }
   function wordNameOf(id) { var d = get(id); return d && d.wordName ? d.wordName : null; }
+  function kasheedaNameOf(id) { var d = get(id); return d && d.kasheedaName ? d.kasheedaName : null; }
   function cssFamilyOf(id) { var d = get(id); return d && d.css ? d.css : null; }
   function tatweelRulesOf(id) { var d = get(id); return d && d.tatweelRules ? d.tatweelRules : null; }
 
   return { LIST: LIST, get: get, mechanismOf: mechanismOf, wordNameOf: wordNameOf,
-    cssFamilyOf: cssFamilyOf, tatweelRulesOf: tatweelRulesOf };
+    kasheedaNameOf: kasheedaNameOf, cssFamilyOf: cssFamilyOf, tatweelRulesOf: tatweelRulesOf };
 }));

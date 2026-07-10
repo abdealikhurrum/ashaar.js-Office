@@ -20,6 +20,7 @@ node_modules/
 ~$*
 
 # Private/licensed fonts: never commit or deploy to the public GitHub Pages site.
-# Jameel Noori Nastaleeq Kasheeda is redistributed under a license that does not
-# permit public rehosting — drop it locally for testing only (see README.md).
-assets/fonts/JameelNooriNastaleeqKasheeda*
+# Jameel Noori Nastaleeq (base) and its Kasheeda face are redistributed under a
+# license that does not permit public rehosting — drop them locally for testing
+# only (see README.md). font-swap mechanism uses both faces (fonts.js `jameel`).
+assets/fonts/JameelNooriNastaleeq*
