@@ -562,4 +562,19 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
   assert.ok(xml.indexOf("w:rFonts") === -1, "no rFonts when wordFillFont absent and fontMode is document-default");
 }
 
+// ── misraParaXml: word-fill shrinks the paragraph mark (empty-line fix) ──────
+{
+  const xml = AshaarWord.misraParaXml("العلم نور", "center", false, { justifyMode: "css", tatweelCount: 12 }, 0);
+  // paragraph-mark rPr with sz 4 present inside pPr, before the first text run
+  const pPrEnd = xml.indexOf("</w:pPr>");
+  assert.ok(pPrEnd !== -1, "has pPr");
+  assert.ok(xml.slice(0, pPrEnd).indexOf('w:sz w:val="4"') !== -1, "paragraph mark shrunk to sz 4 inside pPr");
+}
+{
+  // non-word-fill unchanged: no paragraph-mark shrink
+  const xml = AshaarWord.misraParaXml("العلم", "right", false, { justifyMode: "kashida" }, 0);
+  const pPrEnd = xml.indexOf("</w:pPr>");
+  assert.ok(xml.slice(0, pPrEnd).indexOf('w:sz w:val="4"') === -1, "no paragraph-mark shrink outside word-fill");
+}
+
 console.log("word-html tests passed");

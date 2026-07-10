@@ -1150,8 +1150,11 @@
     }
     rpr += "</w:rPr>";
     var ind = indTwips ? '<w:ind w:left="' + indTwips + '"/>' : "";
+    // Shrink the paragraph mark when word-fill trailing break is emitted, so the
+    // empty line after the break is ~2pt high instead of full paragraph height.
+    var paraMark = trailingBreak ? "<w:rPr><w:sz w:val=\"4\"/><w:szCs w:val=\"4\"/></w:rPr>" : "";
     return "<w:p>" +
-      "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + "</w:pPr>" +
+      "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + paraMark + "</w:pPr>" +
       "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
       trailingBreak +
       "</w:p>";
