@@ -1359,6 +1359,30 @@
           return; // handled — skip the tatweel/spacing paths for this cell
         }
 
+        // Mehr tatweel: DISCRETE trailing elongation. Mehr renders a clean
+        // kashida only from ONE trailing tatweel after a word ending in a
+        // whitelisted final letter (medial U+0640 is zero-width on the canvas
+        // we measure with; Word-native highKashida does nothing for Mehr). So
+        // Mehr fits by the SAME discrete subset-selection as Jameel — choose
+        // which eligible words get a trailing tatweel. Single-font text output.
+        if (mechanism === "tatweel" && opts.justifyMode === "kashida") {
+          if (!canvasCtx || colPx <= 0) return;
+          var mehrFont = repSize + "pt \"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
+          var finalSet = {};
+          ((AshaarFonts.tatweelRulesOf(fontId) || {}).finalInto || []).forEach(function (c) { finalSet[c] = true; });
+          var mline = stripJustification(current);
+          var mparts = mline.split(" "), mtoks = [];
+          mparts.forEach(function (wd, i) { if (i) mtoks.push(" "); mtoks.push(wd); });
+          var melong = mtoks.map(function (t) { return (t !== " " && finalSet[t.slice(-1)]) ? t + "ـ" : t; });
+          var mwb = [], mww = [];
+          canvasCtx.font = mehrFont;
+          for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(canvasCtx.measureText(mtoks[mi]).width); mww.push(canvasCtx.measureText(melong[mi]).width); }
+          var msel = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, colPx);
+          var mout = msel.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
+          if (mout !== current) plans.push({ cell: cell, flat: mout });
+          return;
+        }
+
         // Per-word style tuples from the word ranges, then coalesce to runs.
         var words = [];
         (cell.__wordRanges.items || []).forEach(function (wr) {
@@ -1399,31 +1423,13 @@
         var outTexts; // per-run text to write back (null when spacing writes properties only)
         var sp = null;
 
-        // Mehr's tatweel whitelist: block the engine from inserting a tatweel
-        // into any join the font can't actually render (medialInto only —
-        // finalInto's narrower س/ش rule is a rendering-time check, not
-        // table-expressible here). Rebuilt per cell from that cell's own text.
-        if (mechanism === "tatweel") {
-          var rules = AshaarFonts.tatweelRulesOf(fontId);
-          if (rules) {
-            var corpus = runs.map(function (r) { return r.text; }).join(" ");
-            calibParams = Object.assign({}, calibParams, {
-              priorityTable: AshaarTatweel.buildPriorityTable(corpus, rules)
-            });
-          }
-        }
-
-        if (opts.justifyMode === "kashida") {
-          outTexts = AshaarJustify.justifyRuns(primRuns, colPx, calibParams).map(function (o) { return o.text; });
-        } else {
-          // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
-          sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
-          var gaps = runs.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
-          canvasCtx.font = runFontStr(repName, repSize, false, false);
-          var spaceGlyphPx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var n = Math.max(0, Math.round(sp.wordSpacing * gaps / spaceGlyphPx));
-          outTexts = AshaarWord.distributeMicroSpaces(runs.map(function (r) { return r.text; }), n, MICRO_SPACE);
-        }
+        // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
+        sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
+        var gaps = runs.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
+        canvasCtx.font = runFontStr(repName, repSize, false, false);
+        var spaceGlyphPx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+        var n = Math.max(0, Math.round(sp.wordSpacing * gaps / spaceGlyphPx));
+        outTexts = AshaarWord.distributeMicroSpaces(runs.map(function (r) { return r.text; }), n, MICRO_SPACE);
 
         if (debug) {
           var natSum = 0, finSum = 0, twCount = 0;
