@@ -522,4 +522,25 @@ assert.equal(AshaarWord.kashidaExpansionFraction(24), 0.15);
 assert.equal(AshaarWord.kashidaExpansionFraction(12), 0.075);
 assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
 
+// ── misraParaXml: word-fill mode ────────────────────────────────────────────
+{
+  const opts = { justifyMode: "css", tatweelCount: 20 };
+  const xml = AshaarWord.misraParaXml("العلم نور", "center", false, opts, 0);
+  assert.ok(xml.indexOf('w:jc w:val="highKashida"') !== -1, "Arabic → highKashida jc");
+  assert.ok(xml.indexOf("<w:br/>") !== -1, "Arabic word-fill appends a trailing break");
+  assert.ok(xml.indexOf('w:sz w:val="4"') !== -1, "trailing break run is shrunk");
+}
+{
+  const opts = { justifyMode: "css", tatweelCount: 20 };
+  const xml = AshaarWord.misraParaXml("hello world", "center", false, opts, 0);
+  assert.ok(xml.indexOf('w:jc w:val="distribute"') !== -1, "non-Arabic → distribute");
+  assert.ok(xml.indexOf("<w:br/>") === -1, "distribute needs no trailing break");
+}
+{
+  // Non-word-fill modes unchanged: jc still by position, no break.
+  const xml = AshaarWord.misraParaXml("العلم", "right", false, { justifyMode: "kashida" }, 0);
+  assert.ok(xml.indexOf('w:jc w:val="right"') !== -1, "kashida mode keeps positional jc");
+  assert.ok(xml.indexOf("<w:br/>") === -1, "no break outside word-fill");
+}
+
 console.log("word-html tests passed");

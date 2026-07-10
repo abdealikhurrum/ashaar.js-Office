@@ -1115,7 +1115,18 @@
 
   // indTwips: optional right-indent in twips (used by stacked layout to offset ajuz from sadr)
   function misraParaXml(text, align, isRefrain, opts, indTwips) {
+    opts = opts || {};
     var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    var trailingBreak = "";
+    if (opts.justifyMode === "css") {
+      // "Let Word fill it": native Word justification. Arabic → kashida level +
+      // a shrunk trailing break so the single (last) line actually stretches;
+      // non-Arabic → distribute (fills the last line without a break).
+      jc = wordFillJc(text, Number(opts.tatweelCount || 0));
+      if (containsArabic(text)) {
+        trailingBreak = '<w:r><w:rPr><w:sz w:val="4"/><w:szCs w:val="4"/></w:rPr><w:br/></w:r>';
+      }
+    }
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
     if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
@@ -1125,6 +1136,7 @@
     return "<w:p>" +
       "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + "</w:pPr>" +
       "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
+      trailingBreak +
       "</w:p>";
   }
 
@@ -1371,6 +1383,7 @@
     misraSpans: misraSpans,
     generateBareGrid12Ooxml: generateBareGrid12Ooxml,
     templateToOoxml: templateToOoxml,
-    layoutTableToOoxml: layoutTableToOoxml
+    layoutTableToOoxml: layoutTableToOoxml,
+    misraParaXml: misraParaXml
   };
 }));
