@@ -1129,17 +1129,28 @@
           return Math.max(1, s);
         });
 
-        if (scaleByTable.some(function (s) { return s > 1.001; })) {
-          var colSets = tables.items.map(function (tbl, i) {
-            if (scaleByTable[i] <= 1.001) return null;
-            var cols = tbl.columns; cols.load("items/width"); return cols;
-          });
-          await context.sync();
-          colSets.forEach(function (cols, i) {
-            if (!cols) return;
-            cols.items.forEach(function (col) { col.width = Math.round(col.width * scaleByTable[i] * 100) / 100; });
-          });
-          await context.sync();
+        // Widen each table's columns independently and non-fatally. Table.columns
+        // (TableColumnCollection) is only valid for UNIFORM tables — Word throws
+        // "Cannot access individual columns in this collection because the table
+        // has mixed cell widths" at context.sync() for any table with mixed cell
+        // widths (e.g. a marsiya stanza mixing a 3-cell row, a 1-cell solo row,
+        // and a 2-cell refrain row). Isolating the load+resize per table in its
+        // own try/catch means a mixed-width table just skips widening instead of
+        // aborting the whole justify — the kashida rebuild below always runs.
+        for (var t = 0; t < tables.items.length; t++) {
+          if (scaleByTable[t] <= 1.001) continue;
+          try {
+            var cols = tables.items[t].columns;
+            cols.load("items/width");
+            await context.sync();
+            cols.items.forEach(function (col) {
+              col.width = Math.round(col.width * scaleByTable[t] * 100) / 100;
+            });
+            await context.sync();
+          } catch (eExpand) {
+            // Mixed cell widths or unsupported API for this table: skip
+            // widening it and continue with the rest.
+          }
         }
       }
 
