@@ -332,6 +332,45 @@
     return best.map(function (t) { return { text: t }; });
   }
 
+  // Run-aware non-kashida justification. Computes a single word-spacing value
+  // (px) and a uniform font scale for a misra of differently-styled runs, from
+  // per-run natural widths. Value-returning: the caller applies the result as
+  // CSS/OOXML properties (this never mutates run text).
+  function computeRunSpacing(runs, targetWidth, params) {
+    params = params || {};
+    runs = runs || [];
+    if (!runs.length) return { wordSpacing: 0, fontScale: 1 };
+
+    // Natural width via the shared helper (throws TypeError if a run lacks measure()).
+    var natural = measureRunsNatural(runs);
+    // Second pass: reference font size (drives clamp bounds) + total word gaps.
+    var ref = 0, gaps = 0;
+    for (var i = 0; i < runs.length; i++) {
+      var t = stripTatweels(runs[i].text || '');
+      if (typeof runs[i].fontSize === 'number' && runs[i].fontSize > ref) ref = runs[i].fontSize;
+      var m = t.match(/ /g);
+      gaps += m ? m.length : 0;
+    }
+    ref = ref || params.refFontSize || 16;
+
+    var available = targetWidth * (params.targetFill || 1);
+    var maxWS = typeof params.maxWordSpacing === 'number' ? params.maxWordSpacing : ref * 0.28;
+    var minWS = typeof params.minWordSpacing === 'number' ? params.minWordSpacing : -ref * 0.08;
+    var maxScaleDown = typeof params.maxScaleDown === 'number' ? params.maxScaleDown : 0.06;
+
+    var desired = gaps ? (available - natural) / gaps : 0;
+    var wordSpacing = gaps ? Math.max(minWS, Math.min(maxWS, desired)) : 0;
+
+    // wordSpacing is a property, not text — compute the width after it analytically.
+    var afterSpacing = natural + wordSpacing * gaps;
+    var fontScale = 1;
+    if (afterSpacing > available && maxScaleDown > 0) {
+      fontScale = Math.max(1 - maxScaleDown, available / afterSpacing);
+    }
+
+    return { wordSpacing: Math.round(wordSpacing * 100) / 100, fontScale: fontScale };
+  }
+
   // Find the maximum acceptable number of tatweels for a single line.
   // Thin wrapper over justifyRuns (single run) so the single- and multi-font
   // paths share one algorithm.
@@ -361,6 +400,7 @@
     insertIntoWords: insertIntoWords,
     applySlotsMulti: applySlotsMulti,
     measureRunsNatural: measureRunsNatural,
-    justifyRuns: justifyRuns
+    justifyRuns: justifyRuns,
+    computeRunSpacing: computeRunSpacing
   };
 }));

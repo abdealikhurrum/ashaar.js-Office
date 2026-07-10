@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=3c2ec37728d9e3847d575634b939c9f07a06ce0d
-date=2026-07-09T21:33:27-05:00
+commit=4691e2af18732b63073a2e3f702a666421aec397
+date=2026-07-09T21:39:12-05:00
 package=ashaar-js
 version=0.1.0
-subject=Add justifyRuns; refactor justifyLine to delegate to it
+subject=Add computeRunSpacing (run-aware word-spacing + font scale)

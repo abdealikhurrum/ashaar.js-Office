@@ -109,4 +109,48 @@ assert.deepEqual(
 // missing measure throws
 assert.throws(function () { AshaarJustify.justifyRuns([{ text: "بيت" }], 12, {}); }, TypeError);
 
+// ── computeRunSpacing: two runs of differing size, spacing fills to target ───
+{
+  const runs = [
+    { text: "بيت ", measure: (s) => s.length, fontSize: 20 }, // has 1 word gap
+    { text: "نور",  measure: (s) => s.length, fontSize: 10 },
+  ];
+  // natural = 4 + 3 = 7, available = 12, gaps = 1 → desired 5, within clamp.
+  const r = AshaarJustify.computeRunSpacing(runs, 12, { targetFill: 1 });
+  assert.equal(r.wordSpacing, 5);
+  assert.equal(r.fontScale, 1);
+}
+
+// ── clamp honored at maxWordSpacing (ref font size = max run fontSize = 20) ──
+{
+  const runs = [
+    { text: "بيت ", measure: (s) => s.length, fontSize: 20 },
+    { text: "نور",  measure: (s) => s.length, fontSize: 10 },
+  ];
+  // available huge → desired >> max; clamp to 20 * 0.28 = 5.6.
+  const r = AshaarJustify.computeRunSpacing(runs, 100, { targetFill: 1 });
+  assert.equal(r.wordSpacing, 5.6);
+}
+
+// ── fontScale < 1 only when even max spacing still overflows ─────────────────
+{
+  const runs = [{ text: "بيتنق", measure: (s) => s.length, fontSize: 20 }]; // 1 word, no gap
+  // natural = 5, available = 4, gaps = 0 → wordSpacing 0, overflow → scale down.
+  const r = AshaarJustify.computeRunSpacing(runs, 4, { targetFill: 1 });
+  assert.equal(r.wordSpacing, 0);
+  assert.equal(r.fontScale, Math.max(1 - 0.06, 4 / 5)); // = 0.94
+}
+
+// ── gaps === 0 (single word) → wordSpacing 0, no shrink needed → scale 1 ─────
+{
+  const r = AshaarJustify.computeRunSpacing(
+    [{ text: "بيت", measure: (s) => s.length, fontSize: 16 }], 100, { targetFill: 1 }
+  );
+  assert.equal(r.wordSpacing, 0);
+  assert.equal(r.fontScale, 1);
+}
+
+// ── empty input ──────────────────────────────────────────────────────────────
+assert.deepEqual(AshaarJustify.computeRunSpacing([], 100, {}), { wordSpacing: 0, fontScale: 1 });
+
 console.log("ashaar-justify-runs: Task 1 + Task 2 helpers OK");
