@@ -17,6 +17,8 @@
 - **The Stretch-strength slider does nothing on Justify.** `justifySelection` builds `targetFill:0.92` then overwrites it with an auto-calibrated value (`taskpane.js:1234–1251`); the slider (`tatweelCount`) is read only on insert-as-table and qaseeda paths. Dragging it and re-justifying changes nothing.
 - **Fill is capped at the column edge by design.** All paths cap `targetFill ≤ 1.0`; calibrate searches `[0.80,1.00]` (`ashaar-autotune.js:386`); default `0.96` with a comment that breathing room *prevents* over-stretch. There is no expressive/override regime.
 - **No programmatic undo.** Office.js has no undo/redo hook into Word's history. Native ⌘Z/Ctrl+Z is the only exact undo. A deterministic "reset to bare line" is possible because justification is reducible (`stripJustification` + re-justify).
+- **Per-cell `insertOoxml` drops the paragraph `jc` (verified in Word).** `cell.body.insertOoxml(<package>, replace)` inserts run-level content (font, `<w:br/>`) but Word **resets the paragraph alignment to the cell's positional value** — the kashida `jc` is lost (saved runtime OOXML: 0 kashida `jc`, only center/right; breaks + baked font present). Authored-at-**range/selection scope** OOXML *does* preserve `jc` (every spike stretches; `insertPoem` works). ⇒ the justify path must **re-render at range scope**, not patch cells. This is the pivot below.
+- **Tables are fixed-layout, so columns can't be dragged.** Generated poetry tables emit `<w:tblLayout w:type="fixed"/>` with explicit `w:tcW` (`word-html.js:1246, 1320`); Word won't let the user resize columns. Rather than switch to autofit, this is embraced: the **pane owns the geometry** and sliders control it (see the re-render model).
 
 ## Audience
 
@@ -71,21 +73,26 @@ Triggered from the result panel's "font not loaded" fix, or opened directly. Rew
 
 **Result-panel inline reason:** at the "font not loaded" flag, a one-line version — "the pane can't see Word's fonts — give it the file once" — linking to this full explainer.
 
-### 3. Fix "Let Word fill it" to actually justify (native Word kashida)
+### 3. Apply justification by **re-rendering the poem at range scope** ("Let Word fill it" + all slider-driven adjustment)
 
-Today `justifyMode:"css"` never reaches the document. Rework the mode to emit real Word justification on the inserted/justified paragraphs (table path in `word-html.js`; tab-stop path where applicable), using Word's own font — no pane measurement, no sandbox wall (the §2 fallback).
+**Core mechanism (pivot, user-approved, Word-verified).** Every justify/adjust operation on an Ashaar table is *one* operation:
 
-**Word's justification values** (verified, OOXML `w:jc` / `JustificationValues`):
-- `lowKashida` / `mediumKashida` / `highKashida` — **true kashida**: elongate the connecting strokes (letters stay joined), at three intensities. Arabic/complex-script only.
-- `distribute` — **spacing, not kashida**: "distribute all characters equally" (inter-character + inter-word spacing). Script-agnostic; fills every line including the last.
+> read the current misra text from the table's cells → reconstruct the Ashaar source (as **Adopt** already does) → re-render the whole poem via `renderForWordOoxml` with the current pane opts (mode, strength, width %, gap, font) → **replace the enclosing table / content-control range** with the authored OOXML.
 
-**Mapping:**
-- **Arabic:** emit a **kashida level** for genuine stroke elongation, chosen from the Stretch-strength slider in **thirds** — `lowKashida` (0–⅓), `mediumKashida` (⅓–⅔), `highKashida` (⅔–full).
-- **Column expansion:** allow **up to ~15% column widening at full strength** (scaling to 0 at the low end) so Word's kashida has room to fill — qaseeda-proportional, like §4 but with this smaller 15% ceiling instead of the page boundary.
-- **Last-line problem + fix:** kashida (like `both`) does **not** stretch the last line of a paragraph, and each misra cell is a single line = the last line. So the app **auto-appends a trailing soft line break (`<w:br/>`)** to the misra paragraph, demoting it from last-line so Word kashidas it — the user presses nothing. The break run is shrunk (e.g. ~2pt) / line spacing tightened to minimize the trailing empty line's height.
-- **Non-Arabic fallback:** `distribute` (spacing) — the only value that fills a single last line without the break, for text kashida can't elongate. Not a kashida substitute for Arabic (it's loose spacing).
+Authoring at **range/selection scope preserves the paragraph `jc`** (proven: every spike stretches, `insertPoem` works), whereas per-cell `cell.body.insertOoxml` **drops the kashida `jc`** (Findings). So the justify path must re-render, not patch cells. This one mechanism:
+- makes native Word kashida actually apply (jc survives),
+- applies **all** slider geometry deterministically (width %, inter-misra gap — the pane owns the fixed-layout geometry, §7-geometry),
+- avoids the `table.columns` mixed-width fragility (we regenerate, never poke columns),
+- works on **raw** tables (reconstruct source from cells) and **managed** poems alike,
+- **rebuilds source from current cell text**, so in-Word hand-edits are preserved (never re-render from a possibly-stale CC tag).
 
-**Verify-on-device risk (flag):** whether the trailing `<w:br/>` reliably triggers kashida on line 1, the empty-line height after shrinking, and kashida behavior across Word builds — all require testing in Word. This is the second place a last-line/trailing-break subtlety bites; treat as the riskiest task.
+**Word kashida values** (verified, OOXML `w:jc` / `JustificationValues`), emitted by `misraParaXml` in word-fill mode:
+- `lowKashida` / `mediumKashida` / `highKashida` — **true kashida** stroke elongation, three intensities; Arabic/complex-script only. Strength → level in **thirds** (`low` 0–⅓, `medium` ⅓–⅔, `high` ⅔–full).
+- `distribute` — spacing, not kashida; script-agnostic **non-Arabic fallback** only.
+
+**Last-line fix (Word-verified):** kashida doesn't stretch a paragraph's last line, and a misra cell is a single (last) line. Fix = auto-append a trailing soft break **and shrink the paragraph mark to ~2pt** (`<w:pPr><w:rPr><w:sz w:val="4"/>…`), *not just the break run* — the spike confirmed the empty-line height comes from the **paragraph mark**, so shrinking the mark (not the break run) is what makes the trailing line negligible.
+
+**Verified across layouts** (spike): wide 2-col, narrow 3-col, asymmetric bayt-with-gap, and full multi-row marsiya grid all kashida-stretch with default font, no language tag, `mediumKashida`/`highKashida` + break + shrunk mark.
 
 ### 4. Stretch strength — honest, mode-specific, expressive
 
@@ -102,6 +109,7 @@ Today `justifyMode:"css"` never reaches the document. Rework the mode to emit re
     Ceiling = **whichever binds first — page width or 3× tatweels.** Tick shown at 15; slider reads its multiplier (e.g. "24 · 3×").
   - **Widening is qaseeda-proportional (preserves balance + bandh shape).** Never widen a single cell freely. Scale the **whole qaseeda's** column widths up together so the band grid proportions stay intact (e.g. marsiya 4+4+4/12, a bayt's 5+2+5) and every block stays balanced to the others (the existing balance-to-longest / uniform-profile logic). Expressive stretch effectively scales the qaseeda's columns toward the page, uniformly, then fills the new room with tatweels.
 - Not word spacing anywhere in engine mode. This **supersedes** the earlier "no auto-resize" note — widening is now part of the expressive regime, but only qaseeda-proportional and page-bounded.
+- **Applied via the §3 re-render mechanism.** Strength, width %, gap and the expressive widening are realized by **regenerating the poem's OOXML with the computed geometry** and replacing the range — not by poking `table.columns` in place (which throws on mixed-width tables). The pane computes the target widths/tatweel budget; `renderForWordOoxml` authors them; the range replace applies them with the `jc` intact.
 
 ### 5. Mode chooser — plain language, Ashaar.js engine as the hero
 
@@ -141,6 +149,8 @@ Rename the "Qaseeda profile" concept to **Profile** and make it a first-class, t
 - **Unnamed / one-off:** when no profile is chosen, the profile selector reads **"Current Selection"** so a plain Justify still works without forcing profile creation; the same top controls govern that one-off justify.
 
 **Interplay with §4/§5:** the expressive stretch's **qaseeda-proportional** widening is coherent precisely because a profile applies one parameter set across all the poem's bands — balance and band shape preserved poem-wide.
+
+**Table-geometry model (§7-geometry).** Generated tables are **fixed-layout** (Word won't drag-resize them), and that's intentional: **the pane owns the geometry.** Overall **table width %** (`scaledTextWidth`) and **inter-misra gap** (`gapWidth`) are pane controls, alongside mode and strength. There is no manual column dragging — you dial geometry in with the sliders, and it's applied by the §3 **re-render** (regenerate the poem's OOXML at the new geometry, replace the range). This makes every layout reproducible and is why fixed-layout is a feature, not a limit.
 
 ---
 
