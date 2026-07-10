@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=4691e2af18732b63073a2e3f702a666421aec397
-date=2026-07-09T21:39:12-05:00
+commit=7a396773b17ff37abff5d5292618a0d7c15febf4
+date=2026-07-09T21:47:31-05:00
 package=ashaar-js
 version=0.1.0
-subject=Add computeRunSpacing (run-aware word-spacing + font scale)
+subject=Doc: note applySlotsMulti caller must keep slot.ri in range

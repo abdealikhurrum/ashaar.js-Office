@@ -236,6 +236,7 @@
 
   // Round-robin the top-n slots (tagged with a run index ri) across runs and
   // splice tatweels into each run's text. Returns a new same-length array.
+  // Contract: caller must ensure every slot.ri indexes into runTexts — not bounds-checked here.
   function applySlotsMulti(runTexts, slots, n) {
     var out = runTexts.slice();
     if (!n || !slots.length) return out;

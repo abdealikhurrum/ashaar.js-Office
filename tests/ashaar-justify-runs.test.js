@@ -153,4 +153,7 @@ assert.throws(function () { AshaarJustify.justifyRuns([{ text: "بيت" }], 12, 
 // ── empty input ──────────────────────────────────────────────────────────────
 assert.deepEqual(AshaarJustify.computeRunSpacing([], 100, {}), { wordSpacing: 0, fontScale: 1 });
 
-console.log("ashaar-justify-runs: Task 1 + Task 2 helpers OK");
+// missing measure throws
+assert.throws(function () { AshaarJustify.computeRunSpacing([{ text: "بيت" }], 12, {}); }, TypeError);
+
+console.log("ashaar-justify-runs: Task 1-3 helpers OK");
