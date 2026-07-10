@@ -1517,7 +1517,15 @@
           for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(canvasCtx.measureText(mtoks[mi]).width); mww.push(canvasCtx.measureText(melong[mi]).width); }
           var msel = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, colPx);
           var mout = msel.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
-          if (mout !== current) plans.push({ cell: cell, flat: mout });
+          // Hybrid fill: Mehr elongates only at whitelisted word-endings, so it
+          // undershoots — close the residual with capped hair-spaces at the word
+          // gaps (reusing distributeMicroSpaces). Accept-short if the cap binds.
+          var mGaps = mout.split(" ").length - 1;
+          canvasCtx.font = mehrFont;
+          var mSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+          var mn = AshaarResidual.capMicroSpaces(colPx - msel.fill * colPx, mGaps, mSpacePx, repSize * 96 / 72);
+          var mfinal = AshaarWord.distributeMicroSpaces([mout], mn, MICRO_SPACE)[0];
+          if (mfinal !== current) plans.push({ cell: cell, flat: mfinal });
           return;
         }
 
