@@ -1,7 +1,7 @@
 # Nastaliq Kashida Fonts — Design
 
 **Date:** 2026-07-10
-**Status:** Draft — awaiting spec review
+**Status:** Approved, ready for implementation plans
 **Branch:** `worktree-nastaliq-kashida-fonts` (worktree, based on `feat/guided-justification-ux`)
 **Scope:** Add first-class support for the Nastaliq fonts that can actually fill a line — **Mehr Nastaliq** (tatweel), **Jameel Noori Kasheeda** (italic-run elongation), and **Gulzar** (whitespace-only) — and make the justification engine choose the *right mechanism per font* instead of assuming every "Nastaliq" font kashidas. Introduces a font registry that drives preview, Word run naming, and — critically — which justification modes are valid for a given font.
 
@@ -104,7 +104,8 @@ The italic-run strategy. Jameel elongation is a **discrete subset-selection**: c
 
 **Pure (Node-testable):**
 - `selectItalicRuns(spans, widthsNormal, widthsItalic, targetPx) → { runs:[{text,italic}], fill, reason }`
-  Dynamic-programming / greedy 0-1 selection over spans: maximize filled width ≤ target (with the last legal step allowed to cross, mirroring how the tatweel binary-search picks the max that fits). `spans` are word / connector-group tokens from a splitter (`splitSpans(text)` — also pure). Returns the ordered run list to emit, the achieved fill ratio, and a `reason` when it underfills (e.g. `"no elongatable spans"`, `"discrete steps overshoot"`), feeding the guided-justification result panel (§1 there).
+  Dynamic-programming / greedy 0-1 selection over spans: maximize filled width ≤ target (with the last legal step allowed to cross, mirroring how the tatweel binary-search picks the max that fits). Returns the ordered run list to emit, the achieved fill ratio, and a `reason` when it underfills (e.g. `"no elongatable spans"`, `"discrete steps overshoot"`), feeding the guided-justification result panel (§1 there).
+- `splitSpans(text) → spans[]` (pure). **Spans are connected segments (fasl / piece-of-Arabic-word), NOT words and NOT characters** — confirmed against real Jameel Kasheeda use: the italic→kasheeda swap operates on a whole connected segment; you cannot italicize a single character mid-cluster. Split the text at each **non-joining letter boundary** (after ا أ إ آ د ذ ر ز ژ ڑ و ؤ ے and after whitespace), so each span is one joined cluster. Adjacent spans that carry no elongatable join collapse into their neighbor's run to avoid needless run fragmentation. This is the finest legal granularity, giving the subset-selector many small levers for smooth fill while respecting the font's selection unit.
 
 **Browser-only:**
 - `measureSpans(text, ctx) → { spans, widthsNormal, widthsItalic }` — sets `ctx.font` normal vs `italic <family>` and measures each span. Reuses the same WebView `@font-face`-loaded ctx the tatweel path depends on (same concern flagged at `taskpane.js:1166`).
@@ -179,5 +180,5 @@ No edits to `src/vendor/*` (vendoring preserved). The italic-run strategy lives 
 ## Open questions for spec review
 
 - ~~**Mehr `tatweelRules`:** do we need an explicit slot-override table, or is `probeFont` sufficient?~~ **Resolved:** explicit whitelist (Beta 2.0 letters above), authoritative for this version; probe cross-checks and may expand post-beta. A **verification task** confirms the whitelist against the actual bundled `.woff2` in Word before shipping (fonts and blog can drift).
-- **Jameel span granularity:** italicize at **word** boundaries only, or allow **connector-group** sub-word spans for finer fill? (Design allows sub-word via `splitSpans`; word-only is a simpler fallback if the spike shows sub-word italic runs shape badly.)
+- ~~**Jameel span granularity:** word vs sub-word?~~ **Resolved (owner has used Jameel):** sub-word IS supported, at the **connected-segment (fasl/PAW)** unit — split at non-joining letters, never mid-cluster. `splitSpans` implements this. (Word-level remains a trivial fallback only if the spike shows per-segment italic runs shape badly at boundaries.)
 - Whether the **Noto** default should be retired entirely in favor of Gulzar as the default `whitespace` Nastaliq, or kept for continuity.
