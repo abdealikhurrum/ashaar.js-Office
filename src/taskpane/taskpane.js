@@ -842,7 +842,6 @@
   }
 
   async function insertPoem(replaceSelection) {
-    var pendingMsg = "";
     await withWord(async function (context) {
       var opts = options();
       var source = String(input.value || "");
@@ -873,10 +872,11 @@
         textWidthTwips = Math.min(pageTwips, neededTwips);
       } else {
         textWidthTwips = scaledTextWidth(pageTwips);
-        if (ctxP && textWidthTwips < neededTwips) {
-          pendingMsg = "Inserted — but this width is tight for " + fontSizeP +
-            "pt; widen to ~" + Math.min(100, Math.round(neededTwips / pageTwips * 100)) +
-            "% or turn on Auto-fit for full kashida.";
+        // Never render narrower than needed to avoid misra word-wrap — floor at
+        // the needed width (still capped at the page width), even when the user
+        // hasn't enabled Auto-fit. A wider user preference is still honored.
+        if (ctxP && neededTwips > textWidthTwips) {
+          textWidthTwips = Math.min(pageTwips, neededTwips);
         }
       }
 
@@ -913,8 +913,6 @@
       control.appearance = "BoundingBox";
       await context.sync();
     });
-    // withWord sets "Done."; surface the width nudge after it if one was raised.
-    if (pendingMsg) setMessage(pendingMsg);
   }
 
   async function insertStructure() {

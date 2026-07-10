@@ -275,7 +275,7 @@ assert.equal(poemTables5[0].rows[0][0].text, "م1"); // misras[0] (sadr) → col
 
 // ── renderForWordOoxml ─────────────────────────────────────────────────────
 
-// 2-misra poem: N=2, gapCols=1 → GRID=7 (2*3+1*1=7)
+// 2-misra poem: N=2, gapCols=1 → GRID=13 (2*6+1*1=13)
 const ooxml2misra = AshaarWord.renderForWordOoxml(
   "دل ناداں تجھے ہوا کیا ہے \\ آخر اس درد کی دوا کیا ہے",
   { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360
@@ -283,20 +283,20 @@ const ooxml2misra = AshaarWord.renderForWordOoxml(
 assert.match(ooxml2misra, /<w:tbl>/);
 assert.match(ooxml2misra, /<w:bidiVisual\/>/);
 assert.match(ooxml2misra, /<w:gridSpan w:val="/);
-// GRID=7 columns: 7 gridCol elements
-assert.equal((ooxml2misra.match(/<w:gridCol /g) || []).length, 7);
+// GRID=13 columns: 13 gridCol elements
+assert.equal((ooxml2misra.match(/<w:gridCol /g) || []).length, 13);
 // Two misra cells + one gap cell = 3 tc elements in the row (gridSpan sums to 7)
 const tc2 = (ooxml2misra.match(/<w:tc>/g) || []).length;
 assert.equal(tc2, 3, "N=2: 2 misra cells + 1 gap cell");
 assert.match(ooxml2misra, /دل ناداں تجھے ہوا کیا ہے/);
 assert.match(ooxml2misra, /آخر اس درد کی دوا کیا ہے/);
 
-// 3-misra marsiya stanza: one table with GRID=11 for all rows
-// Row 1 (3-misra): spans=[3,1,3,1,3]=11; Row 2 (solo): padded; Row 3 (2-misra): spans=[5,1,5]=11
+// 3-misra marsiya stanza: one table with GRID=20 for all rows
+// Row 1 (3-misra): spans=[6,1,6,1,6]=20; Row 2 (solo): padded; Row 3 (2-misra): spans=[10,1,9]=20
 const ooxml3misra = AshaarWord.renderForWordOoxml(marsiyaSource,
   { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360
 );
-assert.equal((ooxml3misra.match(/<w:gridCol /g) || []).length, 11); // single GRID=11 table
+assert.equal((ooxml3misra.match(/<w:gridCol /g) || []).length, 20); // single GRID=20 table
 assert.match(ooxml3misra, /<w:bidiVisual\/>/);
 assert.match(ooxml3misra, /شاه كے اصحاب تھے/);
 assert.match(ooxml3misra, /هو گئے شہ پر فدا/); // solo row (padded, centered)
@@ -580,24 +580,24 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
 // ── soloRow (OOXML): solo/refrain lines are misra-width, not full-grid ──────
 // A marsiya's solo line and paired refrain lines used to stretch a single cell
 // across the FULL grid (gridSpan = si.GRID). That looks wrong: they should be
-// the SAME width as an ordinary misra (BASE_CPM = 3 columns), centered, with
+// the SAME width as an ordinary misra (BASE_CPM = 6 columns), centered, with
 // empty pad cells flanking them so the row's spans still sum to si.GRID.
 {
-  // marsiyaSource: N=3, gapCols=1 (default) → GRID = 3*3 + 2*1 = 11
+  // marsiyaSource: N=3, gapCols=1 (default) → GRID = 3*6 + 2*1 = 20
   const ooxml = AshaarWord.renderForWordOoxml(marsiyaSource,
     { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
   const rows = ooxml.match(/<w:tr>[\s\S]*?<\/w:tr>/g);
   const soloRowXml = rows.filter((r) => /هو گئے شہ پر فدا/.test(r))[0];
   assert.ok(soloRowXml, "solo row found");
   const spans = [...soloRowXml.matchAll(/<w:gridSpan w:val="(\d+)"\/>/g)].map((m) => Number(m[1]));
-  // Must NOT be a single full-grid cell (gridSpan === GRID === 11).
-  assert.ok(!(spans.length === 1 && spans[0] === 11),
-    "solo row must not be a single full-grid (11) cell");
-  // The text-bearing cell must span BASE_CPM = 3 columns, matching ordinary misra width.
-  assert.match(soloRowXml, /<w:gridSpan w:val="3"\/>/,
-    "solo misra cell must span BASE_CPM=3 columns, same as an ordinary misra");
-  // Spans must still sum to GRID=11 (pad + solo + pad), so the fixed-layout table stays valid.
-  assert.equal(spans.reduce((a, b) => a + b, 0), 11, "row spans must sum to GRID=11");
+  // Must NOT be a single full-grid cell (gridSpan === GRID === 20).
+  assert.ok(!(spans.length === 1 && spans[0] === 20),
+    "solo row must not be a single full-grid (20) cell");
+  // The text-bearing cell must span BASE_CPM = 6 columns, matching ordinary misra width.
+  assert.match(soloRowXml, /<w:gridSpan w:val="6"\/>/,
+    "solo misra cell must span BASE_CPM=6 columns, same as an ordinary misra");
+  // Spans must still sum to GRID=20 (pad + solo + pad), so the fixed-layout table stays valid.
+  assert.equal(spans.reduce((a, b) => a + b, 0), 20, "row spans must sum to GRID=20");
   // The refrain pair row (paired \"هائے كربلاء والو\" maqta) is a misraRow, not a
   // solo — untouched by this fix; still spans the full 2-misra split.
 }

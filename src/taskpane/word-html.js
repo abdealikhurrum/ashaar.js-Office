@@ -1006,7 +1006,7 @@
 
   // ── OOXML table rendering ────────────────────────────────────────────────
 
-  var BASE_CPM = 3; // baseline grid columns per misra
+  var BASE_CPM = 6; // baseline grid columns per misra
 
   function escapeXml(s) {
     return String(s || "")

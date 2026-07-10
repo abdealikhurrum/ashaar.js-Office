@@ -136,8 +136,8 @@ console.log("  Farsi: Masnavi couplet OOXML");
   assert.match(ooxml, /<w:tbl>/);
   assert.match(ooxml, /بشنو این نی چون شکایت می‌کند/);
   assert.match(ooxml, /از جدایی‌ها حکایت می‌کند/);
-  // N=2, gapCols=1 → GRID=7
-  assert.equal(countMatches(ooxml, /<w:gridCol /g), 7);
+  // N=2, gapCols=1 → GRID=13 (2*6+1)
+  assert.equal(countMatches(ooxml, /<w:gridCol /g), 13);
   // 2 misra cells + 1 gap = 3 tc elements
   assert.equal(countMatches(ooxml, /<w:tc>/g), 3);
   assert.match(ooxml, /<w:bidiVisual\/>/);
@@ -177,8 +177,8 @@ console.log("  Urdu: Marsiya (3-misra + solo + pair) OOXML");
 {
   const ooxml = AshaarWord.renderForWordOoxml(URDU_MARSIYA,
     { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
-  // N=3, gapCols=1 → GRID=11
-  assert.equal(countMatches(ooxml, /<w:gridCol /g), 11);
+  // N=3, gapCols=1 → GRID=20 (3*6+2)
+  assert.equal(countMatches(ooxml, /<w:gridCol /g), 20);
   assert.match(ooxml, /شاه كے اصحاب تھے/);
   assert.match(ooxml, /هو گئے شہ پر فدا/);
   assert.match(ooxml, /هائے كربلاء والو/);
@@ -195,8 +195,8 @@ console.log("  Urdu: rubaʿi (4-misra) OOXML");
 {
   const ooxml = AshaarWord.renderForWordOoxml(URDU_RUBAI,
     { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
-  // N=4, gapCols=1 → GRID=4*3 + 3*1 = 15
-  assert.equal(countMatches(ooxml, /<w:gridCol /g), 15);
+  // N=4, gapCols=1 → GRID=4*6 + 3*1 = 27
+  assert.equal(countMatches(ooxml, /<w:gridCol /g), 27);
   assert.match(ooxml, /مست چلو/);
   assert.match(ooxml, /شاد چلو/);
   assert.match(ooxml, /آزاد چلو/);
