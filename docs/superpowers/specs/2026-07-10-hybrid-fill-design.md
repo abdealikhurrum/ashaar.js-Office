@@ -1,9 +1,11 @@
 # Hybrid Fill (elongation + residual spacing) — Design
 
 **Date:** 2026-07-10
-**Status:** Approved (design), build-after-verification
-**Branch:** `worktree-nastaliq-kashida-fonts`
-**Scope:** After calligraphic elongation (Mehr tatweel / Jameel font-swap) undershoots the column, close the residual with **capped inter-word micro-spacing**; if the cap is hit, leave the line slightly short (no glyph shrink, no column change). Internal to the elongation paths — **no new user mode**. Whitespace fonts (Gulzar/Noto) are unchanged (already spacing-only).
+**Status:** Approved — **build gates passed, ready to implement** (Jameel font-swap verified in Word; Mehr discrete-tatweel renders clean). This is the **bare-minimum** to make the Nastaliq fonts fill the column today.
+**Branch:** `feat/guided-justification-ux`
+**Scope:** After calligraphic elongation (Mehr tatweel / Jameel font-swap) undershoots the column, close the residual with **capped inter-word micro-spacing**; if the cap is hit, leave the line slightly short (no glyph shrink, no column change). Internal to the elongation paths — **no new user mode**. Whitespace fonts (Gulzar/Noto) are unchanged (already spacing-only). The **generic** path (arbitrary Arabic fonts) already fills to target via `justifyRuns`' binary search, so it needs no residual here.
+
+**Reach goals deferred (tracked, do NOT build here):** strength-as-kashida-share, extending hybrid to the generic path, and per-run mixed mechanisms → [ashaar-js#7](https://github.com/abdealikhurrum/ashaar-js/issues/7). Prose justification (river avoidance, finer control) → [ashaar-js#8](https://github.com/abdealikhurrum/ashaar-js/issues/8).
 
 ## Motivation (validated by the demo)
 

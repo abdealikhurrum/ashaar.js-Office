@@ -156,9 +156,14 @@ Rename the "Qaseeda profile" concept to **Profile** and make it a first-class, t
 
 **Table-geometry model (§7-geometry).** Generated tables are **fixed-layout** (Word won't drag-resize them), and that's intentional: **the pane owns the geometry.** Overall **table width %** (`scaledTextWidth`) and **inter-misra gap** (`gapWidth`) are pane controls, alongside mode and strength. There is no manual column dragging — you dial geometry in with the sliders, and it's applied by the §3 **re-render** (regenerate the poem's OOXML at the new geometry, replace the range). This makes every layout reproducible and is why fixed-layout is a feature, not a limit.
 
-### 8. Nastaliq cursor visibility (rendering fix)
+### 8. Nastaliq cursor visibility (rendering fix) — RESOLVED (2026-07-10)
+
+**Status: no longer reproduces.** Verified in Word: the caret is visible inside Ashaar cells with Nastaliq fonts. No code change was required — the symptom cleared on its own (likely fixed incidentally by the intervening `runsToMisraXml`/cell-size and font-preload work). No spike doc was built. If it recurs, the suspects to isolate are the generated cell's `<w:vAlign w:val="bottom"/>` (`word-html.js:1153`) + Nastaliq's tall ascenders/descenders + the default (auto) line rule on `misraParaXml` (`word-html.js:1185`, no explicit `w:line`); diagnose with a metrics spike doc (mirror the kashida spike method) before changing defaults.
+
+<details><summary>Original report</summary>
 
 **Symptom:** the text caret is invisible inside Ashaar blocks, at least with Nastaliq fonts. **Likely cause:** the generated cell paragraph's `<w:vAlign w:val="bottom"/>` plus Nastaliq's very tall ascenders/descenders (and any tight/fixed line height) push the caret outside the visible cell area. **Fix direction:** revisit the generated paragraph/cell vertical metrics (vAlign, line spacing, cell margins) so the caret is visible with tall scripts — the render primitive (§3) should emit caret-safe vertical metrics. Diagnose in Word (mirrors the kashida spike method) before changing defaults.
+</details>
 
 ---
 
