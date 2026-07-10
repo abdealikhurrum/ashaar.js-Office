@@ -79,7 +79,11 @@ Triggered from the result panel's "font not loaded" fix, or opened directly. Rew
 
 > read the current misra text from the table's cells → reconstruct the Ashaar source (as **Adopt** already does) → re-render the whole poem via `renderForWordOoxml` with the current pane opts (mode, strength, width %, gap, font) → **replace the enclosing table / content-control range** with the authored OOXML.
 
-Authoring at **range/selection scope preserves the paragraph `jc`** (proven: every spike stretches, `insertPoem` works), whereas per-cell `cell.body.insertOoxml` **drops the kashida `jc`** (Findings). So the justify path must re-render, not patch cells. This one mechanism:
+**Two-path architecture (decided).** The re-render primitive serves **word-fill, spacing, and every geometry/adjust change** (width %, gap). **Engine-mode kashida (the Ashaar.js tatweel engine) keeps its existing in-place run-aware path** (per-word `insertText`), because re-rendering from reconstructed plain-text source would flatten the per-run styling (bold word, larger first word) that the run-aware work preserves. So: engine kashida = in-place run-aware; everything else = re-render.
+
+**The primitive.** Insert / Adopt / word-fill-or-spacing justify / adjust / apply-profile all reduce to `renderAndPlace(range, source, opts)` = `renderForWordOoxml(source, opts)` → `range.insertOoxml(wrapOoxml(...), replace|end)`, with two helpers: `sourceFromCells(tables)` (extracted from Adopt's reconstruction) and `opts` from the pane/profile. The operations differ only in **where source comes from** (pane input / reconstruct from current cells) and **where it goes** (insert at cursor / replace the block range).
+
+Authoring at **range/selection scope preserves the paragraph `jc`** (proven: every spike stretches, `insertPoem` works), whereas per-cell `cell.body.insertOoxml` **drops the kashida `jc`** (Findings). So the re-render path must place at range scope, not patch cells. This one mechanism:
 - makes native Word kashida actually apply (jc survives),
 - applies **all** slider geometry deterministically (width %, inter-misra gap — the pane owns the fixed-layout geometry, §7-geometry),
 - avoids the `table.columns` mixed-width fragility (we regenerate, never poke columns),
@@ -151,6 +155,10 @@ Rename the "Qaseeda profile" concept to **Profile** and make it a first-class, t
 **Interplay with §4/§5:** the expressive stretch's **qaseeda-proportional** widening is coherent precisely because a profile applies one parameter set across all the poem's bands — balance and band shape preserved poem-wide.
 
 **Table-geometry model (§7-geometry).** Generated tables are **fixed-layout** (Word won't drag-resize them), and that's intentional: **the pane owns the geometry.** Overall **table width %** (`scaledTextWidth`) and **inter-misra gap** (`gapWidth`) are pane controls, alongside mode and strength. There is no manual column dragging — you dial geometry in with the sliders, and it's applied by the §3 **re-render** (regenerate the poem's OOXML at the new geometry, replace the range). This makes every layout reproducible and is why fixed-layout is a feature, not a limit.
+
+### 8. Nastaliq cursor visibility (rendering fix)
+
+**Symptom:** the text caret is invisible inside Ashaar blocks, at least with Nastaliq fonts. **Likely cause:** the generated cell paragraph's `<w:vAlign w:val="bottom"/>` plus Nastaliq's very tall ascenders/descenders (and any tight/fixed line height) push the caret outside the visible cell area. **Fix direction:** revisit the generated paragraph/cell vertical metrics (vAlign, line spacing, cell margins) so the caret is visible with tall scripts — the render primitive (§3) should emit caret-safe vertical metrics. Diagnose in Word (mirrors the kashida spike method) before changing defaults.
 
 ---
 
