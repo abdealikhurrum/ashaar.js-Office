@@ -17,4 +17,32 @@ assert.strictEqual(AshaarResidual.capMicroSpaces(100, 4, 2, 16), 9);
 // explicit capEm honored: cap = 0.5*16*4 = 32px → round(min(100,32)/2)=16
 assert.strictEqual(AshaarResidual.capMicroSpaces(100, 4, 2, 16, 0.5), 16);
 
+// injectSpaceRuns — hair-spaces appended to the " " runs only
+(function () {
+  var runs = [{ text: "كہہ", swap: true }, { text: " ", swap: false },
+              { text: "رہے", swap: false }, { text: " ", swap: false },
+              { text: "تھے", swap: false }];
+  var out = AshaarResidual.injectSpaceRuns(runs, 3);      // 2 space runs, n=3
+  assert.strictEqual(out.length, 5);
+  assert.strictEqual(out[0].text, "كہہ");                 // words untouched
+  assert.strictEqual(out[0].swap, true);                  // swap flag preserved
+  assert.strictEqual(out[1].text, " " + "  ");  // first gap: 2 (remainder)
+  assert.strictEqual(out[3].text, " " + " ");        // second gap: 1
+  assert.strictEqual(runs[1].text, " ");                  // original NOT mutated
+
+  // n <= 0 → text unchanged (structural copy)
+  var out0 = AshaarResidual.injectSpaceRuns(runs, 0);
+  assert.strictEqual(out0[1].text, " ");
+  assert.notStrictEqual(out0, runs);
+
+  // no space runs → unchanged
+  var solid = [{ text: "ابجد", swap: false }];
+  assert.strictEqual(AshaarResidual.injectSpaceRuns(solid, 5)[0].text, "ابجد");
+
+  // custom spaceChar honored
+  var out2 = AshaarResidual.injectSpaceRuns(runs, 2, " ");
+  assert.strictEqual(out2[1].text, " " + " ");
+  assert.strictEqual(out2[3].text, " " + " ");
+})();
+
 console.log("kashida-residual tests passed");

@@ -23,5 +23,25 @@
     return Math.max(0, Math.round(wantPx / spaceGlyphPx));
   }
 
-  return { HAIR_SPACE: HAIR_SPACE, capMicroSpaces: capMicroSpaces };
+  // Spread `n` spaceChar glyphs across the inter-word (" ") runs of a font-swap
+  // run-list, as evenly as possible (earlier gaps take the remainder). Returns a
+  // new array of copied run objects; input is never mutated.
+  function injectSpaceRuns(runs, n, spaceChar) {
+    if (spaceChar == null) spaceChar = HAIR_SPACE;
+    var out = (runs || []).map(function (r) {
+      var c = {}; for (var k in r) { if (r.hasOwnProperty(k)) c[k] = r[k]; } return c;
+    });
+    if (!(n > 0)) return out;
+    var gapIdx = [];
+    for (var i = 0; i < out.length; i++) { if (out[i].text === " ") gapIdx.push(i); }
+    if (!gapIdx.length) return out;
+    var base = Math.floor(n / gapIdx.length), rem = n % gapIdx.length;
+    for (var g = 0; g < gapIdx.length; g++) {
+      var add = base + (g < rem ? 1 : 0);
+      if (add > 0) out[gapIdx[g]].text += new Array(add + 1).join(spaceChar);
+    }
+    return out;
+  }
+
+  return { HAIR_SPACE: HAIR_SPACE, capMicroSpaces: capMicroSpaces, injectSpaceRuns: injectSpaceRuns };
 }));
