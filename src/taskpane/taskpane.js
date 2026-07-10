@@ -262,10 +262,9 @@
     var d = AshaarFonts.get(fontMode.value === "nastaliq" ? "noto" : fontMode.value);
     var note = document.getElementById("font-install-note");
     if (!note) return;
-    if (d && d.wordName && d.mechanism !== "whitespace") {
+    if (d && d.readerNote) {
       note.hidden = false;
-      note.textContent = "Readers need “" + d.wordName + "” installed to see this correctly."
-        + (d.id === "jameel" ? " Specifically the Kasheeda build, or italic runs won’t elongate." : "");
+      note.textContent = "Readers need “" + d.wordName + "” installed to see this correctly.";
     } else { note.hidden = true; }
   }
 
@@ -1089,18 +1088,16 @@
     setMessage("Justifying…");
 
     // Only the tatweel mechanism (Mehr) has a working kashida/tatweel justify
-    // path. Whitespace-mechanism fonts (Gulzar, Noto, …) have no elongatable
-    // joins — injected tatweels shatter their shaping. Italic-run fonts
-    // (Jameel) need a dedicated slant-run justify engine that doesn't exist
-    // yet — until it does, Jameel must not fall through onto the tatweel
-    // engine either (it would inject literal tatweel glyphs into its text).
+    // path. Whitespace-mechanism fonts (Gulzar, Noto, Jameel, …) have no
+    // elongatable joins in Word — injected tatweels shatter their shaping.
+    // (Jameel was going to get a dedicated italic-run justify engine, but
+    // Gate G found Word only slants italic runs instead of swapping in
+    // kasheeda glyphs, so that engine was cut — Jameel is whitespace now.)
     // Downgrade every non-tatweel mechanism to spacing and warn.
     if (mechanism !== "tatweel" && opts.justifyMode === "kashida") {
       opts = Object.assign({}, opts, { justifyMode: "spacing" });
       var label = (AshaarFonts.get(fontId) || {}).label;
-      var msg = mechanism === "italic-run"
-        ? "“" + label + "” kashida isn’t available yet — filling by spacing instead."
-        : "“" + label + "” has no stretch letters — filling by spacing instead.";
+      var msg = "“" + label + "” can’t stretch letters in Word — filling by spacing instead.";
       setMessage(msg);
     }
 

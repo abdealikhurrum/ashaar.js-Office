@@ -28,6 +28,8 @@ The three fonts that *can* fill a Nastaliq line each do it by a **different mech
 
 The blog states this is a **beta** limitation that later versions may lift. So the whitelist is authoritative *for this version* but must be versioned and probe-expandable — see §5 dispatch.
 
+**Gate G result: FAIL (2026-07-10)** — Word does not honor Jameel italic→kasheeda; italic-run mechanism cut; Jameel reclassified whitespace (render-only). Microsoft Word merely slants Jameel Noori Kasheeda's italic runs — it does not swap in the elongated kasheeda glyph forms the way InPage does. The `italic-run` row above is therefore historical/never-built: Jameel is tagged `mechanism:"whitespace"` in the registry (`src/taskpane/fonts.js`) and fills lines the same way Gulzar and Noto do (inter-word spacing), while remaining selectable and render-only (private, user-installed, not bundled publicly).
+
 ## Findings that reshape scope (verified in code)
 
 - **The `nastaliq` mode is hard-coded to a non-kashida font** in five places: `word-html.js:142` (CSS stack), `taskpane.js:256` (`previewFontFamily`), `word-tabstop.js:68` and `word-html.js:1093,1230,1271` (`<w:rFonts w:cs="Noto Nastaliq Urdu"/>`), and the canvas fallback name `"Noto Nastaliq Urdu"` at `taskpane.js:864,1001,1069`. Adding fonts by copy-pasting these literals does not scale and can silently desync preview from Word output.

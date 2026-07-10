@@ -24,6 +24,8 @@
 
 ### Gate G: Jameel Word-italic swap verification
 
+**STATUS: FAILED (2026-07-10).** Word only slants Jameel Kasheeda's italic runs; it does not swap in the elongated kasheeda glyph forms. Task 5 is CUT per the decision below — Jameel is reclassified `mechanism:"whitespace"` in the registry and remains a selectable render-only font.
+
 Jameel Kasheeda's elongated forms live in the **italic style slot**. Whether Microsoft Word (not just InPage) triggers the kasheeda glyphs when a run's italic property is set is **unverified** and gates the entire `italic-run` mechanism (Task 5).
 
 - [ ] **G.1** Install Jameel Noori Nastaleeq Kasheeda on a Mac and a Windows machine with Word.
@@ -510,6 +512,8 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ---
 
 ## Task 5: Jameel italic-run engine (`kashida-italic.js`) + OOXML italic emission
+
+**STATUS: CUT (2026-07-10) — Gate G FAILED.** This task is not built. Jameel is reclassified `mechanism:"whitespace"` in `src/taskpane/fonts.js`; no `kashida-italic.js` module exists. Task text below is left unmodified for the historical record of what was planned.
 
 **GATED on Gate G = PASS.** If Gate G failed, skip this task (Jameel is already `whitespace` via the Task-G decision).
 

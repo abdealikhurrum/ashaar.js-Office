@@ -19,7 +19,11 @@
   src: url("../../assets/fonts/Gulzar-Regular.woff2") format("woff2");
   font-display: swap;
 }
-/* Jameel Kasheeda @font-face deferred — pending Gate G (Word italic-swap verification) */
+/* No Jameel Kasheeda @font-face here: Gate G (2026-07-10) found Word does not
+   swap in kasheeda glyphs on italic runs (it only slants them), so kashida
+   elongation for this font is not available in Word. Jameel stays
+   render-only — selectable, private/user-supplied, install-it-yourself — and
+   fills lines by spacing like the other whitespace-mechanism fonts. */
 
 /* Use the user's LOCALLY-INSTALLED AL-KANZ (an Al-Fatemi derivative) if present,
    so justification metrics match Word without redistributing the font file.

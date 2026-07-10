@@ -22,15 +22,21 @@
     mehr: { id: "mehr", label: "Mehr Nastaliq",
       css: "'Mehr Nastaliq Web','Noto Nastaliq Urdu',serif", wordName: "Mehr Nastaliq Web",
       mechanism: "tatweel", bundled: true, file: "MehrNastaliqWeb.woff2",
+      readerNote: true,
       tatweelRules: {
         version: "beta-2.0",
         medialInto: ["ب","پ","ت","ٹ","ث","س","ش","ف","ک","گ"],
         finalInto:  ["ب","پ","ت","ٹ","ث","ف","ک","گ"]
       } },
+    // Jameel Kasheeda is render-only: Gate G (2026-07-10, manual Word test)
+    // found that Word only slants italic runs, it does not swap in the
+    // kasheeda glyph forms the way InPage does. The italic-run mechanism
+    // never got built; Jameel uses spacing like every other whitespace font.
     jameel: { id: "jameel", label: "Jameel Noori Kasheeda",
       css: "'Jameel Noori Nastaleeq Kasheeda','Jameel Noori Nastaleeq',serif",
       wordName: "Jameel Noori Nastaleeq",
-      mechanism: "italic-run", bundled: true, private: true,
+      mechanism: "whitespace", bundled: true, private: true,
+      readerNote: true,
       file: "JameelNooriNastaleeqKasheeda.ttf" },
     gulzar: { id: "gulzar", label: "Gulzar",
       css: "'Gulzar',serif", wordName: "Gulzar",

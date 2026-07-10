@@ -4,9 +4,16 @@ const AshaarFonts = require("../src/taskpane/fonts");
 
 // mechanism tags
 assert.strictEqual(AshaarFonts.mechanismOf("mehr"), "tatweel");
-assert.strictEqual(AshaarFonts.mechanismOf("jameel"), "italic-run");
+assert.strictEqual(AshaarFonts.mechanismOf("jameel"), "whitespace");
 assert.strictEqual(AshaarFonts.mechanismOf("gulzar"), "whitespace");
 assert.strictEqual(AshaarFonts.mechanismOf("noto"), "whitespace");
+
+// reader-install note: Mehr and Jameel need a reader-side font install;
+// Gulzar does not (Gate G FAIL 2026-07-10 reclassified Jameel to whitespace,
+// but it still needs the note decoupled from mechanism via `readerNote`)
+assert.strictEqual(AshaarFonts.get("mehr").readerNote, true);
+assert.strictEqual(AshaarFonts.get("jameel").readerNote, true);
+assert.ok(!AshaarFonts.get("gulzar").readerNote);
 // unknown / plain modes default to whitespace (never the tatweel engine)
 assert.strictEqual(AshaarFonts.mechanismOf("document"), "whitespace");
 assert.strictEqual(AshaarFonts.mechanismOf("nope"), "whitespace");
