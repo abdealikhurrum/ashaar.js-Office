@@ -31,7 +31,7 @@ Adds pure helpers to `word-html.js` (tested) and rewrites the per-cell apply loo
 - Test: `tests/word-html.test.js` (append cases)
 
 **Interfaces:**
-- Produces: `AshaarWord.coalesceRuns(words)` where `words = [{ text, name, size, bold, italic }]` (per Office.js word-range read). Returns `[{ text, name, size, bold, italic }]`; adjacent words with an identical `(name, size, bold, italic)` tuple merge, their `text` joined by a single space. Empty input → `[]`.
+- Produces: `AshaarWord.coalesceRuns(words)` where `words = [{ text, name, size, bold, italic, ... }]` (per Office.js word-range read; may carry extra fields such as a `range`). Returns `[{ text, name, size, bold, italic, refs }]`; adjacent words with an identical `(name, size, bold, italic)` tuple merge, their `text` joined by a single space and `refs` = the source word objects in order (so the caller maps a run back to its Word ranges). Empty input → `[]`.
 
 - [ ] **Step 1: Write the failing test** — append to `tests/word-html.test.js`:
 
@@ -214,7 +214,7 @@ allCells.forEach(function (cell) {
 await context.sync();
 ```
 
-- [ ] **Step 2: Build runs per cell** (replace the single `cell.body.font` read). For each cell, map its `__wordRanges.items` to `{ text, name, size, bold, italic }` (stripping justification from each word's text), drop empty words, then `AshaarWord.coalesceRuns(words)`. Keep the parallel array of the underlying ranges so run *i* maps to the union range `words[start].expandTo(words[end])`. Skip cells with no visible text.
+- [ ] **Step 2: Build runs per cell** (replace the single `cell.body.font` read). For each cell, map its `__wordRanges.items` to `{ text, name, size, bold, italic }` (stripping justification from each word's text), drop empty words, then `AshaarWord.coalesceRuns(words)`. Keep each run's union range = `run.refs[0].range.expandTo(run.refs[run.refs.length-1].range)`. Skip cells with no visible text.
 
 - [ ] **Step 3: Kashida apply.** Build primitive runs — for each coalesced run set `measure` from a canvas ctx whose `font` is `run.size + "pt \"" + run.name + (run.bold ? "\" bold" : "\"")` (weight via the ctx font shorthand), and `fontProfile` = the poem-level profile (unchanged), `fontSize = run.size`. Call:
 

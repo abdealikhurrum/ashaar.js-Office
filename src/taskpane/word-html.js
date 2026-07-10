@@ -934,8 +934,12 @@
       if (prev && prev.name === w.name && prev.size === w.size &&
           prev.bold === w.bold && prev.italic === w.italic) {
         prev.text += " " + w.text;
+        prev.refs.push(w);
       } else {
-        runs.push({ text: w.text, name: w.name, size: w.size, bold: w.bold, italic: w.italic });
+        runs.push({
+          text: w.text, name: w.name, size: w.size, bold: w.bold, italic: w.italic,
+          refs: [w] // source word objects in order — caller maps these back (e.g. to Word ranges)
+        });
       }
     });
     return runs;

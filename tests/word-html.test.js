@@ -443,15 +443,19 @@ assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase,
 
 // ── coalesceRuns ────────────────────────────────────────────────────────────
 {
-  // Two words, same style → one run.
-  const r = AshaarWord.coalesceRuns([
+  // Two words, same style → one run; refs keep both source words in order.
+  const w = [
     { text: "درد", name: "Amiri", size: 16, bold: false, italic: false },
     { text: "دل",  name: "Amiri", size: 16, bold: false, italic: false },
-  ]);
-  assert.deepEqual(r, [{ text: "درد دل", name: "Amiri", size: 16, bold: false, italic: false }]);
+  ];
+  const r = AshaarWord.coalesceRuns(w);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].text, "درد دل");
+  assert.equal(r[0].name, "Amiri");
+  assert.deepEqual(r[0].refs, w);
 }
 {
-  // Style change (bold) splits into two runs, order preserved.
+  // Style change (bold) splits into two runs, order preserved, one ref each.
   const r = AshaarWord.coalesceRuns([
     { text: "درد", name: "Amiri", size: 16, bold: false, italic: false },
     { text: "دل",  name: "Amiri", size: 16, bold: true,  italic: false },
@@ -460,15 +464,18 @@ assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase,
   assert.equal(r[0].text, "درد");
   assert.equal(r[1].text, "دل");
   assert.equal(r[1].bold, true);
+  assert.equal(r[0].refs.length, 1);
+  assert.equal(r[1].refs.length, 1);
 }
 {
-  // Size change splits; empty input → [].
+  // Size change splits; the second run coalesces its two same-size words.
   const r = AshaarWord.coalesceRuns([
     { text: "الف", name: "Amiri", size: 24, bold: false, italic: false },
     { text: "ب",   name: "Amiri", size: 16, bold: false, italic: false },
     { text: "ج",   name: "Amiri", size: 16, bold: false, italic: false },
   ]);
   assert.deepEqual(r.map(x => x.text), ["الف", "ب ج"]);
+  assert.equal(r[1].refs.length, 2);
   assert.deepEqual(AshaarWord.coalesceRuns([]), []);
 }
 
