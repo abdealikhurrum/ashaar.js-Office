@@ -258,6 +258,17 @@
     return css || "\"Times New Roman\", serif";
   }
 
+  function updateFontNote() {
+    var d = AshaarFonts.get(fontMode.value === "nastaliq" ? "noto" : fontMode.value);
+    var note = document.getElementById("font-install-note");
+    if (!note) return;
+    if (d && d.wordName && d.mechanism !== "whitespace") {
+      note.hidden = false;
+      note.textContent = "Readers need “" + d.wordName + "” installed to see this correctly."
+        + (d.id === "jameel" ? " Specifically the Kasheeda build, or italic runs won’t elongate." : "");
+    } else { note.hidden = true; }
+  }
+
   function setMessage(text) {
     message.textContent = text || "";
   }
@@ -1736,6 +1747,7 @@
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });
+    fontMode.addEventListener("change", updateFontNote);
     layoutPreset.addEventListener("change", applyLayoutPreset);
     misraCount.addEventListener("change", applyLayoutPreset);
     modeTable.addEventListener("click", function () { setMode("table"); });
@@ -1785,6 +1797,7 @@
 
     applyLayoutPreset();
     renderPreview();
+    updateFontNote();
     setMode("table");
     renderTemplateList();
     populateQaseedaNames();

@@ -73,6 +73,21 @@ Font files in `assets/fonts/` are redistributed under their respective open lice
 - **Gulzar** (`assets/fonts/Gulzar-Regular.woff2`) — copyright 2021 The Gulzar Project Authors (designers: Borna Izadpanah, Fiona Ross, Alice Savoie, Simon Cozens; [github.com/googlefonts/gulzar](https://github.com/googlefonts/gulzar)), from [Google Fonts](https://fonts.google.com/specimen/Gulzar). Licensed under the [SIL Open Font License 1.1 (OFL)](https://scripts.sil.org/OFL).
 - **Jameel Noori Nastaleeq Kasheeda** — offered as a font-mode option but not bundled; the file is private/user-supplied and its `@font-face` block is deferred pending Gate G (manual Word italic-swap verification). See `src/taskpane/taskpane.css`.
 
+## Fonts & reader requirements
+
+The add-in previews poetry in the taskpane and inserts it into a Word document; the fonts each side needs are not the same.
+
+- **Bundled in the taskpane (preview only)**: Noto Nastaliq Urdu, Mehr Nastaliq Web (`assets/fonts/MehrNastaliqWeb.woff2`), Gulzar (`assets/fonts/Gulzar-Regular.woff2`), and FatemiMaqala are loaded via `@font-face` in `src/taskpane/taskpane.css` and render inside the pane for anyone, on any machine, with no install.
+- **Word documents render with the document's own installed fonts.** The taskpane only writes a font *name* into the OOXML (`<w:rFonts w:cs="…">`); Word does not embed the font file. This means each font mode has a different reader-side requirement, shown as a note under the Font picker (`#font-install-note` in `src/taskpane/taskpane.html`, wired by `updateFontNote()` in `src/taskpane/taskpane.js`):
+  - **Document default / Arabic serif** — no note; these rely on whatever font is already applied in the document, or a common system fallback.
+  - **Mehr Nastaliq** — note shown; the reader must have "Mehr Nastaliq Web" installed on their machine to see the kashida-stretched glyphs correctly in Word.
+  - **Jameel Noori Kasheeda** — note shown, plus an extra sentence: the reader needs specifically the *Kasheeda* build of Jameel Noori Nastaleeq (not the ordinary Jameel Noori Nastaleeq), or the italic-run trick this mode relies on for elongation won't work.
+  - **Gulzar** — no reader-install note today (its `mechanism` is `"whitespace"`, the same bucket as the no-install fonts), even though the taskpane preview does load a Gulzar font file. Readers without Gulzar installed will see Word's fallback font instead.
+- **Jameel Noori Nastaleeq Kasheeda is private and is never deployed publicly.** The add-in is served as a static site from GitHub Pages, so anything committed to `assets/fonts/` is world-readable at a public URL. The Jameel font file's license does not permit that kind of public rehosting, so:
+  - `assets/fonts/JameelNooriNastaleeqKasheeda*.ttf` is listed in `.gitignore` — it can never be `git add`ed by accident, tracked in `main`, or published to Pages.
+  - The font mode still appears in the picker and its `@font-face` rule is deferred in `taskpane.css`; it is meant to be dropped into `assets/fonts/` locally (or loaded via the in-app "Load a font from your computer" custom-font flow) for development and for testers who already hold a licensed copy — never checked in.
+  - To confirm the guard after a deploy, request the file's Pages URL directly (e.g. `https://<user>.github.io/<repo>/assets/fonts/JameelNooriNastaleeqKasheeda.ttf`) and confirm it 404s.
+
 ## Development Notes
 
 The preview pane uses Ashaar.js native HTML/CSS. Word insertion uses generated table HTML because Word's HTML importer preserves table layout more reliably than browser flex layout.
