@@ -1315,17 +1315,20 @@
       // this same canvas — force that @font-face to finish loading too, or
       // measureText silently falls back to a substitute font and corrupts
       // selectSwapRuns' gain ranking (wrong fasls get swapped).
-      if (canvasCtx && mechanism === "font-swap" && typeof document !== "undefined" && document.fonts && document.fonts.load) {
-        var kName = AshaarFonts.kasheedaNameOf(fontId);
-        if (kName) { try { await document.fonts.load(repSize + "pt \"" + kName + "\""); } catch (e) {} }
-        // The base face is normally loaded incidentally via the repName
-        // preload above, but repName is the cell's reported font.name
-        // (usually the Latin/hAnsi face), not the Arabic w:cs base face
-        // that baseCss below actually measures with — so force-load it
-        // explicitly, or measureText silently falls back to a substitute
-        // font and corrupts widthsBase / the gain ranking in selectSwapRuns.
+      // Both font-swap (Jameel) and tatweel (Mehr) measure a specific Arabic
+      // w:cs face on this canvas, not repName (the cell's reported Latin/hAnsi
+      // font). If that face isn't force-loaded, measureText silently falls back
+      // to a substitute and the elongation measures ~zero width — so Mehr's
+      // trailing tatweel never registers as wider (no final tatweels selected)
+      // and Jameel's gain ranking picks the wrong fasls.
+      if (canvasCtx && (mechanism === "font-swap" || mechanism === "tatweel") &&
+          typeof document !== "undefined" && document.fonts && document.fonts.load) {
         var bName = AshaarFonts.wordNameOf(fontId);
         if (bName) { try { await document.fonts.load(repSize + "pt \"" + bName + "\""); } catch (e) {} }
+        if (mechanism === "font-swap") {
+          var kName = AshaarFonts.kasheedaNameOf(fontId);
+          if (kName) { try { await document.fonts.load(repSize + "pt \"" + kName + "\""); } catch (e) {} }
+        }
       }
 
       // Auto-fit (in place): widen each table's columns so the widest misra has
