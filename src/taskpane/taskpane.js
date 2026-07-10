@@ -1453,7 +1453,7 @@
             canvasCtx.font = repSize + "pt " + wideCss; ww.push(canvasCtx.measureText(s).width);
           });
           var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, colPx);
-          var swapXml = AshaarWord.runsToMisraXml(sel.runs, cellAlign, opts);
+          var swapXml = AshaarWord.runsToMisraXml(sel.runs, cellAlign, opts, repSize);
           plans.push({ cell: cell, ooxml: swapXml });
           return; // handled — skip the tatweel/spacing paths for this cell
         }

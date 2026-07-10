@@ -1148,14 +1148,18 @@
   // runs: [{text, swap}]; base vs Kasheeda cs name chosen per run (Jameel
   // font-swap kashida — Task 8). swap:true fasls render in the wider
   // "Kasheeda" face; the rest stay in the base face.
-  function runsToMisraXml(runs, align, opts) {
+  function runsToMisraXml(runs, align, opts, sizePt) {
     var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
     var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
     var baseName = AshaarFonts.wordNameOf(mode);
     var wideName = AshaarFonts.kasheedaNameOf(mode) || baseName;
+    // Emit the cell's size on every run — a full-paragraph insertOoxml replace
+    // does NOT inherit the previous runs' size, so without this the swapped
+    // paragraph reverts to Word's document default (12pt).
+    var szXml = sizePt ? '<w:sz w:val="' + Math.round(sizePt * 2) + '"/><w:szCs w:val="' + Math.round(sizePt * 2) + '"/>' : "";
     var body = (runs || []).map(function (r) {
       var cs = r.swap ? wideName : baseName;
-      var rpr = "<w:rPr><w:rtl/>" + (cs ? '<w:rFonts w:cs="' + cs + '"/>' : "") + "</w:rPr>";
+      var rpr = "<w:rPr><w:rtl/>" + (cs ? '<w:rFonts w:cs="' + cs + '"/>' : "") + szXml + "</w:rPr>";
       return "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
     }).join("");
     return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" + body + "</w:p>";
