@@ -499,4 +499,27 @@ assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase,
   assert.deepEqual(AshaarWord.distributeMicroSpaces(["a b"], 0, HAIR), ["a b"]);
 }
 
+// ── strengthToKashidaLevel ──────────────────────────────────────────────────
+assert.equal(AshaarWord.strengthToKashidaLevel(0),  "lowKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(7),  "lowKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(8),  "mediumKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(15), "mediumKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(16), "highKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(24), "highKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(undefined), "mediumKashida");
+
+// ── containsArabic / wordFillJc ─────────────────────────────────────────────
+assert.equal(AshaarWord.containsArabic("العلم"), true);
+assert.equal(AshaarWord.containsArabic("hello"), false);
+assert.equal(AshaarWord.containsArabic("۱۲۳"), true);   // Urdu digits are in-range
+assert.equal(AshaarWord.wordFillJc("العلم نور", 4),  "lowKashida");
+assert.equal(AshaarWord.wordFillJc("العلم نور", 20), "highKashida");
+assert.equal(AshaarWord.wordFillJc("hello world", 20), "distribute");
+
+// ── kashidaExpansionFraction ────────────────────────────────────────────────
+assert.equal(AshaarWord.kashidaExpansionFraction(0), 0);
+assert.equal(AshaarWord.kashidaExpansionFraction(24), 0.15);
+assert.equal(AshaarWord.kashidaExpansionFraction(12), 0.075);
+assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
+
 console.log("word-html tests passed");

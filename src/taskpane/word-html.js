@@ -976,6 +976,34 @@
     });
   }
 
+  // Map the 0–24 stretch slider to Word's three native kashida jc levels, in
+  // thirds. Used by "Let Word fill it" (§3).
+  function strengthToKashidaLevel(strength) {
+    var s = Number(strength);
+    if (!isFinite(s)) return "mediumKashida";
+    if (s < 8) return "lowKashida";
+    if (s < 16) return "mediumKashida";
+    return "highKashida";
+  }
+
+  // Any Arabic-script character (Arabic, Arabic Supplement, presentation forms).
+  function containsArabic(text) {
+    return /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/.test(String(text || ""));
+  }
+
+  // jc for "Let Word fill it": native kashida (level from strength) for Arabic,
+  // else distribute (spacing — fills the last line without a trailing break).
+  function wordFillJc(text, strength) {
+    return containsArabic(text) ? strengthToKashidaLevel(strength) : "distribute";
+  }
+
+  // Column expansion allowance for "Let Word fill it": 0 at strength 0, ~15% at
+  // full strength (24). Applied qaseeda-proportionally by the justify path.
+  function kashidaExpansionFraction(strength) {
+    var s = Math.max(0, Math.min(24, Number(strength) || 0));
+    return Math.round((0.15 * s / 24) * 1000) / 1000;
+  }
+
   // ── OOXML table rendering ────────────────────────────────────────────────
 
   var BASE_CPM = 3; // baseline grid columns per misra
@@ -1334,6 +1362,10 @@
     justifyPlainTextBlock: justifyPlainTextBlock,
     coalesceRuns: coalesceRuns,
     distributeMicroSpaces: distributeMicroSpaces,
+    strengthToKashidaLevel: strengthToKashidaLevel,
+    containsArabic: containsArabic,
+    wordFillJc: wordFillJc,
+    kashidaExpansionFraction: kashidaExpansionFraction,
     renderForWordOoxml: renderForWordOoxml,
     wrapOoxml: wrapOoxml,
     misraSpans: misraSpans,
