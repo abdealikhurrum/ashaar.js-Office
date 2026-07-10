@@ -543,23 +543,16 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
   assert.ok(xml.indexOf("<w:br/>") === -1, "no break outside word-fill");
 }
 
-// ── misraParaXml: wordFillFont bakes the cell's real font+size into the run ─
+// ── misraParaXml: word-fill emits one trailing break, tiny break run ────────
 {
-  const opts = { justifyMode: "css", tatweelCount: 12, wordFillFont: { name: "Scheherazade New", size: 14, bold: false, italic: false } };
+  const opts = { justifyMode: "css", tatweelCount: 12 };
   const xml = AshaarWord.misraParaXml("العلم نور", "center", false, opts, 0);
-  assert.ok(xml.indexOf('w:cs="Scheherazade New"') !== -1, "text run carries the cell's real font name");
-  assert.ok(xml.indexOf('w:sz w:val="28"') !== -1, "size in half-points (14pt -> 28)");
   assert.ok(xml.indexOf('w:jc w:val="mediumKashida"') !== -1, "tatweelCount 12 -> mediumKashida");
-  const brCount = (xml.match(/<w:br\/>/g) || []).length;
-  assert.equal(brCount, 1, "exactly one trailing break");
+  assert.equal((xml.match(/<w:br\/>/g) || []).length, 1, "exactly one trailing break");
   assert.ok(xml.indexOf('<w:rPr><w:sz w:val="4"/><w:szCs w:val="4"/></w:rPr><w:br/>') !== -1,
-    "the trailing break run keeps its own tiny size, not the cell font's size");
-}
-{
-  // Without wordFillFont, behavior is unchanged: no rFonts injected for document-default fontMode.
-  const opts = { justifyMode: "css", tatweelCount: 20 };
-  const xml = AshaarWord.misraParaXml("العلم نور", "center", false, opts, 0);
-  assert.ok(xml.indexOf("w:rFonts") === -1, "no rFonts when wordFillFont absent and fontMode is document-default");
+    "the trailing break run keeps its own tiny size");
+  // document-default fontMode injects no rFonts (font comes from the render, not per-cell).
+  assert.ok(xml.indexOf("w:rFonts") === -1, "no rFonts for document-default fontMode");
 }
 
 // ── misraParaXml: word-fill shrinks the paragraph mark (empty-line fix) ──────
