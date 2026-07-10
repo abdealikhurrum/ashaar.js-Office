@@ -264,7 +264,9 @@
     if (!note) return;
     if (d && d.readerNote) {
       note.hidden = false;
-      note.textContent = "Readers need “" + d.wordName + "” installed to see this correctly.";
+      note.textContent = (d.id === "jameel")
+        ? "Readers need “Jameel Noori Nastaleeq” (Regular + Kasheeda) installed to see this correctly."
+        : "Readers need “" + d.wordName + "” installed to see this correctly.";
     } else { note.hidden = true; }
   }
 
@@ -1088,13 +1090,16 @@
     setMessage("Justifying…");
 
     // Only the tatweel mechanism (Mehr) has a working kashida/tatweel justify
-    // path. Whitespace-mechanism fonts (Gulzar, Noto, Jameel, …) have no
-    // elongatable joins in Word — injected tatweels shatter their shaping.
-    // (Jameel was going to get a dedicated italic-run justify engine, but
-    // Gate G found Word only slants italic runs instead of swapping in
-    // kasheeda glyphs, so that engine was cut — Jameel is whitespace now.)
-    // Downgrade every non-tatweel mechanism to spacing and warn.
-    if (mechanism !== "tatweel" && opts.justifyMode === "kashida") {
+    // path. Whitespace-mechanism fonts (Gulzar, Noto, …) have no elongatable
+    // joins in Word — injected tatweels shatter their shaping. Jameel is its
+    // own mechanism, "font-swap": Gate G found Word only slants italic runs
+    // instead of swapping in kasheeda glyphs (so the italic-run engine was
+    // cut), but Gate G2 found Word DOES apply the elongated forms via a
+    // named "Kasheeda" style within the Jameel family — so Jameel fills a
+    // line by swapping whole fasls to that wider face (kashida-fontswap.js)
+    // and has its own dispatch branch below; it must NOT be downgraded here.
+    // Downgrade only whitespace-mechanism fonts to spacing and warn.
+    if (mechanism === "whitespace" && opts.justifyMode === "kashida") {
       opts = Object.assign({}, opts, { justifyMode: "spacing" });
       var label = (AshaarFonts.get(fontId) || {}).label;
       var msg = "“" + label + "” can’t stretch letters in Word — filling by spacing instead.";
@@ -1149,6 +1154,10 @@
             allCells.push(cell);
             cell.body.load("text");
             cell.body.font.load("name,size");
+            // Alignment of the cell's own first paragraph — used by the
+            // font-swap (Jameel) path to preserve the misra's visual side
+            // (sadr/ajuz/solo) when it rebuilds the cell via OOXML.
+            cell.body.paragraphs.load("alignment");
           });
         });
       });
@@ -1179,6 +1188,17 @@
       // Content width = cell width minus the side margins Word reserves for text.
       function contentPx(cell) {
         return Math.max(1, (cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
+      }
+
+      // The cell's own paragraph alignment ("Right"/"Left"/"Centered"/…) maps
+      // to the "right"/"left"/"center" jc the font-swap path needs when it
+      // rebuilds the cell as fresh OOXML — so the misra keeps its visual side.
+      function cellAlignOf(cell) {
+        var p0 = cell.body.paragraphs.items && cell.body.paragraphs.items[0];
+        var al = p0 && p0.alignment;
+        if (al === "Right") return "right";
+        if (al === "Left") return "left";
+        return "center";
       }
 
       // Build the measurement canvas with the REAL font + size.
@@ -1300,6 +1320,28 @@
         if (!stripJustification(current)) return;
         var colPx = contentPx(cell);
 
+        // Jameel font-swap: measure each fasl (connected segment) in the base
+        // vs Kasheeda face, greedily swap the highest-gain fasls to the wider
+        // face until the misra fills the column, and rebuild the cell as
+        // OOXML with a per-run w:cs. Its own path — no word-range/tatweel/
+        // spacing handling applies, so it returns before that machinery.
+        if (mechanism === "font-swap") {
+          if (!canvasCtx || colPx <= 0) return; // no measurement context — leave the cell as-is
+          var cellAlign = cellAlignOf(cell);
+          var wideCss = "\"" + (AshaarFonts.kasheedaNameOf(fontId) || repName) + "\"";
+          var baseCss = "\"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
+          var fss = AshaarKashidaFontswap.splitSpans(stripJustification(current));
+          var wb = [], ww = [];
+          fss.forEach(function (s) {
+            canvasCtx.font = repSize + "pt " + baseCss; wb.push(canvasCtx.measureText(s).width);
+            canvasCtx.font = repSize + "pt " + wideCss; ww.push(canvasCtx.measureText(s).width);
+          });
+          var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, colPx);
+          var swapXml = AshaarWord.runsToMisraXml(sel.runs, cellAlign, opts);
+          plans.push({ cell: cell, ooxml: swapXml });
+          return; // handled — skip the tatweel/spacing paths for this cell
+        }
+
         // Per-word style tuples from the word ranges, then coalesce to runs.
         var words = [];
         (cell.__wordRanges.items || []).forEach(function (wr) {
@@ -1403,6 +1445,17 @@
       var changed = 0;
       for (var pi = 0; pi < plans.length; pi++) {
         var p = plans[pi];
+        if (p.ooxml) {
+          try {
+            p.cell.body.clear();
+            p.cell.body.insertOoxml(p.ooxml, Word.InsertLocation.replace);
+            await context.sync();
+            changed++;
+          } catch (e) {
+            if (debug) diags.push({ i: diags.length, font: "OOXML-FAIL", text: (e && e.message || "").slice(0, 14) });
+          }
+          continue;
+        }
         if (p.flat != null) {
           p.cell.body.paragraphs.getFirst().insertText(p.flat, Word.InsertLocation.replace);
           await context.sync();

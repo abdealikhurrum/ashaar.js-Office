@@ -1101,6 +1101,22 @@
       "</w:p>";
   }
 
+  // runs: [{text, swap}]; base vs Kasheeda cs name chosen per run (Jameel
+  // font-swap kashida — Task 8). swap:true fasls render in the wider
+  // "Kasheeda" face; the rest stay in the base face.
+  function runsToMisraXml(runs, align, opts) {
+    var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var baseName = AshaarFonts.wordNameOf(mode);
+    var wideName = AshaarFonts.kasheedaNameOf(mode) || baseName;
+    var body = (runs || []).map(function (r) {
+      var cs = r.swap ? wideName : baseName;
+      var rpr = "<w:rPr><w:rtl/>" + (cs ? '<w:rFonts w:cs="' + cs + '"/>' : "") + "</w:rPr>";
+      return "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
+    }).join("");
+    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" + body + "</w:p>";
+  }
+
   function baytRowsOoxml(bayt, si, opts) {
     var N = si.N, gapCols = si.gapCols, cwt = si.cwt;
     var textWidthPx = (opts || {})._textWidthPx || 0;
@@ -1339,6 +1355,7 @@
     coalesceRuns: coalesceRuns,
     distributeMicroSpaces: distributeMicroSpaces,
     renderForWordOoxml: renderForWordOoxml,
+    runsToMisraXml: runsToMisraXml,
     wrapOoxml: wrapOoxml,
     misraSpans: misraSpans,
     generateBareGrid12Ooxml: generateBareGrid12Ooxml,

@@ -514,4 +514,14 @@ assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase,
   console.log("word-html registry-font tests passed");
 }
 
+// ── runsToMisraXml (Jameel font-swap kashida — Task 8) ─────────────────────
+{
+  const xml = AshaarWord.runsToMisraXml(
+    [{text:"كہہ", swap:true},{text:" ", swap:false},{text:"تھے", swap:false}],
+    "right", { fontMode: "jameel" });
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "wider face on swapped fasl");
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq"') !== -1, "base face on non-swapped fasl");
+  console.log("word-html font-swap emitter tests passed");
+}
+
 console.log("word-html tests passed");
