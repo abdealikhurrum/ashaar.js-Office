@@ -620,4 +620,23 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
   console.log("word-html font-swap emitter tests passed");
 }
 
+// ── mehrElongate (form-aware Mehr tatweel) ──────────────────────────────────
+{
+  const ISO = {}; "بپتٹثسشفکگ".split("").forEach((c) => { ISO[c] = true; }); // isolatedInto
+  const FIN = {}; "بپتٹثفکگ".split("").forEach((c) => { FIN[c] = true; });   // finalInto (no س ش)
+  const T = "ـ";
+  // final form, allowed: "شب" — beh joined from sheen (dual) → final; ب ∈ FIN → tatweel after beh
+  assert.equal(AshaarWord.mehrElongate("شب", ISO, FIN), "شب" + T);
+  // seen in FINAL form NOT allowed: "نس" — noon joins → seen final; س ∉ FIN → unchanged
+  assert.equal(AshaarWord.mehrElongate("نس", ISO, FIN), "نس");
+  // seen in ISOLATED form allowed: "آس" — alef is right-only joiner → seen isolated; س ∈ ISO → tatweel
+  assert.equal(AshaarWord.mehrElongate("آس", ISO, FIN), "آس" + T);
+  // lone isolated allowed letter
+  assert.equal(AshaarWord.mehrElongate("ب", ISO, FIN), "ب" + T);
+  // trailing diacritic skipped; tatweel inserted after the base letter, before the mark
+  assert.equal(AshaarWord.mehrElongate("کتب" + "ٌ", ISO, FIN), "کتب" + T + "ٌ");
+  // not an allowed letter (lam) → unchanged
+  assert.equal(AshaarWord.mehrElongate("دل", ISO, FIN), "دل");
+}
+
 console.log("word-html tests passed");

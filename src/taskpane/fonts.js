@@ -25,8 +25,10 @@
       readerNote: true,
       tatweelRules: {
         version: "beta-2.0",
-        medialInto: ["ب","پ","ت","ٹ","ث","س","ش","ف","ک","گ"],
-        finalInto:  ["ب","پ","ت","ٹ","ث","ف","ک","گ"]
+        // Letters that take a clean trailing tatweel, by shaping form. Isolated
+        // adds seen/sheen (س ش) which final does not; medial takes no tatweel.
+        isolatedInto: ["ب","پ","ت","ٹ","ث","س","ش","ف","ک","گ"],
+        finalInto:    ["ب","پ","ت","ٹ","ث","ف","ک","گ"]
       } },
     // Gate G2 (2026-07-10, manual Word test) confirmed Jameel Noori Kasheeda's
     // elongated forms are applied by FONT (the "Kasheeda" named style in the

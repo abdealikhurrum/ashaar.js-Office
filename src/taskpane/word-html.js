@@ -1004,6 +1004,49 @@
     return Math.round((0.15 * s / 24) * 1000) / 1000;
   }
 
+  // ── Mehr per-font tatweel (form-aware) ───────────────────────────────────
+  // Minimal Arabic shaping just for Mehr's discrete trailing tatweel.
+  function isArabicMark(cp) {
+    return (cp >= 0x0610 && cp <= 0x061A) || (cp >= 0x064B && cp <= 0x065F) ||
+      cp === 0x0670 || (cp >= 0x06D6 && cp <= 0x06ED);
+  }
+  function isArabicLetter(cp) {
+    return (cp >= 0x0621 && cp <= 0x063A) || (cp >= 0x0641 && cp <= 0x064A) ||
+      (cp >= 0x066E && cp <= 0x066F) || (cp >= 0x0671 && cp <= 0x06D3) || cp === 0x06D5;
+  }
+  // Letters that connect only from the right (don't join onward to the left):
+  // after one of these, the next letter is in ISOLATED form.
+  var RIGHT_JOIN_ONLY = (function () {
+    var s = {};
+    [0x0622,0x0623,0x0624,0x0625,0x0627,0x062F,0x0630,0x0631,0x0632,0x0698,
+     0x0648,0x06C1,0x06C3,0x06BA,0x0671,0x0672,0x0673,0x0675,0x0677,0x06D5,
+     0x0688,0x0691,0x06D2,0x06D3].forEach(function (cp) { s[cp] = 1; });
+    return s;
+  }());
+  function connectsLeftward(cp) {
+    return isArabicLetter(cp) && !isArabicMark(cp) && !RIGHT_JOIN_ONLY[cp] && cp !== 0x0621;
+  }
+
+  // Add ONE trailing tatweel after a word's base final letter, but only when that
+  // letter is allowed for its shaping form: isolated (a lone letter, or one after
+  // a right-only joiner / non-joiner) uses `isolatedInto`; final (joined from the
+  // previous letter) uses `finalInto`. Trailing diacritics are skipped, and the
+  // tatweel goes right after the base letter (before any diacritic).
+  // isolatedSet/finalSet are maps { char: true }.
+  function mehrElongate(word, isolatedSet, finalSet) {
+    var s = String(word);
+    var i = s.length - 1;
+    while (i >= 0 && isArabicMark(s.charCodeAt(i))) i--;          // skip trailing marks
+    if (i < 0 || !isArabicLetter(s.charCodeAt(i))) return s;
+    var base = s.charAt(i);
+    var j = i - 1;
+    while (j >= 0 && isArabicMark(s.charCodeAt(j))) j--;          // previous base char
+    var finalForm = j >= 0 && connectsLeftward(s.charCodeAt(j));
+    var allowed = finalForm ? finalSet : isolatedSet;
+    if (!allowed || !allowed[base]) return s;
+    return s.slice(0, i + 1) + "ـ" + s.slice(i + 1);
+  }
+
   // ── OOXML table rendering ────────────────────────────────────────────────
 
   var BASE_CPM = 6; // baseline grid columns per misra
@@ -1412,6 +1455,7 @@
     containsArabic: containsArabic,
     wordFillJc: wordFillJc,
     kashidaExpansionFraction: kashidaExpansionFraction,
+    mehrElongate: mehrElongate,
     renderForWordOoxml: renderForWordOoxml,
     runsToMisraXml: runsToMisraXml,
     wrapOoxml: wrapOoxml,

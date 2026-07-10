@@ -1467,12 +1467,15 @@
         if (mechanism === "tatweel" && opts.justifyMode === "kashida") {
           if (!canvasCtx || colPx <= 0) return;
           var mehrFont = repSize + "pt \"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
-          var finalSet = {};
-          ((AshaarFonts.tatweelRulesOf(fontId) || {}).finalInto || []).forEach(function (c) { finalSet[c] = true; });
+          var mRules = AshaarFonts.tatweelRulesOf(fontId) || {};
+          var isoSet = {}, finSet = {};
+          (mRules.isolatedInto || []).forEach(function (c) { isoSet[c] = true; });
+          (mRules.finalInto || []).forEach(function (c) { finSet[c] = true; });
           var mline = stripJustification(current);
           var mparts = mline.split(" "), mtoks = [];
           mparts.forEach(function (wd, i) { if (i) mtoks.push(" "); mtoks.push(wd); });
-          var melong = mtoks.map(function (t) { return (t !== " " && finalSet[t.slice(-1)]) ? t + "ـ" : t; });
+          // Form-aware: trailing tatweel only on allowed isolated/final letters.
+          var melong = mtoks.map(function (t) { return t !== " " ? AshaarWord.mehrElongate(t, isoSet, finSet) : t; });
           var mwb = [], mww = [];
           canvasCtx.font = mehrFont;
           for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(canvasCtx.measureText(mtoks[mi]).width); mww.push(canvasCtx.measureText(melong[mi]).width); }
