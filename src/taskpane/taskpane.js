@@ -1088,12 +1088,20 @@
 
     setMessage("Justifying…");
 
-    // Whitespace-mechanism fonts (Gulzar, Noto, …) have no elongatable joins —
-    // injected tatweels shatter their shaping. Downgrade to spacing and warn
-    // instead of running the tatweel path against them.
-    if (mechanism === "whitespace" && opts.justifyMode === "kashida") {
+    // Only the tatweel mechanism (Mehr) has a working kashida/tatweel justify
+    // path. Whitespace-mechanism fonts (Gulzar, Noto, …) have no elongatable
+    // joins — injected tatweels shatter their shaping. Italic-run fonts
+    // (Jameel) need a dedicated slant-run justify engine that doesn't exist
+    // yet — until it does, Jameel must not fall through onto the tatweel
+    // engine either (it would inject literal tatweel glyphs into its text).
+    // Downgrade every non-tatweel mechanism to spacing and warn.
+    if (mechanism !== "tatweel" && opts.justifyMode === "kashida") {
       opts = Object.assign({}, opts, { justifyMode: "spacing" });
-      setMessage("“" + (AshaarFonts.get(fontId) || {}).label + "” has no stretch letters — filling by spacing instead.");
+      var label = (AshaarFonts.get(fontId) || {}).label;
+      var msg = mechanism === "italic-run"
+        ? "“" + label + "” kashida isn’t available yet — filling by spacing instead."
+        : "“" + label + "” has no stretch letters — filling by spacing instead.";
+      setMessage(msg);
     }
 
     await withWord(async function (context) {
