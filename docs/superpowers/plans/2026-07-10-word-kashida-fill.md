@@ -328,3 +328,18 @@ git commit -m "feat(word-fill): justifySelection applies native kashida jc + bre
 - **Deferred (noted):** the **tab-stop path** (`word-tabstop.js:150`, hardcoded `jc="center"`) is out of scope for this plan (tables are the primary layout); add a follow-up if tab-stop word-fill is needed. The §1 result-panel reporting and §6 reset of the trailing break / jc are their own plans.
 - **Type consistency:** `strengthToKashidaLevel(strength)→string`, `containsArabic(text)→bool`, `wordFillJc(text,strength)→string`, `kashidaExpansionFraction(strength)→number` — all consumed with these signatures in Tasks 4 & 6.
 - **Placeholder scan:** the OOXML-escape/wrap helper in Task 6 Step 3 must be the file's existing one — confirm its name when implementing (do not invent).
+
+
+---
+
+## REVISION (2026-07-10): re-render architecture (supersedes Task 6)
+
+**Finding:** per-cell `cell.body.insertOoxml(package, replace)` drops the kashida `jc` (verified via saved runtime OOXML). Authoring at **selection scope** preserves it. `insertPoem(true)` already does exactly that: `renderForWordOoxml(source, opts)` (→ `misraParaXml`, which emits word-fill jc) → `wrapOoxml` → `selection.insertOoxml(..., replace)` → re-wrap CC. And `AshaarTableAdopt.adoptTableToSource(rows, {direction})` already reconstructs source from cell text. So word-fill justify = reconstruct + `insertPoem(true)` with `justifyMode:"css"`.
+
+**Architecture (user-approved):** TWO PATHS. Engine-mode kashida (tatweel) keeps the in-place run-aware `justifySelection` (preserves per-run fonts). Word-fill/spacing/geometry-adjust use the re-render primitive.
+
+**Task R1 — misraParaXml: add shrunk paragraph mark (word-html.js).** In the word-fill branch, also emit `<w:pPr><w:rPr><w:sz w:val="4"/><w:szCs w:val="4"/></w:rPr>…` so the trailing empty line (from the break) is ~2pt. Spike confirmed the empty-line height comes from the paragraph mark, not the break run. TDD: assert the pPr rPr sz=4 present in word-fill output; absent in non-word-fill. Also drop the now-unused `wordFillFont` param if trivial (font comes from the render, not per-cell) — optional.
+
+**Task R2 — justifySelectionWordFill → reconstruct + insertPoem (taskpane.js, Word-verify).** Replace the per-cell insertOoxml body (commits bdc065b/6619340/ec97f86 superseded) with: find enclosing "Ashaar Poem" CC or selection tables → read each table's rows→cells text → `AshaarTableAdopt.adoptTableToSource(rows, {direction:"rtl"})` per table, join stanzas with "\n\n" → set `input.value = source` (like adoptTable) → select the CC/table range → `await insertPoem(true)` (opts already carry justifyMode:"css" + strength/width/gap/fontMode from the pane). Column expansion (§4 ~15%) is realized by the width the render uses (scaledTextWidth), not by poking columns. Verify in Word on marsiya-test.docx: cells kashida-stretch, tiny empty line, no error.
+
+**Deferred / coordinate with other worktree:** §8 Nastaliq cursor visibility + wider Urdu Nastaliq justification live in a separate worktree; do not touch here (keep mergeable).
