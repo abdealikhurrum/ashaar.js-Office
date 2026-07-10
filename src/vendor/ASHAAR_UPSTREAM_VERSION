@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=7a396773b17ff37abff5d5292618a0d7c15febf4
-date=2026-07-09T21:47:31-05:00
+commit=186c056f6e5570e8775e1257cb19331c85ac2b85
+date=2026-07-09T23:21:12-05:00
 package=ashaar-js
 version=0.1.0
-subject=Doc: note applySlotsMulti caller must keep slot.ri in range
+subject=Merge remote-tracking branch 'origin/master'

@@ -28,7 +28,10 @@
      0x0631,0x0632,0x0698,
      0x0648,0x06C1,0x06C3,0x06BA,
      0x0671,0x0672,0x0673,0x0675,0x0677,
-     0x06D5].forEach(function (cp) { s[cp] = 1; });
+     0x06D5,
+     // Urdu/Persian right-joiners: ڈ (ddal), ڑ (rreh), ے/ۓ (yeh barree).
+     // Without these the justifier would wrongly try to elongate after them.
+     0x0688,0x0691,0x06D2,0x06D3].forEach(function (cp) { s[cp] = 1; });
     return s;
   }());
 
@@ -112,9 +115,23 @@
       letters[2].cp === 0x0647;
   }
 
-  function canInsertTatweel(word, current, next) {
+  // Optional GSUB-derived priority table: { "AB": { priority, quality, blocked } }
+  // keyed by the two joining letters. Supplies a calligraphic tier (7–12), a
+  // designed-kashida quality, and a per-pair ligature blocklist read from the
+  // font. Absent entries fall back to DEFAULT_PRIORITY / neutral / not blocked,
+  // so a null table reproduces the original flat behavior.
+  function pairEntry(table, prevCp, nextCp) {
+    if (!table) return null;
+    return table[String.fromCharCode(prevCp) + String.fromCharCode(nextCp)] || null;
+  }
+
+  function canInsertTatweel(word, current, next, table) {
     if (!connectsToNext(word, current, next)) return false;
     if (isLamAlefSequence(current.cp, next.cp)) return false;
+    // Font ligature that would be destroyed by a tatweel here (e.g. beh-meem):
+    // the general form of the lam-alef protection, driven by the font's GSUB.
+    var e = pairEntry(table, current.cp, next.cp);
+    if (e && e.blocked) return false;
     return true;
   }
 
@@ -123,26 +140,27 @@
   }
 
   // Discover all legal tatweel insertion points for a single word.
-  function tatweelSlots(word) {
+  function tatweelSlots(word, table) {
     var slots = [];
     var letters = getLetters(word);
     if (isAllahWord(letters)) return slots;
     for (var i = 0; i < letters.length - 1; i++) {
-      if (canInsertTatweel(word, letters[i], letters[i + 1])) {
-        slots.push({ pos: insertionPosition(letters[i + 1]), priority: DEFAULT_PRIORITY });
+      if (canInsertTatweel(word, letters[i], letters[i + 1], table)) {
+        var e = pairEntry(table, letters[i].cp, letters[i + 1].cp);
+        slots.push({ pos: insertionPosition(letters[i + 1]), priority: e ? e.priority : DEFAULT_PRIORITY });
       }
     }
     return slots;
   }
 
   // Spread a fixed number of tatweels across the legal slots.
-  function spreadTatweels(text, n) {
+  function spreadTatweels(text, n, table) {
     text = stripTatweels(text);
     if (n <= 0) return text;
     var words = text.split(' ');
     var allSlots = [];
     words.forEach(function (w, wi) {
-      tatweelSlots(w).forEach(function (s) {
+      tatweelSlots(w, table).forEach(function (s) {
         allSlots.push({ wi: wi, pos: s.pos, priority: s.priority });
       });
     });
@@ -186,9 +204,15 @@
     }).join(' ');
   }
 
-  // Build a ranked list of insertion slots for a line, optionally using font quality.
+  // Build a ranked list of insertion slots for a line. The optional
+  // `params.priorityTable` supplies per-pair calligraphic tiers (7–12),
+  // designed-kashida quality, and the ligature blocklist; `fontProfile` supplies
+  // probe-measured quality as a fallback. The base score is the pair's tier, so
+  // tatweel lands at the best joins first (Seen/Sad → Normal); the font-quality
+  // bonus breaks ties within a tier.
   function buildSlots(text, params, fontProfile) {
     params = params || {};
+    var table = params.priorityTable || null;
     var words = text.split(' ');
     var slots = [];
     words.forEach(function (w, wi) {
@@ -197,13 +221,13 @@
       for (var i = 0; i < letters.length - 1; i++) {
         var current = letters[i];
         var next = letters[i + 1];
-        if (!canInsertTatweel(w, current, next)) continue;
-        var base = DEFAULT_PRIORITY;
-        var bonus = 0;
-        if (fontProfile) {
-          var q = fontProfile.getQuality(w[current.index], w[next.index]);
-          bonus = (q - 0.5) * (params.fontQualityBoost || 0);
-        }
+        if (!canInsertTatweel(w, current, next, table)) continue;
+        var e = pairEntry(table, current.cp, next.cp);
+        var base = e ? e.priority : DEFAULT_PRIORITY;
+        var quality = null;
+        if (e && typeof e.quality === 'number') quality = e.quality;
+        else if (fontProfile) quality = fontProfile.getQuality(w[current.index], w[next.index]);
+        var bonus = quality == null ? 0 : (quality - 0.5) * (params.fontQualityBoost || 0);
         slots.push({ wi: wi, pos: insertionPosition(next), score: base + bonus });
       }
     });

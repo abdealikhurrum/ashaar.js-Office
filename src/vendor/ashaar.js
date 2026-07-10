@@ -42,6 +42,9 @@
  *     'kashida' — JS tatweel insertion with DOM measurement (most accurate)
  *     'spacing' — JS word-spacing/scale balancing without inserting tatweels
  *     true      — alias for 'kashida'
+ *   opts.priorityTable: optional GSUB priority table ({ "AB": { priority,
+ *     quality, blocked } }) forwarded to the kashida justifier for the ligature
+ *     blocklist + calligraphic tier ordering (see ashaar-justify.js).
  *   opts.layout:
  *     'columns' — two-column bayts
  *     'stacked' — sadr above ajuz, with ajuz indented
@@ -364,7 +367,9 @@
     var lo = 1, hi = text.replace(/\s/g, '').length, best = text;
     while (lo <= hi) {
       var mid = (lo + hi) >> 1;
-      var candidate = currentJustify.spreadTatweels(text, mid);
+      // Pass the GSUB priority table so the DOM kashida path honors the ligature
+      // blocklist + tiers, matching the pure justifyLine path used off-DOM.
+      var candidate = currentJustify.spreadTatweels(text, mid, opts.priorityTable);
       if (probeWidth(probe, candidate) <= effectiveTarget) { best = candidate; lo = mid + 1; }
       else { hi = mid - 1; }
     }
