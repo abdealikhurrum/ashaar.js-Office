@@ -71,17 +71,33 @@ Triggered from the result panel's "font not loaded" fix, or opened directly. Rew
 
 **Result-panel inline reason:** at the "font not loaded" flag, a one-line version — "the pane can't see Word's fonts — give it the file once" — linking to this full explainer.
 
-### 3. Fix "Let Word fill it" to actually justify (→ `w:jc="distribute"`)
+### 3. Fix "Let Word fill it" to actually justify (native Word kashida)
 
-Make the mode emit `w:jc="distribute"` on the inserted/justified Word paragraphs (both the table path in `word-html.js` and, where applicable, the tab-stop path). `distribute` justifies **every** line including the last, so a single-line misra fills **without a trailing Shift-Enter**. This makes the §2 fallback real: Word justifies using its own installed font — no pane measurement, no sandbox wall.
+Today `justifyMode:"css"` never reaches the document. Rework the mode to emit real Word justification on the inserted/justified paragraphs (table path in `word-html.js`; tab-stop path where applicable), using Word's own font — no pane measurement, no sandbox wall (the §2 fallback).
 
-### 4. Stretch strength — honest + expressive
+**Word's justification values** (verified, OOXML `w:jc` / `JustificationValues`):
+- `lowKashida` / `mediumKashida` / `highKashida` — **true kashida**: elongate the connecting strokes (letters stay joined), at three intensities. Arabic/complex-script only.
+- `distribute` — **spacing, not kashida**: "distribute all characters equally" (inter-character + inter-word spacing). Script-agnostic; fills every line including the last.
 
-- **Wire the slider into the Justify path.** The Stretch-strength value drives fill on **Justify Selected Text** (seeds/overrides the calibrated `targetFill`), so the control — and the result panel's "raise strength" recourse — actually do something.
-- **Two regimes:**
-  - **Low→mid:** fill `~90%→100%` of the current column (today's behavior, now slider-driven).
-  - **High ("expressive") zone:** past 100%, **override the cap** — auto-widen the column (engage Auto-fit) and/or continue elongating beyond the current column, so letters visibly extend for dramatic effect that responds to the slider's magnitude. The regime boundary is shown on the control so the jump from "fill" to "stretch" is legible.
-- Interacts with the "hit column/page width" recourse (§1): raising strength into the expressive zone is what widens past the column ceiling.
+**Mapping:**
+- **Arabic:** emit a **kashida level** (mapped from strength — see §4) for genuine stroke elongation.
+- **Last-line problem + fix:** kashida (like `both`) does **not** stretch the last line of a paragraph, and each misra cell is a single line = the last line. So the app **auto-appends a trailing soft line break (`<w:br/>`)** to the misra paragraph, demoting it from last-line so Word kashidas it — the user presses nothing. The break run is shrunk (e.g. ~2pt) / line spacing tightened to minimize the trailing empty line's height.
+- **Non-Arabic fallback:** `distribute` (spacing) — the only value that fills a single last line without the break, for text kashida can't elongate. Not a kashida substitute for Arabic (it's loose spacing).
+
+**Verify-on-device risk (flag):** whether the trailing `<w:br/>` reliably triggers kashida on line 1, the empty-line height after shrinking, and kashida behavior across Word builds — all require testing in Word. This is the second place a last-line/trailing-break subtlety bites; treat as the riskiest task.
+
+### 4. Stretch strength — honest, mode-specific, expressive
+
+- **Wire the slider into the Justify path.** Today the slider does nothing on Justify (auto-calibrated `targetFill`). Make the Stretch-strength value drive fill on **Justify Selected Text**, so the control — and the result panel's "raise strength" recourse — actually do something.
+- **The fill lever is mode-specific** (the slider drives whatever the chosen mode uses):
+  - **Ashaar.js engine (tatweel):** more **tatweels** at legal joins. Never word spacing.
+  - **Space out the words:** more **spaces** (that mode's mechanism — spacing legitimately grows here).
+  - **Let Word fill it:** the strength picks the Word **kashida level** (`low → medium → high`, §3).
+- **Ashaar.js-engine two regimes (0–24 slider):**
+  - **0–15:** today's fill behavior, now slider-driven (fills toward the column edge).
+  - **15–24 (expressive):** raise the **tatweel cap** from **1× → 3×** the engine's normal limit along an **exponential** curve (eases in just past 15, then accelerates to 3× at 24). Extra tatweels distribute across **legal joins only** (illegal joins always skipped). Tick shown on the slider at 15; the slider reads its multiplier (e.g. "24 · 3×").
+  - **Bounded by the cell edge — no auto-resize.** The tatweel cap is usually the first barrier (not column width), so lifting it fills lines that fell short *within the existing cell*. The table is **never** auto-widened. If a line still can't fit, that is the separate, user-initiated **Auto-fit** recourse (§1 "hit column/page width").
+- Not word spacing anywhere in engine mode; not a column resize.
 
 ### 5. Mode chooser — plain language, Ashaar.js engine as the hero
 
@@ -91,7 +107,7 @@ Reframe the "Justification" control (header: **"How should lines fill the column
 |---|---|
 | **Ashaar.js engine** — *stretches the letters (kashida)* · **recommended** | The engine reads your actual font and elongates letters only at the joins a scribe would use, never breaking a ligature. Chips: *reads your font · best-join placement · fine strength control*. Owns the Stretch-strength slider (§4). |
 | **Space out the words** | Adds gaps between words instead of stretching letters. Use when a font's letters can't stretch. |
-| **Let Word fill it** | Word's own justify — fills every line, no Shift-Enter, **needs no font loaded** (the fallback of §2/§3). |
+| **Let Word fill it** | Word's own kashida — real letter elongation using **Word's installed font**, so it **needs no font loaded** (the fallback of §2). Strength picks the intensity (low/med/high); the app auto-inserts the trailing break so single misra lines actually stretch (§3). |
 | **Leave as typed** | No filling. |
 
 The Ashaar.js-engine framing is also what *motivates* loading a font (§2): the engine's font-measuring intelligence is the reason the file matters.
@@ -99,7 +115,12 @@ The Ashaar.js-engine framing is also what *motivates* loading a font (§2): the 
 ### 6. Undo / reset
 
 - **Undo hint** in the result panel after applying: OS-aware `Press ⌘Z / Ctrl+Z to undo` — native, restores the exact prior state.
-- **Reset to unstretched** button: strips the poem's tatweels/micro-spaces and resets any scaled sizes back to the bare lines via the reducible engine. A deterministic clean slate, clearly labeled as a reset (not a step-undo).
+- **Reset to unstretched** button: a deterministic clean slate that undoes **every** fill artifact across all modes, not just tatweels. It must reverse:
+  - **tatweels** (engine mode) — strip (`stripJustification`);
+  - **micro-spaces** (spacing mode) — strip;
+  - **uniform font scale** (spacing/scale) — reset run sizes to their originals;
+  - **Word-fill artifacts (§3)** — remove the auto-inserted trailing `<w:br/>` **and** reset the paragraph's `w:jc` from the kashida/`distribute` value back to its natural alignment (right/left/center by column position).
+  So `stripJustification` alone is insufficient for Word-fill mode; Reset is a mode-complete cleanup. (Native ⌘Z is unaffected — Word's own history reverses all of this regardless.)
 
 ---
 
@@ -107,8 +128,8 @@ The Ashaar.js-engine framing is also what *motivates* loading a font (§2): the 
 
 Ordered so honesty-fixes land before the guidance that points at them:
 
-1. **§3 Fix "Let Word fill it" → distribute** — small, unblocks the font fallback and mode framing. Testable via OOXML assertion.
-2. **§4 Stretch strength wired + expressive regime** — engine/behavior; makes the slider and the "raise strength" recourse real.
+1. **§3 Fix "Let Word fill it" → native Word kashida + auto trailing break** — unblocks the font fallback and mode framing. OOXML assertion for the `w:jc` value + trailing break; **but the real behavior (kashida on the single line, empty-line height) must be verified in Word** — riskiest task, do it first so surprises surface early.
+2. **§4 Stretch strength wired + mode-specific fill + expressive tatweel cap (1×→3× exponential, cell-bounded)** — engine/behavior; makes the slider and the "raise strength" recourse real.
 3. **§1 Justification Result panel** (+ empty state, recourse wiring, undo hint) — the centerpiece; depends on 3 & 4 for accurate recourse.
 4. **§2 Font-loading flow** (why, detect/prefill, dropzone, OS locate, caveats, fallback) — links from §1's font recourse.
 5. **§5 Mode chooser rename/reframe** + **§6 Reset action** — presentation + the reset button.
@@ -120,7 +141,13 @@ Ordered so honesty-fixes land before the guidance that points at them:
 - Redesigning Table Input / Conversion / qaseeda panels beyond what these components touch.
 - The qaseeda profile path's own strength wiring (already uses `strengthToTargetFill`); revisit only if it conflicts with §4.
 
+## Resolved during design (was open)
+
+- **§4 expressive mapping:** tick at **15**; 15→24 raises the tatweel cap **1×→3× on an exponential curve**; **cell-bounded, no auto-resize**; the fill lever is **mode-specific** (tatweels / spaces / Word kashida level).
+- **§3 Word fill:** native **kashida levels** + **auto trailing `<w:br/>`** (not plain `distribute`, which is spacing); `distribute` only as a non-Arabic fallback.
+- **§6 Reset** must also remove the trailing break and reset `w:jc`.
+
 ## Open questions for spec review
 
-- Exact expressive-zone mapping in §4 (where the "widen/over-stretch" boundary sits on 0–24, and whether it auto-toggles Auto-fit vs. exceeds column directly).
-- Whether the result panel should also appear after **insert** (Insert as Table), or only after **Justify**.
+- Whether the result panel should also appear after **Insert as Table**, or only after **Justify**.
+- The exact strength→kashida-level thresholds in Word-fill mode (where low/medium/high switch on 0–24).
