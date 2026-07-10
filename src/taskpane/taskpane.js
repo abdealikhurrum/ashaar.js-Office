@@ -1215,6 +1215,15 @@
         try { await document.fonts.load(repSize + "pt \"" + repName + "\""); } catch (e) {}
       }
 
+      // Jameel font-swap also measures fasls in the Kasheeda (wide) face on
+      // this same canvas — force that @font-face to finish loading too, or
+      // measureText silently falls back to a substitute font and corrupts
+      // selectSwapRuns' gain ranking (wrong fasls get swapped).
+      if (canvasCtx && mechanism === "font-swap" && typeof document !== "undefined" && document.fonts && document.fonts.load) {
+        var kName = AshaarFonts.kasheedaNameOf(fontId);
+        if (kName) { try { await document.fonts.load(repSize + "pt \"" + kName + "\""); } catch (e) {} }
+      }
+
       // Auto-fit (in place): widen each table's columns so the widest misra has
       // kashida headroom, then justify into the new widths. Uses the desktop-only
       // TableColumn API (WordApiDesktop 1.3); on hosts without it, justify proceeds
@@ -1448,7 +1457,7 @@
         if (p.ooxml) {
           try {
             p.cell.body.clear();
-            p.cell.body.insertOoxml(p.ooxml, Word.InsertLocation.replace);
+            p.cell.body.insertOoxml(AshaarWord.wrapOoxml(p.ooxml), Word.InsertLocation.replace);
             await context.sync();
             changed++;
           } catch (e) {
