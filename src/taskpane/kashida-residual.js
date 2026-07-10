@@ -10,7 +10,7 @@
   "use strict";
 
   // Hair space (U+200A) — same glyph the spacing path uses to realize word gaps.
-  var HAIR_SPACE = " ";
+  var HAIR_SPACE = " ";
 
   // How many micro-space glyphs to add to close `residualPx`, never exceeding
   // capEm*sizePx per gap (default 0.28em/gap). Returns 0 for non-positive
