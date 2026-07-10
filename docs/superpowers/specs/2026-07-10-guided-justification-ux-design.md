@@ -135,6 +135,7 @@ Rename the "Qaseeda profile" concept to **Profile** and make it a first-class, t
 **Change:**
 - **Rename Qaseeda → Profile** throughout the UI. Builds on the existing profile store (`AshaarProfiles`, `strengthToTargetFill`, `taskpane.js:447`, apply-to-all) — the machinery exists; this is naming + IA.
 - **A Profile saves:** mode (§5), stretch strength (§4), table width, font — the kashida/formatting preferences — **plus an optional link to a saved Template** (§ Templates feature) for the band **shape**. Applying a profile sets the look and, if a template is linked, the layout too — **without duplicating** the Templates system (the shape still lives as a template; the profile just references it).
+- **Extract shape into a profile in one step.** The existing **"Capture from Word"** (`captureSelectedTableLayout`) already reads a table's cell widths → infers the 12-col spans → saves a Template. Add a **"Save this table's shape into the current Profile"** action that runs capture **and** links the resulting template to the active profile in one click — so a shape can be pulled off any drawn/adopted/converted table and reused via the profile.
 - **Surface at the top:** the pane leads with the **Profile identity** (name selector + New) and the note "A saved set of preferences, applied to every band/bayt tagged with it — reuse across a whole nazam," then its parameters directly beneath. Mode (§5) and Stretch strength (§4) *are* the profile's parameters, not free-floating globals. Advanced settings (per-font correction, debug colors) collapse.
 - **Unnamed / one-off:** when no profile is chosen, default to **"Untitled — current selection"** so a plain Justify still works without forcing profile creation; the same top controls govern that one-off justify. *(Confirm during plan.)*
 
@@ -155,6 +156,7 @@ Ordered so honesty-fixes land before the guidance that points at them:
 ### Separate sub-project (own spec, same branch)
 
 - **Side-by-side ↔ stacked couplet converter** — a layout transform that restacks existing side-by-side bayts (sadr | ajuz) into stacked form (sadr over ajuz) in place, reusing the app's `stacked` layout. Not justification guidance; gets its own brainstorm → spec → plan when we reach it.
+- **Entry-point / workflow simplification** — an IA review of the table-creation entry points (Draw Table, Drop Grid, Adopt Existing Table, and the Conversion-mode *Insert as Table* auto-layout), which overlap and confuse. Decide the canonical minimal set (e.g. is *Insert as Table* redundant?) as its own simplification pass — deliberately **not** decided inside this spec.
 
 ## Out of scope
 
@@ -171,5 +173,6 @@ Ordered so honesty-fixes land before the guidance that points at them:
 
 ## Open questions for spec review
 
-- Whether the result panel should also appear after **Insert as Table**, or only after **Justify**.
 - The exact strength→kashida-level thresholds in Word-fill mode (where low/medium/high switch on 0–24).
+- Whether unnamed one-off justify ("Untitled — current selection") is the right default (§7).
+- *(Deferred to the entry-point simplification sub-project: whether "Insert as Table" survives, and if so whether the result panel appears after it. For now the result panel is Justify-scoped.)*
