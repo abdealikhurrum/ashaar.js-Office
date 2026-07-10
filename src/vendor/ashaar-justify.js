@@ -278,35 +278,70 @@
     return insertIntoWords(text, insertMap, TATWEEL);
   }
 
-  // Find the maximum acceptable number of tatweels for a single line.
-  function justifyLine(text, targetWidth, ctx, params, fontProfile) {
+  // Run-aware kashida: justify a misra whose pieces may each use a different
+  // font. runs = [{ text, measure, fontProfile? }]; returns a same-length array
+  // of { text } with tatweels inserted, measured per run in its own font.
+  function justifyRuns(runs, targetWidth, params) {
     params = params || {};
-    text = stripTatweels(text);
+    runs = runs || [];
+    var texts = runs.map(function (r) {
+      if (!r || typeof r.measure !== 'function') {
+        throw new TypeError('run is missing a measure() function');
+      }
+      return stripTatweels(r.text || '');
+    });
+    var results = texts.map(function (t) { return { text: t }; });
+
+    // Nothing to stretch: no visible text.
+    var hasText = texts.some(function (t) { return t.trim(); });
+    if (!hasText) return results;
+
+    // Already fills the target width (measureRunsNatural sums per-run widths).
+    var natural = measureRunsNatural(runs);
     var target = targetWidth * (params.targetFill || 1);
-    var natural = ctx.measureText(text).width;
+    if (natural >= target) return results;
 
-    // If the line already fits, or it has no visible text, do nothing.
-    if (natural >= target || !text.trim()) return text;
+    // Build a global, quality-ranked slot list tagged with the owning run.
+    var slots = [];
+    texts.forEach(function (t, ri) {
+      buildSlots(t, params, runs[ri].fontProfile || null).forEach(function (s) {
+        slots.push({ ri: ri, wi: s.wi, pos: s.pos, score: s.score });
+      });
+    });
+    if (!slots.length) return results;
+    slots.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.ri !== b.ri) return a.ri - b.ri;
+      if (a.wi !== b.wi) return a.wi - b.wi;
+      return a.pos - b.pos;
+    });
 
-    // Build the ranked insertion points and stop early if no candidate exists.
-    var slots = buildSlots(text, params, fontProfile);
-    if (!slots.length) return text;
-
-    // Binary search the number of tatweels that fit within the target width.
-    // The upper bound allows several tatweels per joining slot so a line can fill a
-    // wide column (the search still stops at `target`, so it never over-stretches).
-    var lo = 1, hi = text.replace(/\s/g, '').length * 8, best = text;
+    // Binary-search the total tatweel count; width is monotonic in the count.
+    var totalLetters = texts.reduce(function (acc, t) {
+      return acc + t.replace(/\s/g, '').length;
+    }, 0);
+    var lo = 1, hi = totalLetters * 8, best = texts;
     while (lo <= hi) {
       var mid = (lo + hi) >> 1;
-      var candidate = applySlots(text, slots, mid);
-      if (ctx.measureText(candidate).width <= target) {
-        best = candidate;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
+      var cand = applySlotsMulti(texts, slots, mid);
+      var w = 0;
+      for (var k = 0; k < runs.length; k++) w += runs[k].measure(cand[k]);
+      if (w <= target) { best = cand; lo = mid + 1; }
+      else { hi = mid - 1; }
     }
-    return best;
+    return best.map(function (t) { return { text: t }; });
+  }
+
+  // Find the maximum acceptable number of tatweels for a single line.
+  // Thin wrapper over justifyRuns (single run) so the single- and multi-font
+  // paths share one algorithm.
+  function justifyLine(text, targetWidth, ctx, params, fontProfile) {
+    var run = {
+      text: text,
+      measure: function (s) { return ctx.measureText(s).width; },
+      fontProfile: fontProfile || null
+    };
+    return justifyRuns([run], targetWidth, params)[0].text;
   }
 
   // Apply justification to each non-empty line in the input array.
@@ -325,6 +360,7 @@
     justifyLines: justifyLines,
     insertIntoWords: insertIntoWords,
     applySlotsMulti: applySlotsMulti,
-    measureRunsNatural: measureRunsNatural
+    measureRunsNatural: measureRunsNatural,
+    justifyRuns: justifyRuns
   };
 }));

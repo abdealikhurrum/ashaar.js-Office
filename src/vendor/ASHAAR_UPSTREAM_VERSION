@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=aafdb47b89633dcfb8a52a609e55b2ef3a753288
-date=2026-07-09T21:28:56-05:00
+commit=3c2ec37728d9e3847d575634b939c9f07a06ce0d
+date=2026-07-09T21:33:27-05:00
 package=ashaar-js
 version=0.1.0
-subject=Add run-aware splice helpers (insertIntoWords, applySlotsMulti, measureRunsNatural)
+subject=Add justifyRuns; refactor justifyLine to delegate to it
