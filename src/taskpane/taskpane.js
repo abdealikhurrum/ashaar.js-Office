@@ -861,9 +861,9 @@
 
       // Measurement canvas at the selection's font — used for auto-fit, the nudge, and kashida.
       var fontSizeP = selFontP.font.size || 12;
-      var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                    : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                    : (selFontP.font.name || "Times New Roman");
+      var modeP = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+      var fontNameP = AshaarFonts.wordNameOf(modeP)
+                    || selFontP.font.name || "Times New Roman";
       var ctxP = document.createElement("canvas").getContext("2d");
       if (ctxP) ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
 
@@ -998,9 +998,9 @@
       var opts = options();
       if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
         var fontSize = selFont.font.size || 12;
-        var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                     : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                     : (selFont.font.name || "Times New Roman");
+        var mode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+        var fontName = AshaarFonts.wordNameOf(mode)
+                     || selFont.font.name || "Times New Roman";
         var canvas = document.createElement("canvas");
         var ctx = canvas.getContext("2d");
         if (ctx) {
@@ -1066,9 +1066,8 @@
     } catch (e) { /* fall through to normal justify */ }
 
     // Fallback font from the pane — used only when a cell reports no explicit font.
-    var fallbackName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                     : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                     : "Times New Roman";
+    var fbMode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+    var fallbackName = AshaarFonts.wordNameOf(fbMode) || "Times New Roman";
     var doKashida = opts.justifyMode === "kashida" || opts.justifyMode === "spacing";
     var CELL_MARGIN_PT = 5.76; // Word default cell side margin (0.08") reserved for text
     var debug = !!(debugMode && debugMode.checked);

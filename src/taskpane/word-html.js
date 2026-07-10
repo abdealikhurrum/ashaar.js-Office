@@ -1228,8 +1228,9 @@
       "</w:tblPr>";
     var emptyPara = "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/></w:pPr></w:p>";
     var rpr = "<w:rPr><w:rtl/>";
-    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var csName = AshaarFonts.wordNameOf(mode);
+    if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
     rpr += "</w:rPr>";
     var rows = (templateData.rows || []).map(function (row) {
       var cells = row.map(function (cell, cIdx) {
@@ -1269,8 +1270,9 @@
       return '<w:gridCol w:w="' + w + '"/>';
     }).join("") + "</w:tblGrid>";
     var rpr = "<w:rPr><w:rtl/>";
-    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var csName = AshaarFonts.wordNameOf(mode);
+    if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
     rpr += "</w:rPr>";
     var rows = (layoutTable.rows || []).map(function (row) {
       var cells = row.map(function (cell, cIdx) {
