@@ -1,10 +1,10 @@
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = factory(require("../vendor/ashaar-justify"));
+    module.exports = factory(require("../vendor/ashaar-justify"), require("./fonts"));
   } else {
-    root.AshaarTabStop = factory(root.AshaarJustify);
+    root.AshaarTabStop = factory(root.AshaarJustify, root.AshaarFonts);
   }
-}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify) {
+}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify, AshaarFonts) {
 
   // US-Letter with 1-inch margins: 6.5" × 1440 twips/inch = 9360 twips.
   // Used as the fallback when no measured page width is available (tests, browser preview).
@@ -64,9 +64,9 @@
 
   function runPropsXml(opts, isRefrain) {
     var inner = "<w:rtl/>";
-    var font = (opts || {}).fontMode;
-    if (font === "nastaliq") inner += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if (font === "arabic-serif") inner += '<w:rFonts w:cs="Scheherazade New"/>';
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var csName = AshaarFonts.wordNameOf(mode);
+    if (csName) inner += '<w:rFonts w:cs="' + csName + '"/>';
     if (isRefrain) inner += '<w:color w:val="A7352A"/>';
     return "<w:rPr>" + inner + "</w:rPr>";
   }

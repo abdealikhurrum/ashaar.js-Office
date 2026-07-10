@@ -1,10 +1,10 @@
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = factory(require("../vendor/ashaar-justify"));
+    module.exports = factory(require("../vendor/ashaar-justify"), require("./fonts"));
   } else {
-    root.AshaarWord = factory(root.AshaarJustify);
+    root.AshaarWord = factory(root.AshaarJustify, root.AshaarFonts);
   }
-}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify) {
+}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify, AshaarFonts) {
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -139,9 +139,9 @@
 
   function fontFamilyStyle(opts) {
     opts = opts || {};
-    if (opts.fontMode === "nastaliq") return "font-family:'Noto Nastaliq Urdu','Jameel Noori Nastaleeq',serif";
-    if (opts.fontMode === "arabic-serif") return "font-family:'Scheherazade New','Amiri','Times New Roman',serif";
-    return "";
+    var mode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode; // legacy alias
+    var css = AshaarFonts.cssFamilyOf(mode);
+    return css ? "font-family:" + css : "";
   }
 
   function tableStyle(opts) {
@@ -1090,8 +1090,9 @@
     var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
-    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var csName = AshaarFonts.wordNameOf(mode);
+    if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
     rpr += "</w:rPr>";
     var ind = indTwips ? '<w:ind w:left="' + indTwips + '"/>' : "";
     return "<w:p>" +
@@ -1317,6 +1318,7 @@
   }
 
   return {
+    fontFamilyStyle: fontFamilyStyle,
     renderForWord: renderForWord,
     renderTextWithLayoutForWord: renderTextWithLayoutForWord,
     renderTemplateForWord: renderTemplateForWord,

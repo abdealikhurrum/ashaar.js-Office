@@ -499,4 +499,19 @@ assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase,
   assert.deepEqual(AshaarWord.distributeMicroSpaces(["a b"], 0, HAIR), ["a b"]);
 }
 
+// Registry-driven fonts: Mehr/Gulzar reach the OOXML cs name and preview stack.
+{
+  const AshaarFonts = require("../src/taskpane/fonts");
+  assert.strictEqual(AshaarFonts.wordNameOf("mehr"), "Mehr Nastaliq Web");
+  // fontFamilyStyle now delegates to the registry
+  const mehrCss = AshaarWord.fontFamilyStyle({ fontMode: "mehr" });
+  assert.ok(/Mehr Nastaliq Web/.test(mehrCss), "mehr css from registry");
+  const gulzarCss = AshaarWord.fontFamilyStyle({ fontMode: "gulzar" });
+  assert.ok(/Gulzar/.test(gulzarCss), "gulzar css from registry");
+  // legacy "nastaliq" alias still resolves to a Nastaliq face (Noto)
+  const notoCss = AshaarWord.fontFamilyStyle({ fontMode: "nastaliq" });
+  assert.ok(/Noto Nastaliq Urdu/.test(notoCss), "nastaliq alias preserved");
+  console.log("word-html registry-font tests passed");
+}
+
 console.log("word-html tests passed");

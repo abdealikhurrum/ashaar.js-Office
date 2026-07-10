@@ -253,9 +253,9 @@
   }
 
   function previewFontFamily(font) {
-    if (font === "nastaliq") return "\"Noto Nastaliq Urdu\", \"Jameel Noori Nastaleeq\", serif";
-    if (font === "arabic-serif") return "\"Scheherazade New\", \"Amiri\", \"Times New Roman\", serif";
-    return "\"Times New Roman\", serif";
+    var mode = font === "nastaliq" ? "noto" : font;
+    var css = AshaarFonts.cssFamilyOf(mode);
+    return css || "\"Times New Roman\", serif";
   }
 
   function setMessage(text) {
