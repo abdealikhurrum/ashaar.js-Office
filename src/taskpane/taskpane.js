@@ -1055,6 +1055,8 @@
 
   async function justifySelection() {
     var opts = options();
+    var fontId = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+    var mechanism = AshaarFonts.mechanismOf(fontId);
 
     // Hybrid qaseeda trigger: if the cursor's block belongs to a qaseeda that has
     // a stored profile, justify by applying that profile across ALL its blocks so
@@ -1074,6 +1076,14 @@
     var diags = [];
 
     setMessage("Justifying…");
+
+    // Whitespace-mechanism fonts (Gulzar, Noto, …) have no elongatable joins —
+    // injected tatweels shatter their shaping. Downgrade to spacing and warn
+    // instead of running the tatweel path against them.
+    if (mechanism === "whitespace" && opts.justifyMode === "kashida") {
+      opts = Object.assign({}, opts, { justifyMode: "spacing" });
+      setMessage("“" + (AshaarFonts.get(fontId) || {}).label + "” has no stretch letters — filling by spacing instead.");
+    }
 
     await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -1313,6 +1323,21 @@
 
         var outTexts; // per-run text to write back (null when spacing writes properties only)
         var sp = null;
+
+        // Mehr's tatweel whitelist: block the engine from inserting a tatweel
+        // into any join the font can't actually render (medialInto only —
+        // finalInto's narrower س/ش rule is a rendering-time check, not
+        // table-expressible here). Rebuilt per cell from that cell's own text.
+        if (mechanism === "tatweel") {
+          var rules = AshaarFonts.tatweelRulesOf(fontId);
+          if (rules) {
+            var corpus = runs.map(function (r) { return r.text; }).join(" ");
+            calibParams = Object.assign({}, calibParams, {
+              priorityTable: AshaarTatweel.buildPriorityTable(corpus, rules)
+            });
+          }
+        }
+
         if (opts.justifyMode === "kashida") {
           outTexts = AshaarJustify.justifyRuns(primRuns, colPx, calibParams).map(function (o) { return o.text; });
         } else {
