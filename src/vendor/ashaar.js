@@ -316,6 +316,17 @@
     return Math.min(max, Math.max(min, n));
   }
 
+  // Given one entry per misra child node, return the ordered run specs to
+  // justify, dropping whitespace-only nodes. DOM-free so it is unit-testable;
+  // the caller supplies computed-font identity (fontKey) and size per child.
+  function misraRunSpecs(childStyles) {
+    return (childStyles || []).filter(function (c) {
+      return c && typeof c.text === 'string' && c.text.trim();
+    }).map(function (c) {
+      return { text: c.text, fontKey: c.fontKey, fontSize: c.fontSize };
+    });
+  }
+
   function justifyMisra(spanEl, probe, targetWidth, opts) {
     opts = opts || {};
     var text = spanEl.dataset.ashaarOriginal;
@@ -503,5 +514,5 @@
     }
   }
 
-  return { parse: parse, render: render, renderText: renderText, init: init, justifyEl: justifyEl, applyAutoLayout: applyAutoLayout, applyRenderOptions: applyRenderOptions };
+  return { parse: parse, render: render, renderText: renderText, init: init, justifyEl: justifyEl, applyAutoLayout: applyAutoLayout, applyRenderOptions: applyRenderOptions, misraRunSpecs: misraRunSpecs };
 }));

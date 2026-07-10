@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=186c056f6e5570e8775e1257cb19331c85ac2b85
-date=2026-07-09T23:21:12-05:00
+commit=dd0306d0dd0082bdd2581a5300975dd1c51b45b2
+date=2026-07-09T23:52:09-05:00
 package=ashaar-js
 version=0.1.0
-subject=Merge remote-tracking branch 'origin/master'
+subject=feat: misraRunSpecs helper for run-aware web justification
