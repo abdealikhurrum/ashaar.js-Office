@@ -786,3 +786,252 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Editing the vendored engine.
 - `.docx` font embedding.
 - Additional Nastaliq fonts (Awami/Nafees/Alvi/Fajer) — now one registry entry each.
+
+---
+
+# ADDENDUM: Jameel `font-swap` kashida (supersedes the cut Task 5)
+
+**Context:** Gate G (italic property) FAILED, but Gate G2 PASSED — see the design spec. Word applies Jameel's kasheeda forms by **font** ("Kasheeda" is a named style in the "Jameel Noori Nastaleeq" family). Mechanism is `font-swap`: measure each fasl in the base vs Kasheeda face; swap the chosen fasls' font to the Kasheeda face to fill the line. The old italic-run `kashida-italic.js` is NOT built; this addendum builds `kashida-fontswap.js` instead.
+
+**Font cs names (verified in the user's Word font menu):** base = `Jameel Noori Nastaleeq`; wider = `Jameel Noori Nastaleeq Kasheeda`.
+
+## Task 7: Jameel font-swap — registry reclassify + pure selection module
+
+**Files:**
+- Modify: `src/taskpane/fonts.js` (reclassify jameel; add kasheeda fields + `kasheedaNameOf`)
+- Modify: `tests/fonts.test.js`
+- Create: `src/taskpane/kashida-fontswap.js`
+- Test: `tests/kashida-fontswap.test.js`
+- Modify: `package.json` (test chain)
+
+**Interfaces produced:**
+- Registry: jameel `mechanism:"font-swap"`, `wordName:"Jameel Noori Nastaleeq"`, new `kasheedaName:"Jameel Noori Nastaleeq Kasheeda"`, `kasheedaFile`, base `file`. New accessor `AshaarFonts.kasheedaNameOf(id) → string|null`.
+- `AshaarKashidaFontswap.splitSpans(text) → string[]` (fasl/PAW segments, order-preserving).
+- `AshaarKashidaFontswap.selectSwapRuns(spans, widthsBase, widthsWide, targetPx) → { runs:[{text,swap}], fill, reason }` — greedy discrete subset-selection; `swap:true` ⇒ render this fasl in the Kasheeda face.
+
+- [ ] **Step 1: reclassify jameel in `src/taskpane/fonts.js`**
+
+Change the `jameel` descriptor to:
+```js
+    jameel: { id: "jameel", label: "Jameel Noori Kasheeda",
+      css: "'Jameel Noori Nastaleeq Kasheeda','Jameel Noori Nastaleeq',serif",
+      wordName: "Jameel Noori Nastaleeq",                 // base face
+      kasheedaName: "Jameel Noori Nastaleeq Kasheeda",    // wider face (font-swap target)
+      mechanism: "font-swap", bundled: true, private: true, readerNote: true,
+      file: "JameelNooriNastaleeq-Regular.ttf", kasheedaFile: "JameelNooriNastaleeqKasheeda.ttf" },
+```
+Add the accessor next to the others:
+```js
+  function kasheedaNameOf(id) { var d = get(id); return d && d.kasheedaName ? d.kasheedaName : null; }
+```
+and export it in the returned object.
+
+- [ ] **Step 2: update `tests/fonts.test.js`**
+
+Change the jameel mechanism assertion and add kasheeda-name coverage:
+```js
+assert.strictEqual(AshaarFonts.mechanismOf("jameel"), "font-swap");
+assert.strictEqual(AshaarFonts.kasheedaNameOf("jameel"), "Jameel Noori Nastaleeq Kasheeda");
+assert.strictEqual(AshaarFonts.wordNameOf("jameel"), "Jameel Noori Nastaleeq"); // base face
+assert.strictEqual(AshaarFonts.kasheedaNameOf("mehr"), null);
+```
+Keep the existing `readerNote` assertions (mehr + jameel true, gulzar falsy).
+
+- [ ] **Step 3: write the failing test `tests/kashida-fontswap.test.js`**
+```js
+"use strict";
+const assert = require("assert");
+const K = require("../src/taskpane/kashida-fontswap");
+
+// splitSpans: break at non-joining letters. "ستارہ" = س-ت-ا | ر | ہ
+const spans = K.splitSpans("ستارہ");
+assert.deepStrictEqual(spans, ["ستا", "ر", "ہ"]);
+assert.strictEqual(spans.join(""), "ستارہ");
+
+// selectSwapRuns: swap highest-gain fasls (wider face) until <= target.
+// base sum 30; wider adds gain [+8,+2,+0]; target 36 → swap span1 (+2 → 32), span0 (+8 → 38>36 skip)
+const r = K.selectSwapRuns(["a","b","c"], [10,10,10], [18,12,10], 36);
+assert.strictEqual(r.runs.length, 3);
+assert.strictEqual(r.runs[1].swap, true);
+assert.strictEqual(r.runs[0].swap, false);
+assert.strictEqual(r.runs[2].swap, false);
+assert.ok(r.fill > 0 && r.fill <= 1);
+
+// no fasl has a wider variant (widths equal) → reason set, nothing swapped
+const r2 = K.selectSwapRuns(["a","b"], [10,10], [10,10], 40);
+assert.strictEqual(r2.runs.every(function (x){return !x.swap;}), true);
+assert.strictEqual(r2.reason, "no kasheeda variants");
+
+console.log("kashida-fontswap tests passed");
+```
+
+- [ ] **Step 4: run → fails (module missing).** `node tests/kashida-fontswap.test.js`
+
+- [ ] **Step 5: implement `src/taskpane/kashida-fontswap.js`**
+```js
+/**
+ * AshaarKashidaFontswap — Jameel Noori Kasheeda fills a line by swapping whole
+ * connected segments (fasl/PAW) from the base face to the wider "Kasheeda" face.
+ * Only fasls whose Kasheeda form is actually wider contribute; the rest measure
+ * equal and are never swapped. splitSpans + selectSwapRuns are pure; the width
+ * measurement (base vs Kasheeda font on a canvas) lives in the browser caller.
+ */
+(function (root, factory) {
+  if (typeof module !== "undefined" && module.exports) module.exports = factory();
+  else root.AshaarKashidaFontswap = factory();
+}(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  // Letters that do NOT join to the following letter → a segment ends after them.
+  var NONJOIN = "اأإآٱدذڈرزڑژوؤءے";
+
+  function splitSpans(text) {
+    var spans = [], cur = "";
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ch === " ") { if (cur) { spans.push(cur); cur = ""; } spans.push(" "); continue; }
+      cur += ch;
+      if (NONJOIN.indexOf(ch) !== -1) { spans.push(cur); cur = ""; }
+    }
+    if (cur) spans.push(cur);
+    return spans;
+  }
+
+  function selectSwapRuns(spans, widthsBase, widthsWide, targetPx) {
+    var n = spans.length, swap = new Array(n), total = 0, i;
+    for (i = 0; i < n; i++) { swap[i] = false; total += widthsBase[i]; }
+
+    var cand = [];
+    for (i = 0; i < n; i++) {
+      var gain = widthsWide[i] - widthsBase[i];
+      if (gain > 0) cand.push({ i: i, gain: gain });
+    }
+    cand.sort(function (a, b) { return b.gain - a.gain; });
+
+    var reason = null;
+    if (!cand.length) reason = "no kasheeda variants";
+
+    for (var k = 0; k < cand.length; k++) {
+      var add = cand[k].gain;
+      if (total + add <= targetPx) { swap[cand[k].i] = true; total += add; }
+    }
+    if (!reason && total < targetPx) reason = "discrete steps underfill";
+
+    var runs = [];
+    for (i = 0; i < n; i++) runs.push({ text: spans[i], swap: swap[i] });
+    return { runs: runs, fill: targetPx > 0 ? total / targetPx : 0, reason: reason };
+  }
+
+  return { splitSpans: splitSpans, selectSwapRuns: selectSwapRuns };
+}));
+```
+
+- [ ] **Step 6: run → passes.** Add `&& node tests/kashida-fontswap.test.js` to `package.json` `test`; run full `npm test` (all green).
+
+- [ ] **Step 7: commit** `feat(fonts): Jameel font-swap mechanism — registry + pure fasl selection`
+
+## Task 8: Jameel font-swap — integration (measure, dispatch, emit, bundle, note)
+
+**Files:**
+- Modify: `src/taskpane/word-html.js` (per-run font emitter `runsToMisraXml`)
+- Modify: `src/taskpane/taskpane.js` (guard fix + font-swap dispatch branch + reader-note dual-font)
+- Modify: `src/taskpane/taskpane.css` (private @font-face for base + Kasheeda Jameel)
+- Modify: `.gitignore` (also guard the base Jameel file)
+- Add (local, gitignored, user-supplied): `assets/fonts/JameelNooriNastaleeq-Regular.ttf`, `assets/fonts/JameelNooriNastaleeqKasheeda.ttf`
+- Modify: `README.md`
+
+**Interfaces consumed:** `AshaarFonts.mechanismOf`, `.wordNameOf`, `.kasheedaNameOf` (Task 7); `AshaarKashidaFontswap.splitSpans`, `.selectSwapRuns` (Task 7).
+
+- [ ] **Step 1: per-run font emitter in `word-html.js`** — add and export:
+```js
+  // runs: [{text, swap}]; base vs Kasheeda cs name chosen per run.
+  function runsToMisraXml(runs, align, opts) {
+    var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var baseName = AshaarFonts.wordNameOf(mode);
+    var wideName = AshaarFonts.kasheedaNameOf(mode) || baseName;
+    var body = runs.map(function (r) {
+      var cs = r.swap ? wideName : baseName;
+      var rpr = "<w:rPr><w:rtl/>" + (cs ? '<w:rFonts w:cs="' + cs + '"/>' : "") + "</w:rPr>";
+      return "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
+    }).join("");
+    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" + body + "</w:p>";
+  }
+```
+Add a test in `tests/word-html.test.js`:
+```js
+{
+  const xml = AshaarWord.runsToMisraXml(
+    [{text:"كہہ", swap:true},{text:" ", swap:false},{text:"تھے", swap:false}],
+    "right", { fontMode: "jameel" });
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "wider face on swapped fasl");
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq"') !== -1, "base face on non-swapped fasl");
+  console.log("word-html font-swap emitter tests passed");
+}
+```
+
+- [ ] **Step 2: fix the guard + add font-swap dispatch in `taskpane.js`**
+
+The guard currently downgrades every non-tatweel font to spacing. Change it so only **whitespace** downgrades (font-swap gets its own path):
+```js
+    if (mechanism === "whitespace" && opts.justifyMode === "kashida") {
+      opts = Object.assign({}, opts, { justifyMode: "spacing" });
+      var label = (AshaarFonts.get(fontId) || {}).label;
+      setMessage("“" + label + "” can’t stretch letters in Word — filling by spacing instead.");
+    }
+```
+In the per-cell dispatch, add a `font-swap` branch that measures each fasl in base vs Kasheeda face, selects, and emits OOXML (mirrors how the cell text is otherwise built). Push a `{ cell: cell, ooxml: xml }` plan:
+```js
+      if (mechanism === "font-swap") {
+        var wideCss = "\"" + (AshaarFonts.kasheedaNameOf(fontId) || repName) + "\"";
+        var baseCss = "\"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
+        var fss = AshaarKashidaFontswap.splitSpans(stripJustification(current));
+        var wb = [], ww = [];
+        fss.forEach(function (s) {
+          canvasCtx.font = repSize + "pt " + baseCss; wb.push(canvasCtx.measureText(s).width);
+          canvasCtx.font = repSize + "pt " + wideCss; ww.push(canvasCtx.measureText(s).width);
+        });
+        var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, colPx);
+        var swapXml = AshaarWord.runsToMisraXml(sel.runs, cellAlign, opts);
+        plans.push({ cell: cell, ooxml: swapXml });
+        return; // handled — skip the tatweel/spacing paths for this cell
+      }
+```
+Where plans are applied, handle the `ooxml` case:
+```js
+        if (plan.ooxml) { plan.cell.body.clear(); plan.cell.body.insertOoxml(plan.ooxml, Word.InsertLocation.replace); }
+```
+(Read the existing per-cell code to get `current`, `colPx`, `cellAlign`, `repName`, `repSize`, `canvasCtx`, and the plan-application loop right; keep the tatweel and spacing branches intact.)
+
+- [ ] **Step 3: private @font-face for both Jameel faces** in `taskpane.css` (replace the deferred-Jameel comment):
+```css
+/* Private — user-supplied Jameel faces (gitignored, never published). Needed so
+   the canvas analyzer can measure base vs Kasheeda widths in the pane. */
+@font-face { font-family: "Jameel Noori Nastaleeq";
+  src: url("../../assets/fonts/JameelNooriNastaleeq-Regular.ttf") format("truetype"); }
+@font-face { font-family: "Jameel Noori Nastaleeq Kasheeda";
+  src: url("../../assets/fonts/JameelNooriNastaleeqKasheeda.ttf") format("truetype"); }
+```
+
+- [ ] **Step 4: `.gitignore`** — also guard the base file (Kasheeda glob already present):
+```
+assets/fonts/JameelNooriNastaleeq-Regular.ttf
+```
+
+- [ ] **Step 5: reader-note dual-font** — in `updateFontNote()`, for jameel show that BOTH faces are needed:
+```js
+      note.textContent = "Readers need “Jameel Noori Nastaleeq” (Regular + Kasheeda) installed to see this correctly.";
+```
+(Keep the generic Mehr note; branch on `d.id === "jameel"`.)
+
+- [ ] **Step 6: run `npm test`** (all green — the pure pieces are covered; the browser dispatch is manual).
+
+- [ ] **Step 7 (MANUAL, on-device — the one real risk):** In Word, run a Jameel justify and confirm:
+  - the emitted `<w:rFonts w:cs="Jameel Noori Nastaleeq Kasheeda"/>` runs actually render in the **wider Kasheeda face** (not the base). If Word does NOT resolve the style-within-family by that cs string, inspect the Kasheeda `.ttf` name table (IDs 1/4/16/17) for the string Word matches, and update `kasheedaName` in the registry accordingly.
+  - a real misra fills: only fasls with kasheeda variants widen; line approaches the column.
+
+- [ ] **Step 8: README** — update the Jameel entry: font-swap kashida (base + Kasheeda faces), render + fill only if both installed; private/not published.
+
+- [ ] **Step 9: commit** `feat(justify): Jameel font-swap kashida — fasl measure/select + per-run cs-font OOXML`
+
+**Type consistency (addendum):** `selectSwapRuns(spans, widthsBase, widthsWide, targetPx)` and `splitSpans(text)` match between Task 7 test/module and Task 8 dispatch. `runsToMisraXml(runs, align, opts)` with `{text,swap}` runs matches between the Task 8 emitter, its test, and the dispatch. `AshaarFonts.kasheedaNameOf` matches between Task 7 and Task 8.

@@ -28,7 +28,15 @@ The three fonts that *can* fill a Nastaliq line each do it by a **different mech
 
 The blog states this is a **beta** limitation that later versions may lift. So the whitelist is authoritative *for this version* but must be versioned and probe-expandable — see §5 dispatch.
 
-**Gate G result: FAIL (2026-07-10)** — Word does not honor Jameel italic→kasheeda; italic-run mechanism cut; Jameel reclassified whitespace (render-only). Microsoft Word merely slants Jameel Noori Kasheeda's italic runs — it does not swap in the elongated kasheeda glyph forms the way InPage does. The `italic-run` row above is therefore historical/never-built: Jameel is tagged `mechanism:"whitespace"` in the registry (`src/taskpane/fonts.js`) and fills lines the same way Gulzar and Noto do (inter-word spacing), while remaining selectable and render-only (private, user-installed, not bundled publicly).
+**Gate G result: FAIL (2026-07-10)** — Word does not honor Jameel *italic*→kasheeda; the `italic-run` trigger is dead. Microsoft Word merely slants Jameel Noori Kasheeda's italic runs — it does not swap glyphs the way InPage does.
+
+**Gate G2 result: PASS (2026-07-10) — `font-swap` mechanism works.** The kasheeda forms are a **named style ("Kasheeda") inside the "Jameel Noori Nastaleeq" family** (Regular / Kasheeda), selected by FONT, not by the italic property. Applying the Kasheeda face to a run widens **only** the segments that have a designed kasheeda variant — verified: in `كہہ رہے تھے اشقياء` only `كہہ` elongated (the initial ک stretches). Jameel is therefore reclassified **`mechanism:"font-swap"`** (NOT whitespace, NOT the dead italic-run):
+- Base face cs name: `Jameel Noori Nastaleeq`; wider face cs name: `Jameel Noori Nastaleeq Kasheeda`.
+- The Task-4/5 **fasl subset-selection carries over unchanged** — only the measurement (base-font width vs Kasheeda-font width per fasl) and the emission (per-run `<w:rFonts w:cs>` swap instead of `<w:i/>`) differ. Fasls with no kasheeda variant measure equal width → zero gain → never swapped, so the "not every combo has a kasheeda form" reality is handled by the analyzer, not special-cased.
+- Both faces must be installed on the reader's machine; both `.ttf`s loaded into the WebView (private `@font-face`, gitignored) so the canvas analyzer can measure them.
+- **Open on-device risk (Task-8 manual check):** confirm `w:cs="Jameel Noori Nastaleeq Kasheeda"` resolves to the wider face in the generated `.docx` (Word style-name-within-family resolution can be finicky); if it does not, inspect the font's name table for the correct full/family string to emit.
+
+The mechanism enum is now **`tatweel | font-swap | whitespace`** (`italic-run` retired).
 
 ## Findings that reshape scope (verified in code)
 
