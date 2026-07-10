@@ -86,32 +86,32 @@ add(note("Three tables below demonstrate the kashida + trailing-break trick. " +
 
 const misra = "العلم نور والجهل ظلام";
 
-// Table (a): mediumKashida + trailing break.
-add(heading("(a) mediumKashida + trailing break", 2));
-add(note("Expected: the misra's letters stretch to fill the cell; trailing empty line is barely visible (2pt)."));
+// Table (a): mediumKashida + trailing break — BOTH cells identical.
+add(heading("(a) mediumKashida + trailing break — both cells", 2));
+add(note("Expected: BOTH cells' letters stretch uniformly to fill; trailing empty line barely visible (2pt)."));
 add(baytTable(
   cellPara(misra, "mediumKashida", true),
-  cellParaDefault(misra)
+  cellPara(misra, "mediumKashida", true)
 ));
 
 add(blankPara());
 
-// Table (b): mediumKashida without break (control).
-add(heading("(b) mediumKashida (no break, control)", 2));
-add(note("Expected: the misra does NOT stretch (confirms Word's last-line rule)."));
+// Table (b): mediumKashida without break (control) — BOTH cells identical.
+add(heading("(b) mediumKashida (no break, control) — both cells", 2));
+add(note("Expected: NEITHER cell stretches (confirms the break is what enables (a))."));
 add(baytTable(
   cellPara(misra, "mediumKashida", false),
-  cellParaDefault(misra)
+  cellPara(misra, "mediumKashida", false)
 ));
 
 add(blankPara());
 
-// Table (c): distribute (control).
-add(heading("(c) distribute (spacing fill, control)", 2));
-add(note("Expected: the misra fills via letter/word spacing, not kashida."));
+// Table (c): distribute (control) — BOTH cells identical.
+add(heading("(c) distribute (spacing fill, control) — both cells", 2));
+add(note("Expected: BOTH cells fill via word/letter spacing, not kashida."));
 add(baytTable(
   cellPara(misra, "distribute", false),
-  cellParaDefault(misra)
+  cellPara(misra, "distribute", false)
 ));
 
 add(blankPara());
