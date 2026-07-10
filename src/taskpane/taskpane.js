@@ -52,7 +52,11 @@
     var headroom = kashidaOn ? 0.9 : 0.98;        // leave room for kashida to fill
     var N = Math.max(maxByPos.length, 2);
     var gapCols = Math.max(1, Math.round(Number(opts.gapWidth || 1)));
-    var GRID = N * 3 + (N - 1) * gapCols, contentCols = N * 3;
+    // 6 must mirror BASE_CPM in word-html.js (grid columns per misra) so the
+    // gap-to-content ratio here matches the actual render; otherwise the needed
+    // width (which now floors the table width) is overestimated and tables come
+    // out too wide.
+    var GRID = N * 6 + (N - 1) * gapCols, contentCols = N * 6;
     var sumContent = maxByPos.reduce(function (a, b) { return a + b; }, 0) / headroom;
     return Math.round(sumContent * GRID / contentCols * 1440 / 96);
   }
