@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ur" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kashida Fitting Demo — Mehr (tatweel) &amp; Jameel (font-swap)</title>
+
+<!-- Real fonts from the repo. Mehr + Gulzar are bundled (CC-BY-SA / OFL);
+     Jameel Regular + Kasheeda are private/local (gitignored) — this file only
+     references them, it does not embed them, so nothing private is published. -->
+<style>
+@font-face { font-family:"Mehr Nastaliq Web"; src:url("../assets/fonts/MehrNastaliqWeb.woff2") format("woff2"); }
+@font-face { font-family:"Jameel Noori Nastaleeq"; src:url("../assets/fonts/JameelNooriNastaleeq-Regular.ttf") format("truetype"); }
+@font-face { font-family:"Jameel Noori Nastaleeq Kasheeda"; src:url("../assets/fonts/JameelNooriNastaleeqKasheeda.ttf") format("truetype"); }
+
+:root { --fg:#1a1a1a; --muted:#6b7280; --line:#d1d5db; --col:#c026d3; --ink:#111; --swap:#0369a1; --bg:#fafafa; --card:#fff; }
+* { box-sizing:border-box; }
+body { margin:0; padding:24px; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--fg); background:var(--bg); }
+h1 { font-size:19px; margin:0 0 4px; }
+.sub { color:var(--muted); font-size:13px; margin:0 0 18px; max-width:70ch; }
+.controls { display:flex; gap:18px; align-items:center; flex-wrap:wrap; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin-bottom:20px; }
+.controls label { font-size:13px; color:var(--muted); }
+.controls input[type=range] { width:260px; vertical-align:middle; }
+.controls .val { font-variant-numeric:tabular-nums; font-weight:600; color:var(--ink); }
+.banner { display:none; background:#fef3c7; border:1px solid #fde68a; color:#92400e; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:16px; }
+.banner.show { display:block; }
+.font-block { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:22px; }
+.font-block h2 { font-size:15px; margin:0 0 2px; }
+.font-block .mech { font-size:12px; color:var(--muted); margin:0 0 14px; }
+.row { margin:14px 0; }
+.row .tag { font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; display:flex; gap:10px; align-items:baseline; }
+.row .tag .rep { font-size:11px; color:var(--muted); text-transform:none; letter-spacing:0; }
+/* The column: a fixed-width RTL box; the right edge is the reference, the
+   dashed left edge is the target width the fill tries to reach. */
+.col { position:relative; direction:rtl; border-right:2px solid var(--ink); padding:2px 10px 6px 0; overflow:hidden; }
+.col::before { content:""; position:absolute; top:0; bottom:0; left:0; border-left:2px dashed var(--col); }
+.line { white-space:nowrap; line-height:1.9; }
+.natural .line { color:#9ca3af; }
+.swapped { color:var(--swap); }         /* fasls rendered in the Kasheeda face */
+.legend { font-size:12px; color:var(--muted); margin-top:8px; }
+.legend b { color:var(--swap); }
+code { background:#f3f4f6; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+<h1>Kashida fitting — live, on the real engine</h1>
+<p class="sub">
+  Each couplet line is fit to the dashed column width using the actual add-in modules
+  (<code>AshaarJustify.justifyRuns</code>, <code>AshaarTatweel</code>, <code>AshaarKashidaFontswap</code>) and your real fonts.
+  <b>Mehr</b> fills by inserting tatweels only at its Beta-2.0 whitelisted joins; <b>Jameel</b> fills by swapping whole
+  connected segments (fasl) to the wider <span class="swapped">Kasheeda</span> face. Both then close any remaining
+  gap with <em>capped</em> inter-word micro-spacing (the hybrid fill), and accept a slightly short line if the cap is hit.
+  Drag the slider to watch the fit adapt.
+</p>
+
+<div class="banner" id="banner"></div>
+
+<div class="controls">
+  <label>Column width <span class="val" id="wval">560</span> px
+    <input type="range" id="w" min="320" max="820" value="560" step="4">
+  </label>
+  <label>Size <span class="val" id="sval">44</span> px
+    <input type="range" id="s" min="28" max="64" value="44" step="2">
+  </label>
+  <label><input type="checkbox" id="hybrid" checked> hybrid residual spacing</label>
+</div>
+
+<div id="out"></div>
+
+<script src="../src/vendor/ashaar-justify.js"></script>
+<script src="../src/taskpane/fonts.js"></script>
+<script src="../src/taskpane/tatweel-whitelist.js"></script>
+<script src="../src/taskpane/kashida-fontswap.js"></script>
+<script>
+(function () {
+  "use strict";
+  var HAIR = " "; // U+200A hair space (same as the add-in's MICRO_SPACE)
+  var MISRAS = [
+    "رات کے خواب دن کے عذاب",         // رات/خواب/عذاب end in whitelisted letters — Mehr elongates
+    "دل کی بات سنو صاحب",             // بات/صاحب end in whitelisted letters
+    "كہہ رہے تھے اشقياء",             // no eligible word-endings → Mehr relies on spacing
+    "دل ناداں تجھے ہوا کیا ہے",
+    "ہم نے مانا کہ تغافل نہ کرو گے لیکن"
+  ];
+  var FONTS = [
+    { id:"mehr",   family:"Mehr Nastaliq Web",     label:"Mehr Nastaliq",        mech:"tatweel" },
+    { id:"jameel", family:"Jameel Noori Nastaleeq", label:"Jameel Noori Kasheeda", mech:"font-swap",
+      wide:"Jameel Noori Nastaleeq Kasheeda" }
+  ];
+
+  var cv = document.createElement("canvas"), ctx = cv.getContext("2d");
+  function measure(text, family, sizePx) { ctx.font = sizePx + "px \"" + family + "\""; return ctx.measureText(text).width; }
+
+  // Hybrid design: cap total added spacing at capEm * size * gaps; accept short.
+  function capMicroSpaces(residualPx, gaps, spaceGlyphPx, sizePx, capEm) {
+    capEm = capEm || 0.28;
+    if (residualPx <= 0 || gaps <= 0 || spaceGlyphPx <= 0) return 0;
+    var capped = Math.min(residualPx, capEm * sizePx * gaps);
+    return Math.max(0, Math.round(capped / spaceGlyphPx));
+  }
+  // Distribute n hair spaces across the word gaps of a plain string, evenly.
+  function spaceOut(text, n) {
+    var words = text.split(" ");
+    var gaps = words.length - 1;
+    if (n <= 0 || gaps <= 0) return text;
+    var out = words[0];
+    for (var i = 1; i < words.length; i++) {
+      var k = Math.floor(n / gaps) + (i <= (n % gaps) ? 1 : 0);
+      out += " " + new Array(k + 1).join(HAIR) + words[i];
+    }
+    return out;
+  }
+
+  // ---- Mehr: DISCRETE trailing-tatweel fill (corrected model) ----
+  // Mehr elongates via ONE trailing tatweel after a word ending in a
+  // whitelisted letter (fixed +step, not incremental, not between letters).
+  // So it is the SAME discrete subset-selection as Jameel: reuse selectSwapRuns,
+  // where the "widen" op is "append trailing tatweel" instead of "swap face".
+  function fitMehr(misra, family, sizePx, hybrid) {
+    var finalSet = {}; AshaarFonts.tatweelRulesOf("mehr").finalInto.forEach(function (c) { finalSet[c] = true; });
+    var parts = misra.split(" "), toks = [];
+    parts.forEach(function (wd, i) { if (i) toks.push(" "); toks.push(wd); });
+    var elong = toks.map(function (t) { return (t !== " " && finalSet[t.slice(-1)]) ? t + "ـ" : t; });
+    var wb = toks.map(function (t) { return measure(t, family, sizePx); });
+    var ww = elong.map(function (t) { return measure(t, family, sizePx); });
+    var target = window.__TARGET;
+    var sel = AshaarKashidaFontswap.selectSwapRuns(toks, wb, ww, target);
+    var elongs = 0, achieved = 0;
+    var out = sel.runs.map(function (r, i) {
+      if (r.swap && ww[i] > wb[i]) { elongs++; achieved += ww[i]; return elong[i]; }
+      achieved += wb[i]; return toks[i];
+    }).join("");
+    var spaces = 0;
+    if (hybrid) {
+      var gaps = parts.length - 1;
+      var sg = measure(HAIR, family, sizePx) || measure(" ", family, sizePx);
+      spaces = capMicroSpaces(target - achieved, gaps, sg, sizePx, 0.28);
+      out = spaceOut(out, spaces); achieved += spaces * sg;
+    }
+    return { html: '<span class="line" style="font-family:\'' + family + '\'">' + esc(out) + '</span>',
+      report: elongs + " trailing kashida" + (spaces ? " · " + spaces + " micro-spaces" : "") + (sel.reason ? " · " + sel.reason : ""),
+      fill: achieved / target };
+  }
+
+  // ---- Jameel: real font-swap via splitSpans + selectSwapRuns ----
+  function fitJameel(misra, family, wide, sizePx, hybrid) {
+    var fss = AshaarKashidaFontswap.splitSpans(misra);
+    var wb = fss.map(function (s) { return measure(s, family, sizePx); });
+    var ww = fss.map(function (s) { return measure(s, wide, sizePx); });
+    var target = window.__TARGET;
+    var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, target);
+    var swaps = sel.runs.filter(function (r, i) { return r.swap && ww[i] > wb[i]; }).length;
+    // achieved from the measured widths of the chosen face per fasl
+    var achieved = 0; sel.runs.forEach(function (r, i) { achieved += r.swap ? ww[i] : wb[i]; });
+    var spaces = 0;
+    // build html, optionally padding the space-spans with hair spaces
+    var gaps = fss.filter(function (s) { return s === " "; }).length;
+    var per = 0, sg = measure(HAIR, family, sizePx) || measure(" ", family, sizePx);
+    if (hybrid && gaps > 0) {
+      spaces = capMicroSpaces(target - achieved, gaps, sg, sizePx, 0.28);
+      per = spaces; achieved += spaces * sg;
+    }
+    var gi = 0, html = sel.runs.map(function (r, i) {
+      if (r.text === " ") {
+        var k = Math.floor(per / gaps) + (gi < (per % gaps) ? 1 : 0); gi++;
+        return " " + new Array(k + 1).join(HAIR);
+      }
+      var fam = r.swap ? wide : family;
+      var cls = r.swap ? ' class="swapped"' : "";
+      return '<span'+cls+' style="font-family:\''+fam+'\'">'+esc(r.text)+'</span>';
+    }).join("");
+    return { html: '<span class="line">'+html+'</span>',
+      report: swaps + " fasl→Kasheeda" + (spaces ? " · " + spaces + " micro-spaces" : "") + (sel.reason ? " · " + sel.reason : ""),
+      fill: achieved / target };
+  }
+
+  function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  function render() {
+    var target = +document.getElementById("w").value;
+    var sizePx = +document.getElementById("s").value;
+    var hybrid = document.getElementById("hybrid").checked;
+    window.__TARGET = target;
+    document.getElementById("wval").textContent = target;
+    document.getElementById("sval").textContent = sizePx;
+    var colStyle = "width:" + target + "px; font-size:" + sizePx + "px";
+
+    var out = FONTS.map(function (f) {
+      var missing = !document.fonts.check(sizePx + 'px "' + f.family + '"') ||
+                    (f.wide && !document.fonts.check(sizePx + 'px "' + f.wide + '"'));
+      var lines = MISRAS.map(function (m) {
+        var nat = '<div class="row natural"><div class="tag">natural</div><div class="col" style="'+colStyle+'">'+
+                  '<span class="line" style="font-family:\''+f.family+'\'">'+esc(m)+'</span></div></div>';
+        var fit = f.mech === "tatweel" ? fitMehr(m, f.family, sizePx, hybrid)
+                                       : fitJameel(m, f.family, f.wide, sizePx, hybrid);
+        var pct = Math.round(fit.fill * 100);
+        var fitRow = '<div class="row"><div class="tag">fitted <span class="rep">'+pct+'% · '+fit.report+'</span></div>'+
+                     '<div class="col" style="'+colStyle+'">'+fit.html+'</div></div>';
+        return nat + fitRow;
+      }).join("");
+      return '<div class="font-block"><h2>'+f.label+'</h2><div class="mech">mechanism: <code>'+f.mech+'</code></div>'+
+             (missing ? '<div class="banner show">Font “'+(f.wide||f.family)+'” not loaded — drop the .ttf/.woff2 into <code>assets/fonts/</code>. Showing a fallback face.</div>' : '')+
+             lines + '</div>';
+    }).join("");
+    document.getElementById("out").innerHTML = out;
+  }
+
+  ["w","s","hybrid"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  if (typeof AshaarJustify === "undefined" || typeof AshaarKashidaFontswap === "undefined") {
+    document.getElementById("banner").className = "banner show";
+    document.getElementById("banner").textContent =
+      "Engine modules failed to load — open this file so the relative paths ../src/... resolve (e.g. via the repo dev server), or check the console.";
+  }
+  document.fonts.ready.then(render);
+  setTimeout(render, 400); // re-render after late font loads
+})();
+</script>
+</body>
+</html>

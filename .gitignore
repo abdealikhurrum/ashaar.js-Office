@@ -24,3 +24,6 @@ node_modules/
 # license that does not permit public rehosting — drop them locally for testing
 # only (see README.md). font-swap mechanism uses both faces (fonts.js `jameel`).
 assets/fonts/JameelNooriNastaleeq*
+
+# local browser-demo tooling artifacts
+.playwright-mcp/
