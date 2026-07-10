@@ -64,6 +64,15 @@ Testers download `manifest.prod.xml` from the URL above (right-click → Save As
 
 Files are served with the `?v=20260527-native-layout` query string in `manifest.prod.xml`. If a JS/CSS change doesn't appear after a deploy, bump that version string in `manifest.prod.xml` and re-distribute it to force testers' clients to refetch.
 
+## Bundled fonts
+
+Font files in `assets/fonts/` are redistributed under their respective open licenses; each `@font-face` block in `src/taskpane/taskpane.css` documents its font's provenance inline.
+
+- **FatemiMaqala** — vendored via the `font-fatemi` submodule (`assets/fonts/FatemiMaqala-Regular.ttf`).
+- **Mehr Nastaliq Web** (`assets/fonts/MehrNastaliqWeb.woff2`) — created by Muhammad Zeeshan Nasar following the calligraphy of Nasrullah Mehr, distributed via the [`mehr`](https://www.npmjs.com/package/mehr) npm package (font v2.0/Beta 2.0). Licensed under [Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/). The `mehr` package's JS/CSS wrapper is MIT; only the font file itself is CC BY-SA.
+- **Gulzar** (`assets/fonts/Gulzar-Regular.woff2`) — copyright 2021 The Gulzar Project Authors (designers: Borna Izadpanah, Fiona Ross, Alice Savoie, Simon Cozens; [github.com/googlefonts/gulzar](https://github.com/googlefonts/gulzar)), from [Google Fonts](https://fonts.google.com/specimen/Gulzar). Licensed under the [SIL Open Font License 1.1 (OFL)](https://scripts.sil.org/OFL).
+- **Jameel Noori Nastaleeq Kasheeda** — offered as a font-mode option but not bundled; the file is private/user-supplied and its `@font-face` block is deferred pending Gate G (manual Word italic-swap verification). See `src/taskpane/taskpane.css`.
+
 ## Development Notes
 
 The preview pane uses Ashaar.js native HTML/CSS. Word insertion uses generated table HTML because Word's HTML importer preserves table layout more reliably than browser flex layout.

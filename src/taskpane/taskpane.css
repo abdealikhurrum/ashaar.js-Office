@@ -9,6 +9,18 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Mehr Nastaliq Web";
+  src: url("../../assets/fonts/MehrNastaliqWeb.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gulzar";
+  src: url("../../assets/fonts/Gulzar-Regular.woff2") format("woff2");
+  font-display: swap;
+}
+/* Jameel Kasheeda @font-face deferred — pending Gate G (Word italic-swap verification) */
+
 /* Use the user's LOCALLY-INSTALLED AL-KANZ (an Al-Fatemi derivative) if present,
    so justification metrics match Word without redistributing the font file.
    local() is the standards-defined way to reference an installed font by name;

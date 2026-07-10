@@ -1691,6 +1691,18 @@
   function bind() {
     if (isBound) return;
     isBound = true;
+    (function populateFontModes() {
+      var order = ["document", "arabic-serif", "noto", "mehr", "jameel", "gulzar"];
+      fontMode.innerHTML = "";
+      order.forEach(function (id) {
+        var d = AshaarFonts.get(id);
+        if (!d) return;
+        var o = document.createElement("option");
+        o.value = id; o.textContent = d.label;
+        if (id === "document") o.selected = true;
+        fontMode.appendChild(o);
+      });
+    })();
     autoFitWidth.addEventListener("change", function () {
       tableWidth.disabled = autoFitWidth.checked;
       renderPreview();
