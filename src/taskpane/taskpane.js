@@ -1480,7 +1480,16 @@
             canvasCtx.font = repSize + "pt " + wideCss; ww.push(canvasCtx.measureText(s).width);
           });
           var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, colPx);
-          var swapXml = AshaarWord.runsToMisraXml(sel.runs, cellAlign, opts, repSize);
+          // Hybrid fill: font-swap elongation undershoots (only fasls with a
+          // Kasheeda variant widen) — close the residual with capped hair-spaces
+          // in the inter-word gap runs. Accept-short if the cap binds.
+          var jGaps = 0;
+          for (var jgi = 0; jgi < sel.runs.length; jgi++) { if (sel.runs[jgi].text === " ") jGaps++; }
+          canvasCtx.font = repSize + "pt " + baseCss;
+          var jSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+          var jn = AshaarResidual.capMicroSpaces(colPx - sel.fill * colPx, jGaps, jSpacePx, repSize * 96 / 72);
+          var jRuns = AshaarResidual.injectSpaceRuns(sel.runs, jn, MICRO_SPACE);
+          var swapXml = AshaarWord.runsToMisraXml(jRuns, cellAlign, opts, repSize);
           plans.push({ cell: cell, ooxml: swapXml });
           return; // handled — skip the tatweel/spacing paths for this cell
         }
