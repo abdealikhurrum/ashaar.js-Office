@@ -211,32 +211,71 @@
     return slots;
   }
 
-  // Apply the top-scoring slots to a text string, inserting the requested number of tatweels.
-  function applySlots(text, slots, n) {
-    if (!n || !slots.length) return text;
-    var words = text.split(' ');
-    var insertMap = {};
-    for (var i = 0; i < n; i++) {
-      var s = slots[i % slots.length];
-      var key = s.wi + ':' + s.pos;
-      insertMap[key] = (insertMap[key] || 0) + 1;
-    }
+  // Splice fill characters into one text. insertMap maps "wi:pos" -> count,
+  // where wi is the word index (split on ' ') and pos is the char offset within
+  // that word. Shared by applySlots (single string) and applySlotsMulti (runs).
+  function insertIntoWords(text, insertMap, fillChar) {
+    var words = String(text).split(' ');
     return words.map(function (w, wi) {
       var chars = w.split('');
-      var offset = 0;
       var ins = [];
       for (var key in insertMap) {
         var kp = key.split(':');
         if (+kp[0] === wi) ins.push({ pos: +kp[1], count: insertMap[key] });
       }
       ins.sort(function (a, b) { return a.pos - b.pos; });
+      var offset = 0;
       ins.forEach(function (e) {
-        var tatweels = new Array(e.count + 1).join(TATWEEL).split('');
-        Array.prototype.splice.apply(chars, [e.pos + offset, 0].concat(tatweels));
-        offset += tatweels.length;
+        var fill = new Array(e.count + 1).join(fillChar).split('');
+        Array.prototype.splice.apply(chars, [e.pos + offset, 0].concat(fill));
+        offset += fill.length;
       });
       return chars.join('');
     }).join(' ');
+  }
+
+  // Round-robin the top-n slots (tagged with a run index ri) across runs and
+  // splice tatweels into each run's text. Returns a new same-length array.
+  function applySlotsMulti(runTexts, slots, n) {
+    var out = runTexts.slice();
+    if (!n || !slots.length) return out;
+    var byRun = {}; // ri -> { "wi:pos": count }
+    for (var i = 0; i < n; i++) {
+      var s = slots[i % slots.length];
+      var map = byRun[s.ri] || (byRun[s.ri] = {});
+      var key = s.wi + ':' + s.pos;
+      map[key] = (map[key] || 0) + 1;
+    }
+    for (var ri in byRun) {
+      out[ri] = insertIntoWords(runTexts[ri], byRun[ri], TATWEEL);
+    }
+    return out;
+  }
+
+  // Natural (tatweel-free) total width of a run array, each measured in its
+  // own font via its measure() callback.
+  function measureRunsNatural(runs) {
+    var total = 0;
+    for (var i = 0; i < (runs || []).length; i++) {
+      var r = runs[i];
+      if (!r || typeof r.measure !== 'function') {
+        throw new TypeError('run[' + i + '] is missing a measure() function');
+      }
+      total += r.measure(stripTatweels(r.text || ''));
+    }
+    return total;
+  }
+
+  // Apply the top-scoring slots to a text string, inserting the requested number of tatweels.
+  function applySlots(text, slots, n) {
+    if (!n || !slots.length) return text;
+    var insertMap = {};
+    for (var i = 0; i < n; i++) {
+      var s = slots[i % slots.length];
+      var key = s.wi + ':' + s.pos;
+      insertMap[key] = (insertMap[key] || 0) + 1;
+    }
+    return insertIntoWords(text, insertMap, TATWEEL);
   }
 
   // Find the maximum acceptable number of tatweels for a single line.
@@ -283,6 +322,9 @@
     buildSlots: buildSlots,
     applySlots: applySlots,
     justifyLine: justifyLine,
-    justifyLines: justifyLines
+    justifyLines: justifyLines,
+    insertIntoWords: insertIntoWords,
+    applySlotsMulti: applySlotsMulti,
+    measureRunsNatural: measureRunsNatural
   };
 }));

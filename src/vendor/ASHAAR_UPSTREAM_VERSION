@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=47e6250120bcb9ba3297d2a62c7b99afcd3dada0
-date=2026-05-31T12:06:54-05:00
+commit=aafdb47b89633dcfb8a52a609e55b2ef3a753288
+date=2026-07-09T21:28:56-05:00
 package=ashaar-js
 version=0.1.0
-subject=Raise kashida cap so lines can fill wide columns
+subject=Add run-aware splice helpers (insertIntoWords, applySlotsMulti, measureRunsNatural)
