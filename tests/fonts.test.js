@@ -18,6 +18,23 @@ assert.ok(!AshaarFonts.get("gulzar").readerNote);
 assert.strictEqual(AshaarFonts.mechanismOf("document"), "whitespace");
 assert.strictEqual(AshaarFonts.mechanismOf("nope"), "whitespace");
 
+// mechanismForFontName: resolve the mechanism from a run's ACTUAL Word font
+// name (per-run justify dispatch). Registry fonts match by their wordName /
+// kasheedaName; anything unrecognised — arbitrary Arabic fonts (Fatemi Maqala),
+// Latin defaults, empty/null — resolves to "generic" (the tatweel engine), NOT
+// "whitespace", so those runs still kashida instead of being forced to spacing.
+assert.strictEqual(AshaarFonts.mechanismForFontName("Mehr Nastaliq Web"), "tatweel");
+assert.strictEqual(AshaarFonts.mechanismForFontName("Jameel Noori Nastaleeq"), "font-swap");         // base face
+assert.strictEqual(AshaarFonts.mechanismForFontName("Jameel Noori Nastaleeq Kasheeda"), "font-swap"); // wide face
+assert.strictEqual(AshaarFonts.mechanismForFontName("Noto Nastaliq Urdu"), "whitespace");
+assert.strictEqual(AshaarFonts.mechanismForFontName("Gulzar"), "whitespace");
+assert.strictEqual(AshaarFonts.mechanismForFontName("Scheherazade New"), "whitespace");
+assert.strictEqual(AshaarFonts.mechanismForFontName("Fatemi Maqala"), "generic");
+assert.strictEqual(AshaarFonts.mechanismForFontName("Times New Roman"), "generic");
+assert.strictEqual(AshaarFonts.mechanismForFontName(""), "generic");
+assert.strictEqual(AshaarFonts.mechanismForFontName(null), "generic");
+assert.strictEqual(AshaarFonts.mechanismForFontName("  Gulzar  "), "whitespace"); // trims whitespace
+
 // Word cs names line up with what callers emit
 assert.strictEqual(AshaarFonts.wordNameOf("mehr"), "Mehr Nastaliq Web");
 assert.strictEqual(AshaarFonts.wordNameOf("gulzar"), "Gulzar");

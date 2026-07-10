@@ -48,11 +48,33 @@
 
   function get(id) { return LIST[id] || null; }
   function mechanismOf(id) { var d = get(id); return d ? d.mechanism : "whitespace"; }
+
+  // Resolve the kashida mechanism from a run's ACTUAL Word font name (used by
+  // the Justify path for per-run dispatch). Registry fonts match by their
+  // wordName / kasheedaName; anything unrecognised resolves to "generic" — the
+  // tatweel engine (AshaarJustify.justifyLine/justifyRuns) — so arbitrary
+  // Arabic fonts (e.g. Fatemi Maqala) still elongate instead of being forced to
+  // spacing. Empty/absent name → "generic" (assume tatweel-capable, matching
+  // pre-mechanism behaviour), NOT "whitespace".
+  function mechanismForFontName(name) {
+    var n = String(name == null ? "" : name).trim();
+    if (n) {
+      for (var id in LIST) {
+        if (!LIST.hasOwnProperty(id)) continue;
+        var d = LIST[id];
+        if ((d.wordName && d.wordName === n) || (d.kasheedaName && d.kasheedaName === n)) {
+          return d.mechanism;
+        }
+      }
+    }
+    return "generic";
+  }
   function wordNameOf(id) { var d = get(id); return d && d.wordName ? d.wordName : null; }
   function kasheedaNameOf(id) { var d = get(id); return d && d.kasheedaName ? d.kasheedaName : null; }
   function cssFamilyOf(id) { var d = get(id); return d && d.css ? d.css : null; }
   function tatweelRulesOf(id) { var d = get(id); return d && d.tatweelRules ? d.tatweelRules : null; }
 
-  return { LIST: LIST, get: get, mechanismOf: mechanismOf, wordNameOf: wordNameOf,
+  return { LIST: LIST, get: get, mechanismOf: mechanismOf,
+    mechanismForFontName: mechanismForFontName, wordNameOf: wordNameOf,
     kasheedaNameOf: kasheedaNameOf, cssFamilyOf: cssFamilyOf, tatweelRulesOf: tatweelRulesOf };
 }));

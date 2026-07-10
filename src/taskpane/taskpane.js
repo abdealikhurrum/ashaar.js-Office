@@ -1185,22 +1185,17 @@
 
     setMessage("Justifying…");
 
-    // Only the tatweel mechanism (Mehr) has a working kashida/tatweel justify
-    // path. Whitespace-mechanism fonts (Gulzar, Noto, …) have no elongatable
-    // joins in Word — injected tatweels shatter their shaping. Jameel is its
-    // own mechanism, "font-swap": Gate G found Word only slants italic runs
-    // instead of swapping in kasheeda glyphs (so the italic-run engine was
-    // cut), but Gate G2 found Word DOES apply the elongated forms via a
-    // named "Kasheeda" style within the Jameel family — so Jameel fills a
-    // line by swapping whole fasls to that wider face (kashida-fontswap.js)
-    // and has its own dispatch branch below; it must NOT be downgraded here.
-    // Downgrade only whitespace-mechanism fonts to spacing and warn.
-    if (mechanism === "whitespace" && opts.justifyMode === "kashida") {
-      opts = Object.assign({}, opts, { justifyMode: "spacing" });
-      var label = (AshaarFonts.get(fontId) || {}).label;
-      var msg = "“" + label + "” can’t stretch letters in Word — filling by spacing instead.";
-      setMessage(msg);
-    }
+    // Kashida mechanism is resolved PER CELL/RUN from each run's REAL font
+    // (see the generic run-aware path below), NOT from the pane dropdown.
+    // Mehr (tatweel) and Jameel (font-swap) still get their explicit
+    // dropdown-driven branches; every other pane selection ("Document default",
+    // Noto, Gulzar, Arabic serif) is "whitespace" as an id but falls through to
+    // the generic path, which decides kashida-vs-spacing from the actual font
+    // of each run: arbitrary Arabic fonts (e.g. Fatemi Maqala) run the generic
+    // tatweel engine; true whitespace-shaping fonts (Noto/Gulzar/Scheherazade)
+    // fall back to spacing. There is deliberately no blanket dropdown-based
+    // downgrade here — it forced "document" and every unrecognised font to
+    // spacing, which is the regression this restores.
 
     await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -1222,14 +1217,25 @@
         selection.load("text");
         selection.font.load("name,size");
         await context.sync();
+        // Resolve the mechanism from the selection's REAL font: true
+        // whitespace-shaping fonts (Noto/Gulzar/Scheherazade) shatter under
+        // injected tatweels, so downgrade kashida→spacing for them; generic /
+        // arbitrary Arabic fonts (Fatemi Maqala, …) keep kashida.
+        var plainOpts = opts;
+        if (opts.justifyMode === "kashida" &&
+            AshaarFonts.mechanismForFontName(selection.font.name) === "whitespace") {
+          plainOpts = Object.assign({}, opts, { justifyMode: "spacing" });
+          setMessage("“" + (selection.font.name || "This font") +
+            "” can’t stretch letters in Word — filling by spacing instead.");
+        }
         if (doKashida) {
           var pc = document.createElement("canvas").getContext("2d");
           if (pc) {
             pc.font = (selection.font.size || 16) + "pt \"" + (selection.font.name || fallbackName) + "\"";
-            opts._justifyCtx = pc;
+            plainOpts._justifyCtx = pc;
           }
         }
-        var justifiedText = AshaarWord.justifyPlainTextBlock(stripJustification(selection.text), opts);
+        var justifiedText = AshaarWord.justifyPlainTextBlock(stripJustification(selection.text), plainOpts);
         selection.insertText(justifiedText, Word.InsertLocation.replace);
         await context.sync();
         return;
@@ -1427,6 +1433,27 @@
         if (canvasCtx.measureText(MICRO_SPACE).width <= 0) MICRO_SPACE = " "; // thin space
       }
 
+      // Force-load EVERY distinct run font across all cells before measuring —
+      // not just repName. A font the WebView CAN see (system-exposed, or a
+      // bundled/uploaded @font-face) loads lazily on first use; without this,
+      // measureText in a mixed-font cell silently falls back to a substitute
+      // for the runs whose face isn't loaded yet, so those runs' metrics are
+      // wrong. This is what lets dual-accessible fonts auto-measure correctly;
+      // fonts the sandbox can't reach are supplied via the Custom-fonts
+      // uploader, which registers an @font-face loaded the exact same way.
+      if (canvasCtx && typeof document !== "undefined" && document.fonts && document.fonts.load) {
+        var faceStrs = {};
+        allCells.forEach(function (cell) {
+          (cell.__wordRanges.items || []).forEach(function (wr) {
+            var f = wr.font;
+            faceStrs[runFontStr((f && f.name) || repName, (f && f.size) || repSize, !!(f && f.bold), !!(f && f.italic))] = true;
+          });
+        });
+        var faceLoads = [];
+        Object.keys(faceStrs).forEach(function (s) { faceLoads.push(document.fonts.load(s).catch(function () {})); });
+        try { await Promise.all(faceLoads); } catch (e) {}
+      }
+
       // Phase 1 (pure, no sync): rebuild each cell as an ordered list of style
       // runs and justify measuring each run in its OWN font. Produces per-cell
       // write plans consumed in phase 2.
@@ -1525,13 +1552,29 @@
         var outTexts; // per-run text to write back (null when spacing writes properties only)
         var sp = null;
 
-        // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
-        sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
-        var gaps = runs.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
-        canvasCtx.font = runFontStr(repName, repSize, false, false);
-        var spaceGlyphPx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-        var n = Math.max(0, Math.round(sp.wordSpacing * gaps / spaceGlyphPx));
-        outTexts = AshaarWord.distributeMicroSpaces(runs.map(function (r) { return r.text; }), n, MICRO_SPACE);
+        // Per-cell mechanism from the runs' REAL fonts. When kashida is chosen
+        // and every run is a font the tatweel engine can elongate (generic /
+        // arbitrary Arabic fonts like Fatemi Maqala), kashida-fill via
+        // justifyRuns — each run measured in its OWN font, so mixed-font misras
+        // stretch correctly (Task A3 Step 3). If ANY run is a whitespace-shaping
+        // font (Noto/Gulzar/Scheherazade), where injected tatweels shatter the
+        // shaping, or the user chose spacing, fall back to run-aware spacing.
+        // (Mehr/Jameel cells never reach here — handled by the branches above.)
+        var anyWhitespaceRun = runs.some(function (r) {
+          return AshaarFonts.mechanismForFontName(r.name) === "whitespace";
+        });
+        if (opts.justifyMode === "kashida" && !anyWhitespaceRun) {
+          var kout = AshaarJustify.justifyRuns(primRuns, colPx, calibParams); // same length/order
+          outTexts = kout.map(function (r) { return r.text; });
+        } else {
+          // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
+          sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
+          var gaps = runs.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
+          canvasCtx.font = runFontStr(repName, repSize, false, false);
+          var spaceGlyphPx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+          var n = Math.max(0, Math.round(sp.wordSpacing * gaps / spaceGlyphPx));
+          outTexts = AshaarWord.distributeMicroSpaces(runs.map(function (r) { return r.text; }), n, MICRO_SPACE);
+        }
 
         if (debug) {
           var natSum = 0, finSum = 0, twCount = 0;
