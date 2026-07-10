@@ -40,6 +40,11 @@ The blog states this is a **beta** limitation that later versions may lift. So t
 
 The mechanism enum is now **`tatweel | font-swap | whitespace`** (`italic-run` retired).
 
+**Word verification results (2026-07-10, real Word + installed fonts via `test-documents/kashida-word-test.docx`):**
+- **A — Jameel font-swap: PASS.** `w:cs="Jameel Noori Nastaleeq Kasheeda"` resolves the *wider* face in Word (Word matches by full name even though Regular/Kasheeda share nameID1 family). **D — PASS:** the mixed base/Kasheeda misra renders perfectly in an RTL table cell. Jameel font-swap is **verified end-to-end in Word** (remaining unknown: only the Office.js `insertOoxml` acceptance of the wrapped package into a cell — a runtime check, since the static OOXML renders correctly).
+- **B — Mehr tatweel RENDERS clean in Word** (the browser "stacking" was a HarfBuzz/canvas artifact, not a Word issue). **But** the engine measures on the browser canvas, where *medial* U+0640 is zero-width; only a *trailing* U+0640 after a whitelisted word-final letter is measurable (one fixed +step) AND renders clean. → **Mehr must use a DISCRETE trailing-tatweel model** (tokenize; a word ending in `finalInto` gains one trailing tatweel = one measurable step; subset-select which to elongate — the SAME selector as Jameel's `selectSwapRuns`), **NOT** the incremental-medial `AshaarJustify.justifyRuns` + `priorityTable` path that Task 4 shipped. The shipped Mehr path is therefore INEFFECTIVE and must be reworked to the discrete trailing model.
+- **C — Word-native `highKashida`: no elongation for Mehr; word-spacing only for Jameel.** No native kashida shortcut for either font.
+
 ## Findings that reshape scope (verified in code)
 
 - **The `nastaliq` mode is hard-coded to a non-kashida font** in five places: `word-html.js:142` (CSS stack), `taskpane.js:256` (`previewFontFamily`), `word-tabstop.js:68` and `word-html.js:1093,1230,1271` (`<w:rFonts w:cs="Noto Nastaliq Urdu"/>`), and the canvas fallback name `"Noto Nastaliq Urdu"` at `taskpane.js:864,1001,1069`. Adding fonts by copy-pasting these literals does not scale and can silently desync preview from Word output.
