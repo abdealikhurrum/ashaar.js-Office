@@ -577,4 +577,29 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
   assert.ok(xml.slice(0, pPrEnd).indexOf('w:sz w:val="4"') === -1, "no paragraph-mark shrink outside word-fill");
 }
 
+// ── soloRow (OOXML): solo/refrain lines are misra-width, not full-grid ──────
+// A marsiya's solo line and paired refrain lines used to stretch a single cell
+// across the FULL grid (gridSpan = si.GRID). That looks wrong: they should be
+// the SAME width as an ordinary misra (BASE_CPM = 3 columns), centered, with
+// empty pad cells flanking them so the row's spans still sum to si.GRID.
+{
+  // marsiyaSource: N=3, gapCols=1 (default) → GRID = 3*3 + 2*1 = 11
+  const ooxml = AshaarWord.renderForWordOoxml(marsiyaSource,
+    { justifyMode: "none", gapWidth: 1 }, Ashaar, 9360);
+  const rows = ooxml.match(/<w:tr>[\s\S]*?<\/w:tr>/g);
+  const soloRowXml = rows.filter((r) => /هو گئے شہ پر فدا/.test(r))[0];
+  assert.ok(soloRowXml, "solo row found");
+  const spans = [...soloRowXml.matchAll(/<w:gridSpan w:val="(\d+)"\/>/g)].map((m) => Number(m[1]));
+  // Must NOT be a single full-grid cell (gridSpan === GRID === 11).
+  assert.ok(!(spans.length === 1 && spans[0] === 11),
+    "solo row must not be a single full-grid (11) cell");
+  // The text-bearing cell must span BASE_CPM = 3 columns, matching ordinary misra width.
+  assert.match(soloRowXml, /<w:gridSpan w:val="3"\/>/,
+    "solo misra cell must span BASE_CPM=3 columns, same as an ordinary misra");
+  // Spans must still sum to GRID=11 (pad + solo + pad), so the fixed-layout table stays valid.
+  assert.equal(spans.reduce((a, b) => a + b, 0), 11, "row spans must sum to GRID=11");
+  // The refrain pair row (paired \"هائے كربلاء والو\" maqta) is a misraRow, not a
+  // solo — untouched by this fix; still spans the full 2-misra split.
+}
+
 console.log("word-html tests passed");

@@ -1172,14 +1172,20 @@
     function gapTc() { return tcXml(gapCols, cwt, null); }
     function padTc(p) { return p > 0 ? tcXml(p, cwt, null) : ""; }
 
-    // Solo misra spans the FULL grid, centred. A single full-width cell keeps the
-    // solo independent of the couplet's column split (no shared content column can
-    // push the grid under fixed table layout). Justify target stays at BASE_CPM so a
-    // short solo still centres modestly; a long solo simply uses the full width.
+    // Solo misra is the SAME width as an ordinary misra (BASE_CPM columns),
+    // centred, with empty pad cells flanking it — not a single full-grid cell.
+    // In a marsiya (centered solo line + paired refrain lines) a full-grid cell
+    // stretched those lines across the whole table width, which looked wrong;
+    // they should match the width of the other misras. Spans still sum to
+    // si.GRID (left pad + BASE_CPM + right pad), so fixed table layout stays valid.
     // indTwips: right-indent passed through to misraParaXml for stacked ajuz offset
     function soloRow(text, isRefrain, indTwips) {
-      var para = misraParaXml(justify(text, BASE_CPM), "center", isRefrain, opts, indTwips || 0);
-      return "<w:tr>" + tcXml(si.GRID, cwt, para) + "</w:tr>";
+      var span = BASE_CPM;
+      var pad = Math.max(0, si.GRID - span);
+      var left = Math.floor(pad / 2);
+      var right = pad - left;
+      var para = misraParaXml(justify(text, span), "center", isRefrain, opts, indTwips || 0);
+      return "<w:tr>" + padTc(left) + tcXml(span, cwt, para) + padTc(right) + "</w:tr>";
     }
 
     function misraRow(texts, refrains) {

@@ -880,6 +880,15 @@
         }
       }
 
+      // "Let Word fill it" (§4): expand the render width by a strength-driven
+      // fraction (0..15%) so higher strength visibly fills a wider table. The
+      // base width above still comes from the Table-width slider / auto-fit;
+      // this only scales it up, capped at the page width.
+      if (opts.justifyMode === "css") {
+        var expandFrac = AshaarWord.kashidaExpansionFraction(opts.tatweelCount);
+        textWidthTwips = Math.min(pageTwips, Math.round(textWidthTwips * (1 + expandFrac)));
+      }
+
       if ((opts.justifyMode === "kashida" || opts.justifyMode === "spacing") && ctxP) {
         opts._textWidthPx = textWidthTwips * 96 / 1440;
         opts._justifyCtx = ctxP;
