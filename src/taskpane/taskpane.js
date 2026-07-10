@@ -257,9 +257,21 @@
   }
 
   function previewFontFamily(font) {
-    if (font === "nastaliq") return "\"Noto Nastaliq Urdu\", \"Jameel Noori Nastaleeq\", serif";
-    if (font === "arabic-serif") return "\"Scheherazade New\", \"Amiri\", \"Times New Roman\", serif";
-    return "\"Times New Roman\", serif";
+    var mode = font === "nastaliq" ? "noto" : font;
+    var css = AshaarFonts.cssFamilyOf(mode);
+    return css || "\"Times New Roman\", serif";
+  }
+
+  function updateFontNote() {
+    var d = AshaarFonts.get(fontMode.value === "nastaliq" ? "noto" : fontMode.value);
+    var note = document.getElementById("font-install-note");
+    if (!note) return;
+    if (d && d.readerNote) {
+      note.hidden = false;
+      note.textContent = (d.id === "jameel")
+        ? "Readers need “Jameel Noori Nastaleeq” (Regular + Kasheeda) installed to see this correctly."
+        : "Readers need “" + d.wordName + "” installed to see this correctly.";
+    } else { note.hidden = true; }
   }
 
   function setMessage(text) {
@@ -864,9 +876,9 @@
 
       // Measurement canvas at the selection's font — used for auto-fit, the nudge, and kashida.
       var fontSizeP = selFontP.font.size || 12;
-      var fontNameP = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                    : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                    : (selFontP.font.name || "Times New Roman");
+      var modeP = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+      var fontNameP = AshaarFonts.wordNameOf(modeP)
+                    || selFontP.font.name || "Times New Roman";
       var ctxP = document.createElement("canvas").getContext("2d");
       if (ctxP) ctxP.font = fontSizeP + "pt \"" + fontNameP + "\"";
 
@@ -1009,9 +1021,9 @@
       var opts = options();
       if (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") {
         var fontSize = selFont.font.size || 12;
-        var fontName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                     : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                     : (selFont.font.name || "Times New Roman");
+        var mode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+        var fontName = AshaarFonts.wordNameOf(mode)
+                     || selFont.font.name || "Times New Roman";
         var canvas = document.createElement("canvas");
         var ctx = canvas.getContext("2d");
         if (ctx) {
@@ -1146,6 +1158,8 @@
 
   async function justifySelection() {
     var opts = options();
+    var fontId = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+    var mechanism = AshaarFonts.mechanismOf(fontId);
 
     // Hybrid qaseeda trigger: if the cursor's block belongs to a qaseeda that has
     // a stored profile, justify by applying that profile across ALL its blocks so
@@ -1162,15 +1176,31 @@
     if (opts.justifyMode === "css") { await justifySelectionWordFill(opts); return; }
 
     // Fallback font from the pane — used only when a cell reports no explicit font.
-    var fallbackName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
-                     : opts.fontMode === "arabic-serif" ? "Scheherazade New"
-                     : "Times New Roman";
+    var fbMode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+    var fallbackName = AshaarFonts.wordNameOf(fbMode) || "Times New Roman";
     var doKashida = opts.justifyMode === "kashida" || opts.justifyMode === "spacing";
     var CELL_MARGIN_PT = 5.76; // Word default cell side margin (0.08") reserved for text
     var debug = !!(debugMode && debugMode.checked);
     var diags = [];
 
     setMessage("Justifying…");
+
+    // Only the tatweel mechanism (Mehr) has a working kashida/tatweel justify
+    // path. Whitespace-mechanism fonts (Gulzar, Noto, …) have no elongatable
+    // joins in Word — injected tatweels shatter their shaping. Jameel is its
+    // own mechanism, "font-swap": Gate G found Word only slants italic runs
+    // instead of swapping in kasheeda glyphs (so the italic-run engine was
+    // cut), but Gate G2 found Word DOES apply the elongated forms via a
+    // named "Kasheeda" style within the Jameel family — so Jameel fills a
+    // line by swapping whole fasls to that wider face (kashida-fontswap.js)
+    // and has its own dispatch branch below; it must NOT be downgraded here.
+    // Downgrade only whitespace-mechanism fonts to spacing and warn.
+    if (mechanism === "whitespace" && opts.justifyMode === "kashida") {
+      opts = Object.assign({}, opts, { justifyMode: "spacing" });
+      var label = (AshaarFonts.get(fontId) || {}).label;
+      var msg = "“" + label + "” can’t stretch letters in Word — filling by spacing instead.";
+      setMessage(msg);
+    }
 
     await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -1220,6 +1250,10 @@
             allCells.push(cell);
             cell.body.load("text");
             cell.body.font.load("name,size");
+            // Alignment of the cell's own first paragraph — used by the
+            // font-swap (Jameel) path to preserve the misra's visual side
+            // (sadr/ajuz/solo) when it rebuilds the cell via OOXML.
+            cell.body.paragraphs.load("alignment");
           });
         });
       });
@@ -1252,6 +1286,17 @@
         return Math.max(1, (cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
       }
 
+      // The cell's own paragraph alignment ("Right"/"Left"/"Centered"/…) maps
+      // to the "right"/"left"/"center" jc the font-swap path needs when it
+      // rebuilds the cell as fresh OOXML — so the misra keeps its visual side.
+      function cellAlignOf(cell) {
+        var p0 = cell.body.paragraphs.items && cell.body.paragraphs.items[0];
+        var al = p0 && p0.alignment;
+        if (al === "Right") return "right";
+        if (al === "Left") return "left";
+        return "center";
+      }
+
       // Build the measurement canvas with the REAL font + size.
       var canvasCtx = null;
       if (doKashida) {
@@ -1264,6 +1309,23 @@
       // fonts load lazily on first use; this forces the load and awaits it.
       if (canvasCtx && typeof document !== "undefined" && document.fonts && document.fonts.load) {
         try { await document.fonts.load(repSize + "pt \"" + repName + "\""); } catch (e) {}
+      }
+
+      // Jameel font-swap also measures fasls in the Kasheeda (wide) face on
+      // this same canvas — force that @font-face to finish loading too, or
+      // measureText silently falls back to a substitute font and corrupts
+      // selectSwapRuns' gain ranking (wrong fasls get swapped).
+      if (canvasCtx && mechanism === "font-swap" && typeof document !== "undefined" && document.fonts && document.fonts.load) {
+        var kName = AshaarFonts.kasheedaNameOf(fontId);
+        if (kName) { try { await document.fonts.load(repSize + "pt \"" + kName + "\""); } catch (e) {} }
+        // The base face is normally loaded incidentally via the repName
+        // preload above, but repName is the cell's reported font.name
+        // (usually the Latin/hAnsi face), not the Arabic w:cs base face
+        // that baseCss below actually measures with — so force-load it
+        // explicitly, or measureText silently falls back to a substitute
+        // font and corrupts widthsBase / the gain ranking in selectSwapRuns.
+        var bName = AshaarFonts.wordNameOf(fontId);
+        if (bName) { try { await document.fonts.load(repSize + "pt \"" + bName + "\""); } catch (e) {} }
       }
 
       // Auto-fit (in place): widen each table's columns so the widest misra has
@@ -1371,6 +1433,52 @@
         if (!stripJustification(current)) return;
         var colPx = contentPx(cell);
 
+        // Jameel font-swap: measure each fasl (connected segment) in the base
+        // vs Kasheeda face, greedily swap the highest-gain fasls to the wider
+        // face until the misra fills the column, and rebuild the cell as
+        // OOXML with a per-run w:cs. Its own path — no word-range/tatweel/
+        // spacing handling applies, so it returns before that machinery.
+        if (mechanism === "font-swap") {
+          if (!canvasCtx || colPx <= 0) return; // no measurement context — leave the cell as-is
+          var cellAlign = cellAlignOf(cell);
+          var wideCss = "\"" + (AshaarFonts.kasheedaNameOf(fontId) || repName) + "\"";
+          var baseCss = "\"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
+          var fss = AshaarKashidaFontswap.splitSpans(stripJustification(current));
+          var wb = [], ww = [];
+          fss.forEach(function (s) {
+            canvasCtx.font = repSize + "pt " + baseCss; wb.push(canvasCtx.measureText(s).width);
+            canvasCtx.font = repSize + "pt " + wideCss; ww.push(canvasCtx.measureText(s).width);
+          });
+          var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, colPx);
+          var swapXml = AshaarWord.runsToMisraXml(sel.runs, cellAlign, opts);
+          plans.push({ cell: cell, ooxml: swapXml });
+          return; // handled — skip the tatweel/spacing paths for this cell
+        }
+
+        // Mehr tatweel: DISCRETE trailing elongation. Mehr renders a clean
+        // kashida only from ONE trailing tatweel after a word ending in a
+        // whitelisted final letter (medial U+0640 is zero-width on the canvas
+        // we measure with; Word-native highKashida does nothing for Mehr). So
+        // Mehr fits by the SAME discrete subset-selection as Jameel — choose
+        // which eligible words get a trailing tatweel. Single-font text output.
+        if (mechanism === "tatweel" && opts.justifyMode === "kashida") {
+          if (!canvasCtx || colPx <= 0) return;
+          var mehrFont = repSize + "pt \"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
+          var finalSet = {};
+          ((AshaarFonts.tatweelRulesOf(fontId) || {}).finalInto || []).forEach(function (c) { finalSet[c] = true; });
+          var mline = stripJustification(current);
+          var mparts = mline.split(" "), mtoks = [];
+          mparts.forEach(function (wd, i) { if (i) mtoks.push(" "); mtoks.push(wd); });
+          var melong = mtoks.map(function (t) { return (t !== " " && finalSet[t.slice(-1)]) ? t + "ـ" : t; });
+          var mwb = [], mww = [];
+          canvasCtx.font = mehrFont;
+          for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(canvasCtx.measureText(mtoks[mi]).width); mww.push(canvasCtx.measureText(melong[mi]).width); }
+          var msel = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, colPx);
+          var mout = msel.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
+          if (mout !== current) plans.push({ cell: cell, flat: mout });
+          return;
+        }
+
         // Per-word style tuples from the word ranges, then coalesce to runs.
         var words = [];
         (cell.__wordRanges.items || []).forEach(function (wr) {
@@ -1410,17 +1518,14 @@
 
         var outTexts; // per-run text to write back (null when spacing writes properties only)
         var sp = null;
-        if (opts.justifyMode === "kashida") {
-          outTexts = AshaarJustify.justifyRuns(primRuns, colPx, calibParams).map(function (o) { return o.text; });
-        } else {
-          // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
-          sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
-          var gaps = runs.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
-          canvasCtx.font = runFontStr(repName, repSize, false, false);
-          var spaceGlyphPx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var n = Math.max(0, Math.round(sp.wordSpacing * gaps / spaceGlyphPx));
-          outTexts = AshaarWord.distributeMicroSpaces(runs.map(function (r) { return r.text; }), n, MICRO_SPACE);
-        }
+
+        // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
+        sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
+        var gaps = runs.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
+        canvasCtx.font = runFontStr(repName, repSize, false, false);
+        var spaceGlyphPx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+        var n = Math.max(0, Math.round(sp.wordSpacing * gaps / spaceGlyphPx));
+        outTexts = AshaarWord.distributeMicroSpaces(runs.map(function (r) { return r.text; }), n, MICRO_SPACE);
 
         if (debug) {
           var natSum = 0, finSum = 0, twCount = 0;
@@ -1459,6 +1564,17 @@
       var changed = 0;
       for (var pi = 0; pi < plans.length; pi++) {
         var p = plans[pi];
+        if (p.ooxml) {
+          try {
+            p.cell.body.clear();
+            p.cell.body.insertOoxml(AshaarWord.wrapOoxml(p.ooxml), Word.InsertLocation.replace);
+            await context.sync();
+            changed++;
+          } catch (e) {
+            if (debug) diags.push({ i: diags.length, font: "OOXML-FAIL", text: (e && e.message || "").slice(0, 14) });
+          }
+          continue;
+        }
         if (p.flat != null) {
           p.cell.body.paragraphs.getFirst().insertText(p.flat, Word.InsertLocation.replace);
           await context.sync();
@@ -1788,6 +1904,18 @@
   function bind() {
     if (isBound) return;
     isBound = true;
+    (function populateFontModes() {
+      var order = ["document", "arabic-serif", "noto", "mehr", "jameel", "gulzar"];
+      fontMode.innerHTML = "";
+      order.forEach(function (id) {
+        var d = AshaarFonts.get(id);
+        if (!d) return;
+        var o = document.createElement("option");
+        o.value = id; o.textContent = d.label;
+        if (id === "document") o.selected = true;
+        fontMode.appendChild(o);
+      });
+    })();
     autoFitWidth.addEventListener("change", function () {
       tableWidth.disabled = autoFitWidth.checked;
       renderPreview();
@@ -1796,6 +1924,7 @@
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });
+    fontMode.addEventListener("change", updateFontNote);
     layoutPreset.addEventListener("change", applyLayoutPreset);
     misraCount.addEventListener("change", applyLayoutPreset);
     modeTable.addEventListener("click", function () { setMode("table"); });
@@ -1845,6 +1974,7 @@
 
     applyLayoutPreset();
     renderPreview();
+    updateFontNote();
     setMode("table");
     renderTemplateList();
     populateQaseedaNames();

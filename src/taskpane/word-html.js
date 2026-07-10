@@ -1,10 +1,10 @@
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = factory(require("../vendor/ashaar-justify"));
+    module.exports = factory(require("../vendor/ashaar-justify"), require("./fonts"));
   } else {
-    root.AshaarWord = factory(root.AshaarJustify);
+    root.AshaarWord = factory(root.AshaarJustify, root.AshaarFonts);
   }
-}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify) {
+}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify, AshaarFonts) {
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -139,9 +139,9 @@
 
   function fontFamilyStyle(opts) {
     opts = opts || {};
-    if (opts.fontMode === "nastaliq") return "font-family:'Noto Nastaliq Urdu','Jameel Noori Nastaleeq',serif";
-    if (opts.fontMode === "arabic-serif") return "font-family:'Scheherazade New','Amiri','Times New Roman',serif";
-    return "";
+    var mode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode; // legacy alias
+    var css = AshaarFonts.cssFamilyOf(mode);
+    return css ? "font-family:" + css : "";
   }
 
   function tableStyle(opts) {
@@ -1129,8 +1129,10 @@
     }
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
-    if (opts.fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if (opts.fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    // Font routed through the AshaarFonts registry (nastaliq engine merge).
+    var mode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
+    var csName = AshaarFonts.wordNameOf(mode);
+    if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
     rpr += "</w:rPr>";
     var ind = indTwips ? '<w:ind w:left="' + indTwips + '"/>' : "";
     // Shrink the paragraph mark when word-fill trailing break is emitted, so the
@@ -1141,6 +1143,22 @@
       "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
       trailingBreak +
       "</w:p>";
+  }
+
+  // runs: [{text, swap}]; base vs Kasheeda cs name chosen per run (Jameel
+  // font-swap kashida — Task 8). swap:true fasls render in the wider
+  // "Kasheeda" face; the rest stay in the base face.
+  function runsToMisraXml(runs, align, opts) {
+    var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var baseName = AshaarFonts.wordNameOf(mode);
+    var wideName = AshaarFonts.kasheedaNameOf(mode) || baseName;
+    var body = (runs || []).map(function (r) {
+      var cs = r.swap ? wideName : baseName;
+      var rpr = "<w:rPr><w:rtl/>" + (cs ? '<w:rFonts w:cs="' + cs + '"/>' : "") + "</w:rPr>";
+      return "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
+    }).join("");
+    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" + body + "</w:p>";
   }
 
   function baytRowsOoxml(bayt, si, opts) {
@@ -1276,8 +1294,9 @@
       "</w:tblPr>";
     var emptyPara = "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/></w:pPr></w:p>";
     var rpr = "<w:rPr><w:rtl/>";
-    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var csName = AshaarFonts.wordNameOf(mode);
+    if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
     rpr += "</w:rPr>";
     var rows = (templateData.rows || []).map(function (row) {
       var cells = row.map(function (cell, cIdx) {
@@ -1317,8 +1336,9 @@
       return '<w:gridCol w:w="' + w + '"/>';
     }).join("") + "</w:tblGrid>";
     var rpr = "<w:rPr><w:rtl/>";
-    if ((opts || {}).fontMode === "nastaliq") rpr += '<w:rFonts w:cs="Noto Nastaliq Urdu"/>';
-    else if ((opts || {}).fontMode === "arabic-serif") rpr += '<w:rFonts w:cs="Scheherazade New"/>';
+    var mode = (opts || {}).fontMode === "nastaliq" ? "noto" : (opts || {}).fontMode;
+    var csName = AshaarFonts.wordNameOf(mode);
+    if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
     rpr += "</w:rPr>";
     var rows = (layoutTable.rows || []).map(function (row) {
       var cells = row.map(function (cell, cIdx) {
@@ -1366,6 +1386,7 @@
   }
 
   return {
+    fontFamilyStyle: fontFamilyStyle,
     renderForWord: renderForWord,
     renderTextWithLayoutForWord: renderTextWithLayoutForWord,
     renderTemplateForWord: renderTemplateForWord,
@@ -1388,6 +1409,7 @@
     wordFillJc: wordFillJc,
     kashidaExpansionFraction: kashidaExpansionFraction,
     renderForWordOoxml: renderForWordOoxml,
+    runsToMisraXml: runsToMisraXml,
     wrapOoxml: wrapOoxml,
     misraSpans: misraSpans,
     generateBareGrid12Ooxml: generateBareGrid12Ooxml,

@@ -40,11 +40,8 @@
       <section class="controls shared-controls" aria-label="Shared formatting controls">
         <div class="field">
           <label for="font-mode">Font</label>
-          <select id="font-mode">
-            <option value="document" selected>Document default</option>
-            <option value="arabic-serif">Arabic serif</option>
-            <option value="nastaliq">Nastaliq</option>
-          </select>
+          <select id="font-mode"></select>
+          <p id="font-install-note" class="adopt-hint" hidden></p>
         </div>
         <div class="field">
           <label for="justify-mode">Justification</label>
@@ -323,6 +320,8 @@
           "../vendor/ashaar.js",
           "../vendor/ashaar-autotune.js",
           "./profiles.js",
+          "./fonts.js",
+          "./kashida-fontswap.js",
           "./word-html.js",
           "./word-tabstop.js",
           "./table-adopt.js",

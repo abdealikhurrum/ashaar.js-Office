@@ -9,6 +9,31 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Mehr Nastaliq Web";
+  src: url("../../assets/fonts/MehrNastaliqWeb.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gulzar";
+  src: url("../../assets/fonts/Gulzar-Regular.woff2") format("woff2");
+  font-display: swap;
+}
+/* Private — user-supplied Jameel faces (gitignored, never published). Needed so
+   the canvas analyzer can measure base vs Kasheeda widths in the pane. Gate G2
+   (2026-07-10) found Word applies Jameel's elongated forms via a named
+   "Kasheeda" style within the family (font-swap), not via italic runs — see
+   kashida-fontswap.js. Both files are user-supplied and NOT bundled/deployed;
+   drop them into assets/fonts/ locally (see README.md). */
+@font-face {
+  font-family: "Jameel Noori Nastaleeq";
+  src: url("../../assets/fonts/JameelNooriNastaleeq-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Jameel Noori Nastaleeq Kasheeda";
+  src: url("../../assets/fonts/JameelNooriNastaleeqKasheeda.ttf") format("truetype");
+}
+
 /* Use the user's LOCALLY-INSTALLED AL-KANZ (an Al-Fatemi derivative) if present,
    so justification metrics match Word without redistributing the font file.
    local() is the standards-defined way to reference an installed font by name;

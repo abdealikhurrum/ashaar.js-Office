@@ -595,4 +595,29 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
   // solo — untouched by this fix; still spans the full 2-misra split.
 }
 
+// Registry-driven fonts: Mehr/Gulzar reach the OOXML cs name and preview stack.
+{
+  const AshaarFonts = require("../src/taskpane/fonts");
+  assert.strictEqual(AshaarFonts.wordNameOf("mehr"), "Mehr Nastaliq Web");
+  // fontFamilyStyle now delegates to the registry
+  const mehrCss = AshaarWord.fontFamilyStyle({ fontMode: "mehr" });
+  assert.ok(/Mehr Nastaliq Web/.test(mehrCss), "mehr css from registry");
+  const gulzarCss = AshaarWord.fontFamilyStyle({ fontMode: "gulzar" });
+  assert.ok(/Gulzar/.test(gulzarCss), "gulzar css from registry");
+  // legacy "nastaliq" alias still resolves to a Nastaliq face (Noto)
+  const notoCss = AshaarWord.fontFamilyStyle({ fontMode: "nastaliq" });
+  assert.ok(/Noto Nastaliq Urdu/.test(notoCss), "nastaliq alias preserved");
+  console.log("word-html registry-font tests passed");
+}
+
+// ── runsToMisraXml (Jameel font-swap kashida — Task 8) ─────────────────────
+{
+  const xml = AshaarWord.runsToMisraXml(
+    [{text:"كہہ", swap:true},{text:" ", swap:false},{text:"تھے", swap:false}],
+    "right", { fontMode: "jameel" });
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "wider face on swapped fasl");
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq"') !== -1, "base face on non-swapped fasl");
+  console.log("word-html font-swap emitter tests passed");
+}
+
 console.log("word-html tests passed");
