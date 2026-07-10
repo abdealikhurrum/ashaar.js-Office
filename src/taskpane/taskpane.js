@@ -1053,6 +1053,139 @@
     return String(s || "").replace(/[ـ  ]/g, "");
   }
 
+  // "Let Word fill it" mode: no probe/calibrate/tatweel — Word's own kashida
+  // renderer does the work via the paragraph's jc (justification) value. We
+  // (1) qaseeda-proportionally widen the table's columns so kashida has
+  // headroom, then (2) rebuild each cell's single paragraph as OOXML carrying
+  // the word-fill jc + shrunk trailing break, using the SAME misraParaXml/
+  // wrapOoxml emitters insertPoem/insertTabStopPoem already use (DRY — no
+  // second XML builder). The Office.js alignment enum has no kashida values,
+  // so a plain `paragraph.alignment = ...` assignment cannot express this;
+  // insertOoxml is the only way to set jc="mediumKashida" etc.
+  async function justifySelectionWordFill(opts) {
+    setMessage("Justifying…");
+
+    await withWord(async function (context) {
+      var selection = context.document.getSelection();
+
+      // Find enclosing Ashaar Poem content control (mirrors the kashida/spacing path).
+      var cc = selection.parentContentControlOrNullObject;
+      cc.load("title");
+      await context.sync();
+
+      var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem")
+        ? cc.getRange() : selection;
+
+      var tables = workRange.tables;
+      tables.load("items");
+      await context.sync();
+
+      if (!tables.items.length) {
+        setMessage("Select an Ashaar table to fill with Word kashida.");
+        return;
+      }
+
+      tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+      await context.sync();
+      tables.items.forEach(function (tbl) {
+        tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+      });
+      await context.sync();
+
+      var allCells = [];
+      tables.items.forEach(function (tbl) {
+        tbl.rows.items.forEach(function (row) {
+          row.cells.items.forEach(function (cell) {
+            allCells.push(cell);
+            cell.body.load("text");
+          });
+        });
+      });
+      await context.sync();
+
+      // Column expansion (qaseeda-proportional): scale every column of every
+      // table by 1+frac, capped so the table doesn't exceed page width. Reuses
+      // the same canResize gate + page-width computation as the kashida/spacing
+      // auto-fit block above (desktop-only TableColumn API, WordApiDesktop 1.3).
+      var canResize = (typeof Office !== "undefined" && Office.context && Office.context.requirements
+        && Office.context.requirements.isSetSupported
+        && Office.context.requirements.isSetSupported("WordApiDesktop", "1.3"));
+      var frac = AshaarWord.kashidaExpansionFraction(opts.tatweelCount);
+      if (frac > 0 && canResize) {
+        var sectionA = context.document.sections.getFirst();
+        sectionA.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+        await context.sync();
+        var plA = sectionA.pageLayout;
+        var pagePt = plA && plA.width ? (plA.width - (plA.leftMargin || 0) - (plA.rightMargin || 0)) : 468;
+
+        // Per table: current width (first row's cells) scaled by 1+frac, capped at page width.
+        var scaleByTable = tables.items.map(function (tbl) {
+          var tableWpt = 0;
+          if (tbl.rows.items.length) {
+            tbl.rows.items[0].cells.items.forEach(function (cell) { tableWpt += (cell.columnWidth || 0); });
+          }
+          var s = 1 + frac;
+          if (tableWpt > 0 && tableWpt * s > pagePt) s = pagePt / tableWpt;
+          return Math.max(1, s);
+        });
+
+        if (scaleByTable.some(function (s) { return s > 1.001; })) {
+          var colSets = tables.items.map(function (tbl, i) {
+            if (scaleByTable[i] <= 1.001) return null;
+            var cols = tbl.columns; cols.load("items/width"); return cols;
+          });
+          await context.sync();
+          colSets.forEach(function (cols, i) {
+            if (!cols) return;
+            cols.items.forEach(function (col) { col.width = Math.round(col.width * scaleByTable[i] * 100) / 100; });
+          });
+          await context.sync();
+        }
+      }
+
+      // Rebuild each cell's paragraph as word-fill OOXML: native kashida jc (or
+      // "distribute" for non-Arabic) plus the shrunk trailing break that lets a
+      // single (last) line actually stretch — same emitter used by insertPoem.
+      // One context.sync() per cell (inside try/catch) so a failure on one cell
+      // degrades gracefully instead of aborting the whole batch, mirroring the
+      // run-aware fallback pattern in justifySelection's kashida/spacing path.
+      //
+      // NOT verified in Word yet (Task 7 does that): if a wrapOoxml-wrapped
+      // single paragraph is rejected by Word at cell-body scope, the first
+      // catch retries with the bare paraXml fragment (no package wrapper); if
+      // that also fails, the second catch degrades to plain justified
+      // alignment (jc="both", no kashida) so the cell is at least readable.
+      var changed = 0;
+      for (var i = 0; i < allCells.length; i++) {
+        var cell = allCells[i];
+        var base = stripJustification(cell.body.text || "").trim();
+        if (!base) continue;
+        // opts.justifyMode === "css" here, so misraParaXml returns the
+        // word-fill jc + shrunk break (no rFonts override — keep the cell's own font).
+        var paraXml = AshaarWord.misraParaXml(base, "center", false, opts, 0);
+        try {
+          cell.body.insertOoxml(AshaarWord.wrapOoxml(paraXml), Word.InsertLocation.replace);
+          await context.sync();
+          changed++;
+        } catch (eWrapped) {
+          try {
+            cell.body.insertOoxml(paraXml, Word.InsertLocation.replace);
+            await context.sync();
+            changed++;
+          } catch (eBare) {
+            try {
+              cell.body.paragraphs.getFirst().alignment = Word.Alignment.justified;
+              await context.sync();
+              changed++;
+            } catch (eDegraded) { /* leave this cell untouched */ }
+          }
+        }
+      }
+
+      setMessage("Filled " + changed + " cell(s) with Word kashida.");
+    });
+  }
+
   async function justifySelection() {
     var opts = options();
 
@@ -1064,6 +1197,11 @@
       var qname = await getQaseedaAtSelection();
       if (qname && loadProfileStore()[qname]) { await applyProfileToQaseeda(qname); return; }
     } catch (e) { /* fall through to normal justify */ }
+
+    // "Let Word fill it": native Word kashida (jc) instead of manual tatweel
+    // insertion / spacing math. Entirely different code path — skip the
+    // probe/calibrate/tatweel machinery below and delegate.
+    if (opts.justifyMode === "css") { await justifySelectionWordFill(opts); return; }
 
     // Fallback font from the pane — used only when a cell reports no explicit font.
     var fallbackName = opts.fontMode === "nastaliq" ? "Noto Nastaliq Urdu"
