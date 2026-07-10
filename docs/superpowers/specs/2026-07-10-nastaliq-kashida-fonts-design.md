@@ -15,12 +15,18 @@ The three fonts that *can* fill a Nastaliq line each do it by a **different mech
 
 | Font | Kashida mechanism | Fills a line by | License / shipping |
 |---|---|---|---|
-| **Mehr Nastaliq Web** | `tatweel` (U+0640), **limited** coverage, **Mehr-specific slot rules** | Inserting tatweels at legal joins; canvas-measured | CC-BY-SA (npm pkg MIT) → **bundle** w/ attribution |
+| **Mehr Nastaliq Web** | `tatweel` (U+0640), **limited** coverage, **whitelist slot rules** (Beta 2.0) | Inserting tatweels only on joins into whitelisted letters; canvas-measured | CC-BY-SA (npm pkg MIT) → **bundle** w/ attribution |
 | **Jameel Noori Kasheeda** | `italic-run` — elongated forms live in the **italic style slot**; whole-run toggle, **discrete** | Italicizing chosen spans (each jumps to its wider kasheeda form) | murky/pirated → **bundle privately** (owner's decision), do not ship on public Pages without resolving |
 | **Gulzar** | `whitespace` — **no elongation**; *"dramatic failures when set to justify"* with tatweels | Inter-word space only (Word `distribute`) | OFL → **bundle** |
 | *Noto Nastaliq Urdu (existing)* | `whitespace` — no kashida | Inter-word space only | already referenced; **reclassify** off the tatweel path |
 
 **Consequence:** justification is not one algorithm gated by a boolean; it is three strategies gated by a per-font tag.
+
+**Mehr's tatweel whitelist (Beta 2.0, verified — [mehrtype how-to](https://mehrtype.blogspot.com/2022/02/how-to-use-mehr-nastaliq-web-font.html)).** Elongation is designed only on the join *leading into* these letters; every other join renders no kashida:
+- **Medial/initial:** ب پ ت ٹ ث س ش ف ک گ
+- **Word-final:** ب پ ت ٹ ث ف ک گ (س ش are not elongated word-final)
+
+The blog states this is a **beta** limitation that later versions may lift. So the whitelist is authoritative *for this version* but must be versioned and probe-expandable — see §5 dispatch.
 
 ## Findings that reshape scope (verified in code)
 
@@ -47,7 +53,12 @@ AshaarFonts.LIST = {
   mehr:   { id:"mehr",   label:"Mehr Nastaliq",
             css:"'Mehr Nastaliq Web', serif", wordName:"Mehr Nastaliq Web",
             mechanism:"tatweel",   bundled:true,  file:"MehrNastaliqWeb.woff2",
-            tatweelRules:{ /* optional slot overrides; probe refines empirically */ } },
+            // Beta 2.0 whitelist: tatweel is legal ONLY on a join leading INTO these letters.
+            tatweelRules:{
+              version:"beta-2.0",
+              medialInto: ["ب","پ","ت","ٹ","ث","س","ش","ف","ک","گ"],
+              finalInto:  ["ب","پ","ت","ٹ","ث","ف","ک","گ"],   // س ش drop out word-final
+              probeMayExpand:true } },
   jameel: { id:"jameel", label:"Jameel Noori Kasheeda",
             css:"'Jameel Noori Nastaleeq Kasheeda','Jameel Noori Nastaleeq',serif",
             wordName:"Jameel Noori Nastaleeq",           // italic run triggers kasheeda
@@ -103,7 +114,7 @@ The italic-run strategy. Jameel elongation is a **discrete subset-selection**: c
 ### 5. Justify dispatch
 
 In `justifySelection` (and the qaseeda/apply-to-all path), branch on `AshaarFonts.mechanismOf(fontId)`:
-- **`tatweel`** → existing `probeFont → calibrate → justifyLine → insertText`. Slots filtered by the font's `tatweelRules` **and** empirically by `probeFont` scores (this is where Mehr's different rule set is honored — the probe already scores per-pair elongation quality; sparse Mehr coverage naturally yields fewer legal slots). Primary path for Mehr.
+- **`tatweel`** → existing `probeFont → calibrate → justifyLine → insertText`. Slots are the **intersection** of `buildSlots()`'s generic legal joins with the font's `tatweelRules` whitelist: for Mehr, keep a candidate slot only if the letter *following* the tatweel is in `medialInto` (mid-word) or `finalInto` (word-final). `probeFont` runs as a cross-check and, when `probeMayExpand`, may *add* slots it empirically measures as elongating (so a post-beta Mehr with fuller coverage unlocks automatically without a code change). Primary path for Mehr.
 - **`italic-run`** → §4: `measureSpans → selectItalicRuns → insertOoxml`. No `probeFont` (tatweel probe is meaningless here).
 - **`whitespace`** → **no glyph manipulation**; delegate to the guided-justification §3 Word path with `distribute` (or `w:jc="both"`), set on the misra paragraphs. Hard guard: assert we never call `justifyLine` for a `whitespace` font (prevents Gulzar shaping failures).
 
@@ -136,7 +147,7 @@ No edits to `src/vendor/*` (vendoring preserved). The italic-run strategy lives 
 - **Unit (Node, `tests/kashida-italic.test.js`):** `splitSpans` tokenization; `selectItalicRuns` on synthetic width arrays — picks the max-fill subset ≤ target, reports `reason` when no span is elongatable, handles the all-fit and none-fit edges. Pure, deterministic, no canvas.
 - **Manual (in Word, checklist):**
   1. **Spike first (blocking):** does setting a run italic in Jameel Kasheeda actually swap to elongated glyphs in Word (Mac + Windows)? Sample doc with normal vs italic Jameel runs.
-  2. Mehr: engine justify fills lines; probe shows sparse-but-real slot coverage; ragged→clean.
+  2. **Mehr whitelist verification (before shipping):** render tatweel between each documented pair (into ب پ ت ٹ ث س ش ف ک گ medial; ب پ ت ٹ ث ف ک گ final) in the *bundled* Mehr and confirm each actually elongates; confirm a non-whitelisted join (e.g. into ر/د/ه) does **not**. Reconcile any drift between the blog and the shipped `.woff2`, and check whether the bundled version is still Beta 2.0 or a later build (which may widen coverage). Then: engine justify fills lines; probe agrees with the whitelist; ragged→clean.
   3. Gulzar: engine mode is disabled in the chooser; "Space out words" fills; injecting tatweels is never attempted.
   4. Reader-end: open the `.docx` on a machine without the font → graceful fallback + the pane note was accurate.
 
@@ -167,6 +178,6 @@ No edits to `src/vendor/*` (vendoring preserved). The italic-run strategy lives 
 
 ## Open questions for spec review
 
-- **Mehr `tatweelRules`:** do we need an explicit slot-override table, or is `probeFont`'s empirical scoring sufficient on its own? (Design assumes probe-first, override-only-if-needed.)
+- ~~**Mehr `tatweelRules`:** do we need an explicit slot-override table, or is `probeFont` sufficient?~~ **Resolved:** explicit whitelist (Beta 2.0 letters above), authoritative for this version; probe cross-checks and may expand post-beta. A **verification task** confirms the whitelist against the actual bundled `.woff2` in Word before shipping (fonts and blog can drift).
 - **Jameel span granularity:** italicize at **word** boundaries only, or allow **connector-group** sub-word spans for finer fill? (Design allows sub-word via `splitSpans`; word-only is a simpler fallback if the spike shows sub-word italic runs shape badly.)
 - Whether the **Noto** default should be retired entirely in favor of Gulzar as the default `whitespace` Nastaliq, or kept for continuity.
