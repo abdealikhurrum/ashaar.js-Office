@@ -1394,6 +1394,36 @@
           });
           await context.sync();
         }
+      } else if (!opts.autoFitWidth && canvasCtx && canResize && opts.tableWidthPct) {
+        // Table-width % applied IN PLACE (no rebuild): scale each table's columns
+        // so its total width = tableWidthPct% of the page content width. Mirrors
+        // how insert treats the slider when auto-fit is off, but on the EXISTING
+        // table — so a width change no longer requires copy-and-replace. Uniform
+        // scale preserves the gap:content proportions (layout shape intact).
+        var sectionW = context.document.sections.getFirst();
+        sectionW.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+        await context.sync();
+        var plW = sectionW.pageLayout;
+        var pageW = plW && plW.width ? (plW.width - (plW.leftMargin || 0) - (plW.rightMargin || 0)) : 468;
+        var targetW = Math.max(1, (Number(opts.tableWidthPct) / 100) * pageW);
+        var colSetsW = tables.items.map(function (tbl) { var c = tbl.columns; c.load("items/width"); return c; });
+        await context.sync();
+        var didResize = false;
+        colSetsW.forEach(function (cols) {
+          var cur = 0; cols.items.forEach(function (col) { cur += (col.width || 0); });
+          if (cur <= 0) return;
+          var scale = targetW / cur;
+          if (Math.abs(scale - 1) < 0.005) return;
+          cols.items.forEach(function (col) { col.width = Math.round(col.width * scale * 100) / 100; });
+          didResize = true;
+        });
+        if (didResize) {
+          await context.sync();
+          tables.items.forEach(function (tbl) {
+            tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+          });
+          await context.sync();
+        }
       }
 
       // Probe + calibrate using the real font/size and content widths.
