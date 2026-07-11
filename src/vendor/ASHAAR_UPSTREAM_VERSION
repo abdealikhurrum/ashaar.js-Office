@@ -1,7 +1,7 @@
 repo=https://github.com/abdealikhurrum/ashaar-js.git
 branch=master
-commit=4a56e05e07d62a4b2aa3804ac22856ddcf6cac9e
-date=2026-07-09T23:55:26-05:00
+commit=caf103f1c844a93a6f0393406ef44588647aee79
+date=2026-07-11T12:06:47-05:00
 package=ashaar-js
 version=0.1.0
-subject=feat: run-aware justifyMisra over styled child nodes
+subject=feat(justify): justifyRunsConcentrated — em-capped concentration + achievedPx (ashaar-js#7)

@@ -357,6 +357,83 @@
     return best.map(function (t) { return { text: t }; });
   }
 
+  // Concentrated, budget-aware kashida: like justifyRuns but (1) piles tatweels
+  // onto each position up to a per-position em cap (0.5em by default) before
+  // moving to the next-best position — a few LONG kashidas, not many short ones —
+  // and (2) reports achievedPx so the caller can backfill the remainder with
+  // spacing. Elongation never exceeds targetWidth (the elongation budget).
+  // params: { perPositionEm=0.5, maxPositions (0=unbounded), priorityTable,
+  //           fontQualityBoost, defaultFontSize } — the last four feed buildSlots.
+  function justifyRunsConcentrated(runs, targetWidth, params) {
+    params = params || {};
+    runs = runs || [];
+    var texts = runs.map(function (r) {
+      if (!r || typeof r.measure !== 'function') {
+        throw new TypeError('run is missing a measure() function');
+      }
+      return stripTatweels(r.text || '');
+    });
+    var current = texts.slice();
+    var natural = measureRunsNatural(runs);
+    if (natural >= targetWidth) {
+      return { runs: current.map(function (t) { return { text: t }; }), achievedPx: natural, positionsUsed: 0 };
+    }
+    var slots = [];
+    texts.forEach(function (t, ri) {
+      buildSlots(t, params, runs[ri].fontProfile || null).forEach(function (s) {
+        slots.push({ ri: ri, wi: s.wi, pos: s.pos, score: s.score });
+      });
+    });
+    if (!slots.length) {
+      return { runs: current.map(function (t) { return { text: t }; }), achievedPx: natural, positionsUsed: 0 };
+    }
+    slots.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.ri !== b.ri) return a.ri - b.ri;
+      if (a.wi !== b.wi) return a.wi - b.wi;
+      return a.pos - b.pos;
+    });
+
+    var perPositionEm = params.perPositionEm == null ? 0.5 : params.perPositionEm;
+    var maxPositions = params.maxPositions || 0; // 0 = unbounded
+    var HARD_CAP = 32;                           // per-position tatweel backstop
+    var byRun = {};                              // ri -> { "wi:pos": count }
+    var total = natural;
+    var positionsUsed = 0;
+
+    for (var si = 0; si < slots.length; si++) {
+      if (total >= targetWidth) break;
+      if (maxPositions && positionsUsed >= maxPositions) break;
+      var s = slots[si];
+      var fontSize = runs[s.ri].fontSize || params.defaultFontSize || 16;
+      var capPx = perPositionEm * fontSize * 96 / 72;
+      var map = byRun[s.ri] || (byRun[s.ri] = {});
+      var key = s.wi + ':' + s.pos;
+      var slotStart = total;
+      var engaged = false;
+      var count = 0;
+      while (count < HARD_CAP) {
+        map[key] = (map[key] || 0) + 1;
+        count++;
+        current[s.ri] = insertIntoWords(texts[s.ri], map, TATWEEL);
+        var prev = total;
+        total = 0;
+        for (var mi = 0; mi < runs.length; mi++) total += runs[mi].measure(current[mi]);
+        if (total <= prev) {                      // this tatweel added no width — revert & abandon
+          map[key] -= 1;
+          current[s.ri] = insertIntoWords(texts[s.ri], map, TATWEEL);
+          total = prev;
+          break;
+        }
+        engaged = true;
+        if (total >= targetWidth) break;
+        if (total - slotStart >= capPx) break;    // per-position em cap
+      }
+      if (engaged) positionsUsed++;
+    }
+    return { runs: current.map(function (t) { return { text: t }; }), achievedPx: total, positionsUsed: positionsUsed };
+  }
+
   // Run-aware non-kashida justification. Computes a single word-spacing value
   // (px) and a uniform font scale for a misra of differently-styled runs, from
   // per-run natural widths. Value-returning: the caller applies the result as
@@ -426,6 +503,7 @@
     applySlotsMulti: applySlotsMulti,
     measureRunsNatural: measureRunsNatural,
     justifyRuns: justifyRuns,
+    justifyRunsConcentrated: justifyRunsConcentrated,
     computeRunSpacing: computeRunSpacing
   };
 }));
