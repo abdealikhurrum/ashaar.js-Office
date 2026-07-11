@@ -1588,7 +1588,6 @@
           } catch (e) { /* keep defaults */ }
         }
       }
-      calibParams.targetFill = 1.0; // φ is the only strength lever; fill target is the column edge
 
       // Canvas font shorthand for one run: "[italic] [bold] Npt \"Family\"".
       function runFontStr(name, size, bold, italic) {
@@ -1772,7 +1771,10 @@
         if (opts.justifyMode === "kashida" && !anyWhitespaceRun) {
           var gNatural = primRuns.reduce(function (a, r) { return a + r.measure(r.text); }, 0);
           var gTarget = gNatural + elongShare * Math.max(0, colPx - gNatural);
-          var kout = AshaarJustify.justifyRuns(primRuns, gTarget, calibParams); // same length/order
+          // φ is the only strength lever for kashida: force targetFill=1.0 for
+          // this call only (fill target is the column edge), without mutating
+          // the shared calibParams read by the spacing branch below.
+          var kout = AshaarJustify.justifyRuns(primRuns, gTarget, Object.assign({}, calibParams, { targetFill: 1.0 })); // same length/order
           outTexts = kout.map(function (r) { return r.text; });
         } else {
           // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.

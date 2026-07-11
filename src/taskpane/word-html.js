@@ -987,8 +987,8 @@
     });
   }
 
-  // Map the 0–24 stretch slider to Word's three native kashida jc levels, in
-  // Strength 1–10 → kashida level in thirds. Used by "Let Word fill it" (§3).
+  // Map Strength 1–10 to Word's three native kashida jc levels, in thirds
+  // (1–3 low, 4–6 medium, 7–10 high). Used by "Let Word fill it" (§3).
   function strengthToKashidaLevel(strength) {
     var s = Number(strength);
     if (!isFinite(s)) return "mediumKashida";
