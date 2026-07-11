@@ -584,6 +584,20 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
   assert.ok(xml.indexOf('w:sz w:val=') === -1, "no fontSizePt → no w:sz (insert default unchanged)");
 }
 
+// ── misraParaXml: opts.fontCsName overrides the cs font (Re-render font pin) ──
+// Re-render preserves an arbitrary existing font (e.g. Fatemi Maqala, not in the
+// registry) by pinning the exact cs name, overriding fontMode's registry lookup.
+{
+  const xml = AshaarWord.misraParaXml("العلم", "right", false, { fontMode: "document", fontCsName: "Fatemi Maqala" }, 0);
+  assert.ok(xml.indexOf('w:cs="Fatemi Maqala"') !== -1, "fontCsName pins the cs font even under Document default");
+}
+{
+  // fontCsName wins over the fontMode registry font
+  const xml = AshaarWord.misraParaXml("العلم", "right", false, { fontMode: "mehr", fontCsName: "Fatemi Maqala" }, 0);
+  assert.ok(xml.indexOf('w:cs="Fatemi Maqala"') !== -1, "fontCsName overrides fontMode's wordName");
+  assert.ok(xml.indexOf('w:cs="Mehr Nastaliq Web"') === -1, "fontMode font not emitted when fontCsName set");
+}
+
 // ── soloRow (OOXML): solo/refrain lines are misra-width, not full-grid ──────
 // A marsiya's solo line and paired refrain lines used to stretch a single cell
 // across the FULL grid (gridSpan = si.GRID). That looks wrong: they should be

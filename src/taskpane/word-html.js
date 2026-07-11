@@ -1173,8 +1173,11 @@
     var rpr = "<w:rPr><w:rtl/>";
     if (isRefrain) rpr += '<w:color w:val="A7352A"/>';
     // Font routed through the AshaarFonts registry (nastaliq engine merge).
+    // opts.fontCsName pins an EXACT cs font (Re-render preserving an arbitrary
+    // existing font — e.g. Fatemi Maqala — that isn't in the registry),
+    // overriding the fontMode → wordName lookup.
     var mode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
-    var csName = AshaarFonts.wordNameOf(mode);
+    var csName = opts.fontCsName || AshaarFonts.wordNameOf(mode);
     if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
     // Size-preserving re-render: when the caller supplies the cell's point size
     // (gap/width apply that rebuilds the poem), emit it so the rebuilt run keeps

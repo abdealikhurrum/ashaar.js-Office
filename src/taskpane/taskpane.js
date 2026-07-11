@@ -857,9 +857,12 @@
     }
   }
 
-  async function insertPoem(replaceSelection) {
+  async function insertPoem(replaceSelection, optsOverride) {
     await withWord(async function (context) {
       var opts = options();
+      // Re-render passes overrides (e.g. justifyMode:"none" for a bare rebuild,
+      // fontCsName to pin the poem's existing font). Merge over the pane opts.
+      if (optsOverride) opts = Object.assign({}, opts, optsOverride);
       var source = String(input.value || "");
 
       var sectionP = context.document.sections.getFirst();
@@ -1142,6 +1145,81 @@
       }
       setMessage("Reset " + cleared + " cell(s) — kashida & micro-spaces cleared.");
     });
+  }
+
+  // Single-button Re-render for a managed poem: reconstruct it from the current
+  // cells and rebuild through the normal render path applying the pane's gap /
+  // table-width, but BARE (justifyMode "none") — renderForWordOoxml is
+  // mechanism-unaware, so baking kashida here would inject generic tatweels into
+  // a Jameel/Mehr poem. Font + size are preserved: size rides insertPoem's
+  // replace-capture; font is the dropdown font when one is explicitly chosen
+  // (so a mode that needs a specific font adopts it), else the poem's existing
+  // font (pinned via opts.fontCsName). After the bare rebuild, fill in place
+  // with the correct per-cell mechanism by delegating to justifySelection.
+  async function reRender() {
+    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to re-render."); return; }
+    var opts = options();
+    var source = "";
+    var existingFont = "";
+
+    await withWord(async function (context) {
+      var selection = context.document.getSelection();
+      var cc = selection.parentContentControlOrNullObject;
+      cc.load("title");
+      await context.sync();
+      var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem") ? cc.getRange() : selection;
+      var tables = workRange.tables;
+      tables.load("items");
+      await context.sync();
+      if (!tables.items.length) { setMessage("Click inside an Ashaar table to re-render."); return; }
+
+      tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+      await context.sync();
+      tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
+      await context.sync();
+      tables.items.forEach(function (tbl) {
+        tbl.rows.items.forEach(function (row) {
+          row.cells.items.forEach(function (cell) { cell.body.load("text"); cell.body.font.load("name"); });
+        });
+      });
+      await context.sync();
+
+      // Reconstruct source (same reconstruction Adopt / word-fill use).
+      source = tables.items.map(function (tbl) {
+        var rows = tbl.rows.items.map(function (row) {
+          return row.cells.items.map(function (cell) { return cell.body.text || ""; });
+        });
+        return AshaarTableAdopt.adoptTableToSource(rows, { direction: "rtl" });
+      }).filter(function (s) { return s.trim(); }).join("\n\n");
+
+      // Representative existing font (first cell reporting one) to preserve.
+      tables.items.forEach(function (tbl) {
+        tbl.rows.items.forEach(function (row) {
+          row.cells.items.forEach(function (cell) {
+            if (!existingFont && cell.body.font && cell.body.font.name) existingFont = cell.body.font.name;
+          });
+        });
+      });
+
+      if (!source.trim()) { setMessage("That table didn't contain any text to re-render."); return; }
+      workRange.select();
+      await context.sync();
+    });
+
+    if (!source.trim()) return; // a friendly message was already shown
+
+    // Font pin: an explicitly-chosen dropdown font wins (so a mode that needs a
+    // specific font adopts it); otherwise preserve the poem's existing font.
+    var dropdownFont = AshaarFonts.wordNameOf(opts.fontMode === "nastaliq" ? "noto" : opts.fontMode);
+    var fontCsName = dropdownFont || existingFont || null;
+
+    input.value = source;
+    // Step 1: bare rebuild — gap/width from the pane, font pinned, size preserved.
+    await insertPoem(true, { justifyMode: "none", fontCsName: fontCsName });
+    // Step 2: fill in place with the correct per-cell mechanism for the chosen
+    // mode (skipped when the pane mode is "none").
+    if (opts.justifyMode && opts.justifyMode !== "none") await justifySelection();
+    setMessage("Re-rendered (font & size preserved).");
   }
 
   // justify-mode dropdown is "Word justify" (opts.justifyMode === "css") on
@@ -2101,6 +2179,7 @@
     document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
+    document.getElementById("re-render").addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
     // Import-options (separator flexibility): auto-normalize on paste; manual overrides.
