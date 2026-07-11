@@ -15,6 +15,13 @@
   // How many micro-space glyphs to add to close `residualPx`, never exceeding
   // capEm*sizePx per gap (default 0.28em/gap). Returns 0 for non-positive
   // residual / no gaps / unmeasurable glyph.
+  //
+  // The 0.28em/gap cap is a deliberate typographic limit: when elongation +
+  // capped spacing still don't reach the column edge, the line is ACCEPTED
+  // SHORT rather than over-spaced (unbounded word gaps read worse than a
+  // slightly short line). Recourse for a persistently short line is to give the
+  // engine more room to distribute into — INCREASE table width % or REDUCE the
+  // font size — not to lift the cap. See the hybrid-fill design §5a.
   function capMicroSpaces(residualPx, gaps, spaceGlyphPx, sizePx, capEm) {
     if (capEm == null) capEm = 0.28;
     if (!(residualPx > 0) || !(gaps > 0) || !(spaceGlyphPx > 0)) return 0;

@@ -48,6 +48,15 @@ achieved = Σ(`run.swap ? ww[i] : wb[i]`), `n = capMicroSpaces(...)`, `sel.runs 
 ### 5. Policy
 Accept-short: no font-shrink (`maxScaleDown` unused). Shared 0.28em/gap cap. Column-widening (guided-justification §4, deferred) remains the future lever for lines the cap can't fill.
 
+### 5a. The 0.28em headroom cap — why a line may stay short, and the recourse
+Residual inter-word spacing is capped at **0.28em per gap** (`capEm=0.28` in `capMicroSpaces`; the same ceiling `computeRunSpacing` uses). Once elongation + capped spacing still don't reach the column edge, the line is **accepted short** rather than over-spaced — a deliberate typographic limit (unbounded word gaps look worse than a slightly short line, and this keeps hybrid consistent with spacing-only mode).
+
+**When a line stays short, the fix is to give the engine more room to distribute into, not to lift the cap:**
+- **Increase the table width %** — widens every column proportionally, so there is more space for elongation + within-cap spacing to fill evenly across the poem.
+- **Reduce the font size** — the same column then holds the text with more slack, which the engine distributes evenly (and the 0.28em cap, being relative to em, scales down with the font so spacing stays proportionate).
+
+Both are pane controls; apply them via **Justify** (width in place) or **Re-render** (rebuild, font/size preserved). This is user-facing recourse — surface it in the guided-justification §1 Result panel's "capped / filled as wide as it can" reasons when that lands, and in the user guide.
+
 ## Testing
 - `capMicroSpaces`, `injectSpaceRuns` → Node unit tests (residual→count, cap enforcement, zero-gap/zero-residual edges; even distribution across space-runs).
 - Chaining is browser-side → the `demo/kashida-fitting.html` harness is the visual verification aid; on-device confirmation rides the same Word pass as the elongation.
