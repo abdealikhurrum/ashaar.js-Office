@@ -465,6 +465,7 @@
     var CELL_MARGIN_PT = 5.76;
     var strength = AshaarProfiles.normalizeStrength(profile.justify.strength);
     var elongShare = AshaarWord.strengthToElongationShare(strength); // φ ∈ [0,1]
+    var fillMode = AshaarProfiles.normalizeFillMode(profile.justify.fillMode);
     var doKashida = profile.justify.mode === "kashida";
     var fallbackName = profile.font || "Times New Roman";
     var summary = "";
@@ -505,8 +506,9 @@
         // (which survives on the captured proxy) and insertText (a method).
         var tableInfos = allTables.map(function (tbl) {
           var cells = [];
-          tbl.rows.items.forEach(function (row) {
-            row.cells.items.forEach(function (cell) {
+          tbl.rows.items.forEach(function (row, ri) {
+            var cols = row.cells.items.length;
+            row.cells.items.forEach(function (cell, ci) {
               var f = cell.body.font;
               var current = (cell.body.text || "").trim();
               var base = stripJustification(current);
@@ -515,6 +517,7 @@
                 current: current,
                 base: base,
                 measure: base.replace(/\s+/g, " ").trim(),
+                matKey: AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
                 fontName: (f && f.name) || "",
                 fontSize: (f && f.size) || 0
               });
@@ -614,6 +617,21 @@
         var MICRO_SPACE = " "; // hair space
         canvasCtx.font = repSize + "pt \"" + repName + "\"";
         if (canvasCtx.measureText(MICRO_SPACE).width <= 0) MICRO_SPACE = " "; // thin space
+
+        // Cross-block natural-width matrix: longest natural per position across
+        // ALL blocks of this qaseeda (harmony). Measured in each cell's own font.
+        var qMatrixCells = [];
+        tableInfos.forEach(function (info) {
+          info.cells.forEach(function (c) {
+            if (!AshaarMatrix.isContentCell(c.measure)) return;
+            var fnm = c.fontName || repName, fsz = c.fontSize || repSize;
+            canvasCtx.font = fsz + "pt \"" + fnm + "\"";
+            c.natPx = AshaarProfiles.applyFontCorrection(canvasCtx.measureText(c.measure).width, fnm, profile.fontCorrections);
+            qMatrixCells.push({ key: c.matKey, natural: c.natPx });
+          });
+        });
+        var qMatrix = AshaarMatrix.buildMatrix(qMatrixCells);
+
         tableInfos.forEach(function (info) {
           info.cells.forEach(function (c) {
             if (!c.base) return;
@@ -627,21 +645,35 @@
                 text: c.base, fontSize: csize, fontProfile: null,
                 measure: function (s) { canvasCtx.font = csize + "pt \"" + fname + "\""; return canvasCtx.measureText(s).width; }
               }];
-              var cT = colPx - 0.28 * csize * 96 / 72;
-              var cNatural = canvasCtx.measureText(c.base).width;
-              var cBudget = cNatural + elongShare * Math.max(0, cT - cNatural);
-              var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cBudget, {
-                perPositionEm: 0.5,
-                maxPositions: AshaarWord.strengthToMaxPositions(strength)
-              });
-              var cElong = cConc.runs[0].text;
-              var cGaps = cElong.split(" ").length - 1;
-              canvasCtx.font = csize + "pt \"" + fname + "\"";
-              var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-              var cN = AshaarResidual.capMicroSpaces(cT - cConc.achievedPx, cGaps, cSpacePx, csize * 96 / 72);
-              justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
+              var cNatural = c.natPx != null ? c.natPx : canvasCtx.measureText(c.base).width;
+              var cMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(strength) };
+              if (fillMode === "cell-fit") {
+                // Cell-fit: concentrate to the φ budget (no buffer); the distribute
+                // OOXML paragraph fills the residual to the true edge.
+                var cBudgetCf = AshaarMatrix.cellFitBudget(cNatural, colPx, elongShare);
+                var cConcCf = AshaarJustify.justifyRunsConcentrated(runOne, cBudgetCf, cMax);
+                c.ooxml = AshaarWord.misraDistributeXml([{ text: cConcCf.runs[0].text, csName: fname, sizePt: csize }], csize);
+                justified = null; // written via OOXML below
+              } else {
+                // Natural-fit: fill to this position's matrix width; capped
+                // micro-spaces backfill whatever the tatweels didn't cover.
+                var cReach = colPx - 0.28 * csize * 96 / 72;
+                var cWpos = qMatrix[c.matKey] || cNatural;
+                var cTarget = AshaarMatrix.naturalFitTarget(cWpos, cReach, elongShare);
+                var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cTarget, cMax);
+                var cElong = cConc.runs[0].text;
+                var cGaps = cElong.split(" ").length - 1;
+                canvasCtx.font = csize + "pt \"" + fname + "\"";
+                var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+                var cN = AshaarResidual.capMicroSpaces(cTarget - cConc.achievedPx, cGaps, cSpacePx, csize * 96 / 72);
+                justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
+              }
             }
-            if (justified !== c.current) {
+            if (c.ooxml) {
+              c.cell.body.clear();
+              c.cell.body.insertOoxml(AshaarWord.wrapOoxml(c.ooxml), Word.InsertLocation.replace);
+              changed++;
+            } else if (justified != null && justified !== c.current) {
               c.cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
               changed++;
             }
