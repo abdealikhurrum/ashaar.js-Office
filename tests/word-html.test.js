@@ -683,4 +683,25 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   assert.equal(AshaarWord.mehrElongate("دل", ISO, FIN), "دل");
 }
 
+// ── misraDistributeXml: Cell-fit distribute paragraph ────────────────────────
+{
+  const xml = AshaarWord.misraDistributeXml(
+    [{ text: "دل", csName: "Fatemi Maqala" }, { text: " ", csName: "Fatemi Maqala" }, { text: "ناداں", csName: "Fatemi Maqala" }],
+    16
+  );
+  assert.match(xml, /<w:jc w:val="distribute"\/>/, "distribute jc");
+  assert.match(xml, /<w:bidi\/>/, "rtl paragraph");
+  assert.match(xml, /<w:rtl\/>/, "rtl runs");
+  assert.match(xml, /<w:rFonts w:cs="Fatemi Maqala"\/>/, "per-run cs font");
+  assert.match(xml, /<w:sz w:val="32"\/>/, "16pt -> 32 half-points");
+  assert.ok(xml.indexOf("دل") !== -1 && xml.indexOf("ناداں") !== -1, "carries text");
+  // No injected hair/thin spaces (distribute is the residual, not micro-spaces).
+  assert.ok(xml.indexOf(" ") === -1 && xml.indexOf(" ") === -1, "no micro-spaces injected");
+}
+{
+  // Per-run size override wins over the fallback.
+  const xml = AshaarWord.misraDistributeXml([{ text: "x", csName: "A", sizePt: 20 }], 16);
+  assert.match(xml, /<w:sz w:val="40"\/>/, "per-run 20pt -> 40 half-points");
+}
+
 console.log("word-html tests passed");

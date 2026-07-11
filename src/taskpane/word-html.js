@@ -1241,6 +1241,22 @@
     return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" + body + "</w:p>";
   }
 
+  // Cell-fit residual is Word Distributed justification: emit the (tatweel'd)
+  // misra as a paragraph with <w:jc w:val="distribute"/> so Word stretches the
+  // inter-word gaps to the true cell edge. Each run keeps its own cs font (+
+  // size); NO micro-spaces are injected (that is the Natural-fit residual).
+  // runs: [{text, csName, sizePt?}].
+  function misraDistributeXml(runs, sizePtFallback) {
+    var body = (runs || []).map(function (r) {
+      var sz = r.sizePt || sizePtFallback;
+      var szXml = sz ? '<w:sz w:val="' + Math.round(sz * 2) + '"/><w:szCs w:val="' + Math.round(sz * 2) + '"/>' : "";
+      var cs = r.csName ? '<w:rFonts w:cs="' + r.csName + '"/>' : "";
+      return "<w:r><w:rPr><w:rtl/>" + cs + szXml + "</w:rPr>" +
+        '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
+    }).join("");
+    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"distribute\"/></w:pPr>" + body + "</w:p>";
+  }
+
   function baytRowsOoxml(bayt, si, opts) {
     var N = si.N, gapCols = si.gapCols, cwt = si.cwt;
     var textWidthPx = (opts || {})._textWidthPx || 0;
@@ -1493,6 +1509,7 @@
     mehrElongate: mehrElongate,
     renderForWordOoxml: renderForWordOoxml,
     runsToMisraXml: runsToMisraXml,
+    misraDistributeXml: misraDistributeXml,
     wrapOoxml: wrapOoxml,
     misraSpans: misraSpans,
     generateBareGrid12Ooxml: generateBareGrid12Ooxml,
