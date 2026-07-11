@@ -461,7 +461,7 @@
     var profile = getProfile(name);
     var CELL_MARGIN_PT = 5.76;
     var strength = AshaarProfiles.normalizeStrength(profile.justify.strength);
-    var targetFill = AshaarProfiles.strengthToTargetFill(strength);
+    var elongShare = AshaarWord.strengthToElongationShare(strength); // φ ∈ [0,1]
     var doKashida = profile.justify.mode === "kashida";
     var fallbackName = profile.font || "Times New Roman";
     var summary = "";
@@ -605,7 +605,7 @@
 
         // Re-justify every cell with the profile's params (captured values only).
         var changed = 0;
-        var calibParams = { targetFill: targetFill };
+        var calibParams = { targetFill: 1.0 }; // φ is the only strength lever; fill target is the column edge
         tableInfos.forEach(function (info) {
           info.cells.forEach(function (c) {
             if (!c.base) return;
@@ -614,7 +614,9 @@
             if (doKashida && colPx > 0) {
               var fname = c.fontName || repName;
               canvasCtx.font = (c.fontSize || repSize) + "pt \"" + fname + "\"";
-              justified = AshaarJustify.justifyLine(c.base, colPx, canvasCtx, calibParams, null);
+              var gNatural = canvasCtx.measureText(c.base).width;
+              var gTarget = gNatural + elongShare * Math.max(0, colPx - gNatural);
+              justified = AshaarJustify.justifyLine(c.base, gTarget, canvasCtx, calibParams, null);
             }
             if (justified !== c.current) {
               c.cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
