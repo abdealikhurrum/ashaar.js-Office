@@ -1,8 +1,12 @@
 # In-Place Adjust + Per-Cell Mechanism Auto-Detect — Design
 
 **Date:** 2026-07-10
-**Status:** Approved (design), ready for implementation plan
+**Status:** IMPLEMENTED + Word-verified (per-cell auto-detect, size-preserving re-render, in-place table-width). Commits `d959239`, `84f2032`, `f23684c`.
 **Branch:** `feat/guided-justification-ux`
+
+## Known limitation (documented 2026-07-11)
+
+**Middle gap has no in-place / dedicated re-render trigger for engine-kashida poems.** Because the gap is structural in the fixed grid (see "Design finding" below), a gap change must **re-render** the poem. That re-render is now **size-preserving**, but the only paths that trigger it are **Insert as Table** (Conversion) and **"Word justify"** (css word-fill) mode — both of which reconstruct + replace the selection. For a poem being justified via the **engine kashida** path (Jameel/Mehr/generic, in place), there is **no button that rebuilds the existing managed table with a new gap**. Mode/strength and table-width % apply in place on Justify; **gap does not**. Workaround today: change the gap and re-insert / use Word-justify mode (size is preserved). A dedicated "rebuild this managed table with the current gap" action for engine-mode poems is a tracked follow-up, not yet built.
 **Scope:** Two related changes to the justify/adjust workflow: **(1)** resolve the kashida mechanism **per cell from its real font** (so any dropdown, incl. Document default, justifies each font correctly and in place); **(2)** apply geometry + mode changes — **middle gap, table width %, kashida sub-mode** — to the **existing** managed table **in place** (column resize + in-place re-justify), instead of the current re-render-and-replace-selection, which rebuilds the table and reverts font size to Word's 12pt default.
 
 ## Problem (from Word testing, 2026-07-10)
