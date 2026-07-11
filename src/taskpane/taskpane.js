@@ -8,6 +8,7 @@
   var tablePanel = document.getElementById("table-mode-panel");
   var convertPanel = document.getElementById("convert-mode-panel");
   var justifyMode = document.getElementById("justify-mode");
+  var justifyFillMode = document.getElementById("justify-fill-mode");
   var layoutMode = document.getElementById("layout-mode");
   var widthMode = document.getElementById("width-mode");
   var bandhCount = document.getElementById("bandh-count");
@@ -76,6 +77,7 @@
   var qaseedaWidthMode = document.getElementById("qaseeda-width-mode");
   var qaseedaWidthPct = document.getElementById("qaseeda-width-pct");
   var qaseedaJustifyMode = document.getElementById("qaseeda-justify-mode");
+  var qaseedaFillMode = document.getElementById("qaseeda-fill-mode");
   var qaseedaStrength = document.getElementById("qaseeda-strength");
   var qaseedaStrengthValue = document.getElementById("qaseeda-strength-value");
   var qaseedaCorrFont = document.getElementById("qaseeda-corr-font");
@@ -240,6 +242,7 @@
     return {
       justifyMode: justifyMode.value,
       justify: justifyMode.value === "none" ? false : justifyMode.value,
+      fillMode: (justifyFillMode && justifyFillMode.value) || "natural-fit",
       layoutMode: layoutMode.value,
       layout: layoutMode.value,
       widthMode: widthMode.value,
@@ -686,6 +689,7 @@
     p.width.mode = qaseedaWidthMode.value;
     p.width.pct = Number(qaseedaWidthPct.value || 50);
     p.justify.mode = qaseedaJustifyMode.value;
+    p.justify.fillMode = (qaseedaFillMode && qaseedaFillMode.value) || "natural-fit";
     p.justify.strength = Number(qaseedaStrength.value || 0);
     var corrFont = (qaseedaCorrFont.value || "").trim();
     p.fontCorrections = {};
@@ -702,6 +706,7 @@
     qaseedaWidthMode.value = p.width.mode;
     qaseedaWidthPct.value = p.width.pct;
     qaseedaJustifyMode.value = p.justify.mode;
+    if (qaseedaFillMode) qaseedaFillMode.value = AshaarProfiles.normalizeFillMode(p.justify.fillMode);
     var strength = AshaarProfiles.normalizeStrength(p.justify.strength);
     qaseedaStrength.value = strength;
     qaseedaStrengthValue.textContent = strength;
