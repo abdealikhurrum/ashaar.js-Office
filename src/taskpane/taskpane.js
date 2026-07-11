@@ -484,7 +484,17 @@
         blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.load("items"); }); });
         await context.sync();
         var allTables = [];
-        blockTables.forEach(function (t) { t.items.forEach(function (tbl) { allTables.push(tbl); }); });
+        var allTablePatterns = [];
+        var blockCells = blocks.map(function (cc) {
+          var p = AshaarWord.parseContentControlTag(cc.tag);
+          return (p && p.cells) || null;
+        });
+        blockTables.forEach(function (t, bi) {
+          t.items.forEach(function (tbl, j) {
+            allTables.push(tbl);
+            allTablePatterns.push(blockCells[bi] ? blockCells[bi][j] : null);
+          });
+        });
         if (!allTables.length) { summary = "Qaseeda “" + name + "” has no tables to size."; return; }
 
         // Stage 1: load each row's cells (must sync before reading cells.items).
@@ -504,7 +514,12 @@
         // collection reloads (for the resized columnWidth) drop body.text from
         // freshly-derived items, so we never re-read body.* — only columnWidth
         // (which survives on the captured proxy) and insertText (a method).
-        var tableInfos = allTables.map(function (tbl) {
+        var tableInfos = allTables.map(function (tbl, ai) {
+          var pattern = allTablePatterns[ai];
+          var perRowCounts = tbl.rows.items.map(function (row) { return row.cells.items.length; });
+          var tblMap = AshaarCellMap.alignPatternToTable(perRowCounts, pattern)
+            ? AshaarCellMap.buildBandhCellMap(pattern) : null;
+          var seq = 0;
           var cells = [];
           tbl.rows.items.forEach(function (row, ri) {
             var cols = row.cells.items.length;
@@ -512,12 +527,15 @@
               var f = cell.body.font;
               var current = (cell.body.text || "").trim();
               var base = stripJustification(current);
+              var mapped = tblMap ? tblMap[seq] : null;
+              seq++;
               cells.push({
                 cell: cell,
                 current: current,
                 base: base,
                 measure: base.replace(/\s+/g, " ").trim(),
-                matKey: AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
+                matKey: mapped ? (mapped.label || mapped.slot) : AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
+                kind: mapped ? mapped.kind : null,
                 fontName: (f && f.name) || "",
                 fontSize: (f && f.size) || 0
               });
@@ -634,6 +652,8 @@
 
         tableInfos.forEach(function (info) {
           info.cells.forEach(function (c) {
+            if (c.kind === "spacing") return;              // structural gap — never justified
+            if (!c.base && c.kind !== "content") return;   // empty & not known-content → skip
             if (!c.base) return;
             var colPx = Math.max(1, (c.cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
             var justified = c.base;
@@ -1397,11 +1417,19 @@
 
       // Find enclosing Ashaar Poem content control (the poem is the calibration unit)
       var cc = selection.parentContentControlOrNullObject;
-      cc.load("title");
+      cc.load("title,tag");
       await context.sync();
 
       var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem")
         ? cc.getRange() : selection;
+
+      // Persisted bandh cell-map (content/spacing tag + labels) for this block,
+      // when present — one pattern per stanza table, in document order.
+      var ccCells = null;
+      if (!cc.isNullObject && cc.title === "Ashaar Poem") {
+        var ccPayload = AshaarWord.parseContentControlTag(cc.tag);
+        ccCells = ccPayload && ccPayload.cells;
+      }
 
       var tables = workRange.tables;
       tables.load("items");
@@ -1445,16 +1473,31 @@
       await context.sync();
 
       var allCells = [];
-      tables.items.forEach(function (tbl) {
+      tables.items.forEach(function (tbl, ti) {
+        // Prefer the persisted bandh map for this table; fall back to geometry
+        // (adopted/hand-drawn tables, older v1 tags → no map).
+        var pattern = ccCells && ccCells[ti];
+        var perRowCounts = tbl.rows.items.map(function (row) { return row.cells.items.length; });
+        var tblMap = AshaarCellMap.alignPatternToTable(perRowCounts, pattern)
+          ? AshaarCellMap.buildBandhCellMap(pattern) : null;
+        var cellSeq = 0;
         tbl.rows.items.forEach(function (row, ri) {
           var cols = row.cells.items.length;
           row.cells.items.forEach(function (cell, ci) {
             allCells.push(cell);
-            // Grid signature for the natural-width matrix. Cross-table (multi-
-            // stanza) cells at the same (row, col) group so corresponding misras
-            // balance to one width; `span` carries the row's cell count so
-            // different-shaped rows never group together.
-            cell.__matKey = AshaarMatrix.positionKey({ row: ri, col: ci, span: cols });
+            // Harmony key + content/spacing: the label from the persisted map
+            // (A1 matches A1 across bandhs) when available, else the geometric
+            // signature. `__kind` lets an empty content cell stay content and a
+            // tagged gap be skipped regardless of its text.
+            var mapped = tblMap ? tblMap[cellSeq] : null;
+            cellSeq++;
+            if (mapped) {
+              cell.__kind = mapped.kind;
+              cell.__matKey = mapped.label || mapped.slot;
+            } else {
+              cell.__kind = null;
+              cell.__matKey = AshaarMatrix.positionKey({ row: ri, col: ci, span: cols });
+            }
             cell.body.load("text");
             cell.body.font.load("name,size");
             // Alignment of the cell's own first paragraph — used by the
@@ -1699,7 +1742,8 @@
       var matrixCells = [];
       allCells.forEach(function (cell) {
         var base = stripJustification(cell.body.text || "").replace(/\s+/g, " ").trim();
-        if (!AshaarMatrix.isContentCell(base)) return;
+        var isContent = cell.__kind === "content" || (cell.__kind == null && AshaarMatrix.isContentCell(base));
+        if (!isContent) return; // tagged spacing (even with stray text) excluded from the matrix
         var mf = cell.body.font;
         var mnm = (mf && mf.name) || repName, msz = (mf && mf.size) || repSize;
         var natPx = 0;
@@ -1715,6 +1759,7 @@
       var plans = [];
       allCells.forEach(function (cell) {
         var current = (cell.body.text || "").trim();
+        if (cell.__kind === "spacing") return; // structural gap — never justified
         if (!stripJustification(current)) return;
         var colPx = contentPx(cell);
 
