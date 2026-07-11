@@ -1095,6 +1095,55 @@
   // reconstruction) and re-run the normal insertPoem(true) pipeline — which
   // renders via renderForWordOoxml → wrapOoxml → selection.insertOoxml(...,
   // replace) and re-wraps the "Ashaar Poem" content control. Because the
+  // §6 "Reset to unstretched" (core): strip justification artifacts — tatweels
+  // (U+0640) and hairline/thin micro-spaces (U+200A / U+2009) — from the poem or
+  // table at the cursor, IN PLACE. Never rebuilds the table, so font size and
+  // run formatting survive. Reuses stripJustification (the same strip re-justify
+  // already runs before each pass, so this leaves the exact bare text). The
+  // fuller §6 reset (uniform font-scale, column widening, word-fill jc/break) is
+  // a separate follow-up; this covers the "clear kashida & spaces" case.
+  async function resetJustification() {
+    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to reset."); return; }
+    await withWord(async function (context) {
+      var selection = context.document.getSelection();
+      var cc = selection.parentContentControlOrNullObject;
+      cc.load("title");
+      await context.sync();
+      var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem") ? cc.getRange() : selection;
+      var tables = workRange.tables;
+      tables.load("items");
+      await context.sync();
+      if (!tables.items.length) { setMessage("Click inside an Ashaar table to reset."); return; }
+
+      tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+      await context.sync();
+      tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
+      await context.sync();
+      var cells = [];
+      tables.items.forEach(function (tbl) {
+        tbl.rows.items.forEach(function (row) {
+          row.cells.items.forEach(function (cell) { cells.push(cell); cell.body.load("text"); });
+        });
+      });
+      await context.sync();
+
+      // One sync per changed cell so a single-cell failure falls out of the
+      // batch without aborting the rest (mirrors justifySelection's write phase).
+      var cleared = 0;
+      for (var i = 0; i < cells.length; i++) {
+        var cur = cells[i].body.text || "";
+        var stripped = stripJustification(cur);
+        if (stripped === cur) continue; // already clean — no tatweels/micro-spaces
+        try {
+          cells[i].body.paragraphs.getFirst().insertText(stripped, Word.InsertLocation.replace);
+          await context.sync();
+          cleared++;
+        } catch (e) { /* skip a cell that fails to rewrite */ }
+      }
+      setMessage("Reset " + cleared + " cell(s) — kashida & micro-spaces cleared.");
+    });
+  }
+
   // justify-mode dropdown is "Word justify" (opts.justifyMode === "css") on
   // this path, that re-render emits the word-fill kashida jc + shrunk break
   // (misraParaXml), with width %/gap/strength/fontMode flowing through
@@ -2052,6 +2101,7 @@
     document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
+    document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
     // Import-options (separator flexibility): auto-normalize on paste; manual overrides.
     input.addEventListener("paste", function () { setTimeout(applyImportNormalization, 0); });
