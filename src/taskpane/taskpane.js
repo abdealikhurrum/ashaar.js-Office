@@ -605,7 +605,12 @@
 
         // Re-justify every cell with the profile's params (captured values only).
         var changed = 0;
-        var calibParams = { targetFill: 1.0 }; // φ is the only strength lever; fill target is the column edge
+        // Micro-space glyph used to realize word-spacing in Word (text-mutating).
+        // Declared locally here — NOT module-level; mirrors justifySelection's
+        // own local declaration (taskpane.js, "hair space" / "thin space" fallback).
+        var MICRO_SPACE = " "; // hair space
+        canvasCtx.font = repSize + "pt \"" + repName + "\"";
+        if (canvasCtx.measureText(MICRO_SPACE).width <= 0) MICRO_SPACE = " "; // thin space
         tableInfos.forEach(function (info) {
           info.cells.forEach(function (c) {
             if (!c.base) return;
@@ -613,10 +618,25 @@
             var justified = c.base;
             if (doKashida && colPx > 0) {
               var fname = c.fontName || repName;
-              canvasCtx.font = (c.fontSize || repSize) + "pt \"" + fname + "\"";
-              var gNatural = canvasCtx.measureText(c.base).width;
-              var gTarget = gNatural + elongShare * Math.max(0, colPx - gNatural);
-              justified = AshaarJustify.justifyLine(c.base, gTarget, canvasCtx, calibParams, null);
+              var csize = c.fontSize || repSize;
+              canvasCtx.font = csize + "pt \"" + fname + "\"";
+              var runOne = [{
+                text: c.base, fontSize: csize, fontProfile: null,
+                measure: function (s) { canvasCtx.font = csize + "pt \"" + fname + "\""; return canvasCtx.measureText(s).width; }
+              }];
+              var cT = colPx - 0.28 * csize * 96 / 72;
+              var cNatural = canvasCtx.measureText(c.base).width;
+              var cBudget = cNatural + elongShare * Math.max(0, cT - cNatural);
+              var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cBudget, {
+                perPositionEm: 0.5,
+                maxPositions: AshaarWord.strengthToMaxPositions(strength)
+              });
+              var cElong = cConc.runs[0].text;
+              var cGaps = cElong.split(" ").length - 1;
+              canvasCtx.font = csize + "pt \"" + fname + "\"";
+              var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+              var cN = AshaarResidual.capMicroSpaces(cT - cConc.achievedPx, cGaps, cSpacePx, csize * 96 / 72);
+              justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
             }
             if (justified !== c.current) {
               c.cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
