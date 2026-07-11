@@ -1338,6 +1338,45 @@
     );
   }
 
+  // The content/gap KIND sequence a bayt contributes, per row — mirrors
+  // baytRowsOoxml's branches (solo → [g,c,g]; K-misra row → [c,g,c,…,c]; stacked
+  // → one solo row per misra). Spans/alignment/indents don't change cell order,
+  // so only the kind matters here. This is the single derivation the persisted
+  // pattern and (via AshaarCellMap) all labels come from; the cross-check test
+  // (tests/word-html.test.js) locks it to the actual OOXML the generator emits.
+  function baytCellPatternRows(bayt, opts) {
+    var stacked = (opts || {}).layoutMode === "stacked";
+    function solo() { return ["g", "c", "g"]; }
+    function misra(K) { var r = []; for (var i = 0; i < K; i++) { r.push("c"); if (i < K - 1) r.push("g"); } return r; }
+    if (bayt.type === "row") {
+      var K = (bayt.misras || []).length;
+      if (K === 0) return [];
+      if (K === 1) return [solo()];
+      if (stacked) { var rows = []; for (var i = 0; i < K; i++) rows.push(solo()); return rows; }
+      return [misra(K)];
+    }
+    if (!bayt.ajuz) return [solo()];
+    if (stacked) return [solo(), solo()];
+    return [misra(2)];
+  }
+
+  function stanzaCellPattern(stanza, opts) {
+    var rows = [];
+    (stanza.bayts || []).forEach(function (b) {
+      baytCellPatternRows(b, opts).forEach(function (r) { rows.push(r); });
+    });
+    return rows;
+  }
+
+  function poemCellPatterns(text, opts, Ashaar) {
+    var poems = parsePoetry(String(text || ""), Ashaar);
+    var pats = [];
+    poems.forEach(function (poem) {
+      (poem.stanzas || []).forEach(function (stanza) { pats.push(stanzaCellPattern(stanza, opts)); });
+    });
+    return pats;
+  }
+
   function stanzaTableOoxml(stanza, opts, textWidthTwips) {
     var si = stanzaGridInfo(stanza, opts, textWidthTwips);
     si.colSpans = stanzaColSpans(stanza, si, opts); // shared spans → columns align across rows
@@ -1508,6 +1547,8 @@
     kashidaExpansionFraction: kashidaExpansionFraction,
     mehrElongate: mehrElongate,
     renderForWordOoxml: renderForWordOoxml,
+    stanzaCellPattern: stanzaCellPattern,
+    poemCellPatterns: poemCellPatterns,
     runsToMisraXml: runsToMisraXml,
     misraDistributeXml: misraDistributeXml,
     wrapOoxml: wrapOoxml,

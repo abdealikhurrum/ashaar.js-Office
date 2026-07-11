@@ -704,4 +704,55 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   assert.match(xml, /<w:sz w:val="40"\/>/, "per-run 20pt -> 40 half-points");
 }
 
+// ── cell patterns: mirror the OOXML generator's content/gap cell order ───────
+{
+  const Ashaar2 = require("../src/vendor/ashaar");
+  // A simple couplet (sadr \ ajuz) → one table, one row [c,g,c].
+  const pats = AshaarWord.poemCellPatterns("دل ناداں \\ آخر اس درد", { layoutMode: "balanced" }, Ashaar2);
+  assert.equal(pats.length, 1, "one stanza → one pattern");
+  assert.deepStrictEqual(pats[0], [["c", "g", "c"]], "couplet row = content,gap,content");
+}
+{
+  const Ashaar2 = require("../src/vendor/ashaar");
+  // Solo single misra (|) → one table, one row [g,c,g].
+  const pats = AshaarWord.poemCellPatterns("تنہا مصرعہ |", { layoutMode: "balanced" }, Ashaar2);
+  assert.deepStrictEqual(pats[0], [["g", "c", "g"]], "solo row = gap,content,gap");
+}
+{
+  const Ashaar2 = require("../src/vendor/ashaar");
+  // Stacked couplet → two solo rows.
+  const pats = AshaarWord.poemCellPatterns("دل ناداں \\ آخر اس درد", { layoutMode: "stacked" }, Ashaar2);
+  assert.deepStrictEqual(pats[0], [["g", "c", "g"], ["g", "c", "g"]], "stacked = two solo rows");
+}
+
+// ── cross-check: pattern shape/kind == the generator's actual <w:tc> cells ───
+{
+  const Ashaar2 = require("../src/vendor/ashaar");
+  function tablesOf(xml) { return xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) || []; }
+  function rowsOf(tblXml) { return tblXml.match(/<w:tr>[\s\S]*?<\/w:tr>/g) || []; }
+  function cellsOf(trXml) { return trXml.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || []; }
+  function kindOf(tcXml) { return /<w:r[ >]/.test(tcXml) ? "c" : "g"; }
+
+  const cases = [
+    { src: "دل ناداں \\ آخر اس درد", opts: { layoutMode: "balanced" } },
+    { src: "تنہا مصرعہ |", opts: { layoutMode: "balanced" } },
+    { src: "دل ناداں \\ آخر اس درد", opts: { layoutMode: "stacked" } },
+    { src: "الف \\ ب\n\nج \\ د", opts: { layoutMode: "balanced" } }, // two stanzas
+  ];
+  cases.forEach(function (c, ci) {
+    const body = AshaarWord.renderForWordOoxml(c.src, c.opts, Ashaar2, 9360);
+    const pats = AshaarWord.poemCellPatterns(c.src, c.opts, Ashaar2);
+    const tbls = tablesOf(body);
+    assert.equal(tbls.length, pats.length, "case " + ci + ": table count == pattern count");
+    tbls.forEach(function (tbl, ti) {
+      const rows = rowsOf(tbl);
+      assert.equal(rows.length, pats[ti].length, "case " + ci + " tbl " + ti + ": row count");
+      rows.forEach(function (tr, ri) {
+        const kinds = cellsOf(tr).map(kindOf);
+        assert.deepStrictEqual(kinds, pats[ti][ri], "case " + ci + " tbl " + ti + " row " + ri + ": cell kinds");
+      });
+    });
+  });
+}
+
 console.log("word-html tests passed");
