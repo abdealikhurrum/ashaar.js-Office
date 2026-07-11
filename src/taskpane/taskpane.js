@@ -995,7 +995,7 @@
         replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
       var control = inserted.insertContentControl();
       control.title = "Ashaar Poem";
-      control.tag = AshaarWord.contentControlTag(source, opts);
+      control.tag = AshaarWord.contentControlTag(source, opts, AshaarWord.poemCellPatterns(source, opts, Ashaar));
       control.appearance = "BoundingBox";
       await context.sync();
     });

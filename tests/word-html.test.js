@@ -755,4 +755,18 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   });
 }
 
+// ── tag round-trips the cells pattern; absent → null ─────────────────────────
+{
+  const pat = [[["c", "g", "c"]], [["g", "c", "g"]]]; // two stanzas
+  const tag = AshaarWord.contentControlTag("poem", { tableWidthPct: 50 }, pat);
+  const parsed = AshaarWord.parseContentControlTag(tag);
+  assert.deepStrictEqual(parsed.cells, pat, "cells round-trip");
+  assert.equal(parsed.v, 2, "payload version bumped to 2");
+}
+{
+  // No 3rd arg → no cells (grid/template paths); parses to null.
+  const tag = AshaarWord.contentControlTag("grid", { tableWidthPct: 50 });
+  assert.strictEqual(AshaarWord.parseContentControlTag(tag).cells, null, "absent cells → null");
+}
+
 console.log("word-html tests passed");

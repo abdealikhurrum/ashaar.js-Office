@@ -431,7 +431,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Wire the insert path to compute + pass the pattern**
 
-In `src/taskpane/taskpane.js`, the poem-insert tag is set in `insertPoem` (line ~998) and in the re-render path (line ~1121). At BOTH sites, replace:
+In `src/taskpane/taskpane.js`, the **table** poem-insert sets its tag in `insertPoem` (line ~998, the `renderForWordOoxml` path). Replace (anchored by its unique `replaceSelection` context):
 ```js
       control.tag = AshaarWord.contentControlTag(source, opts);
 ```
@@ -439,7 +439,7 @@ with:
 ```js
       control.tag = AshaarWord.contentControlTag(source, opts, AshaarWord.poemCellPatterns(source, opts, Ashaar));
 ```
-Leave the grid/template tag sites (`contentControlTag("grid", opts)`, `contentControlTag("template", opts)`, `contentControlTag("grid12", …)`, `contentControlTag("template:" + …, opts)`) unchanged — they pass no 3rd arg and get the fallback.
+Leave the OTHER `contentControlTag(source, opts)` call (line ~1121) UNCHANGED — that is the **tab-stop/paragraph** path (`AshaarTabStop.poemToOoxml`), which produces no tables, so a cell-map doesn't apply (it correctly falls back to no-map). Also leave the grid/template tag sites (`"grid"`, `"template"`, `"grid12"`, `"template:"+…`) unchanged — they pass no 3rd arg and get the fallback.
 
 - [ ] **Step 6: Syntax + suite**
 

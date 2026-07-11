@@ -889,7 +889,7 @@
     }).join("<p style=\"margin:10pt 0\"></p>");
   }
 
-  function contentControlTag(text, opts) {
+  function contentControlTag(text, opts, cellPatterns) {
     opts = opts || {};
     var source = String(text || "");
     var hash = 0;
@@ -898,7 +898,7 @@
     }
     var payload = {
       k: "ashaar-poem",
-      v: 1,
+      v: 2,
       layoutMode: opts.layoutMode || "balanced",
       widthMode: opts.widthMode || "optimized",
       justifyMode: opts.justifyMode || "kashida",
@@ -911,6 +911,7 @@
       qaseeda: opts.qaseeda || "",
       sourceHash: (hash >>> 0).toString(16)
     };
+    if (cellPatterns && cellPatterns.length) payload.cells = cellPatterns;
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
@@ -923,6 +924,7 @@
       var payload = JSON.parse(decodeURIComponent(tag.slice("ashaar:".length)));
       if (!payload || typeof payload !== "object") return null;
       if (typeof payload.qaseeda !== "string") payload.qaseeda = "";
+      payload.cells = payload.cells || null;
       return payload;
     } catch (e) {
       return null;
