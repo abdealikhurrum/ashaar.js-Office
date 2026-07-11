@@ -1663,8 +1663,9 @@
             canvasCtx.font = repSize + "pt " + baseCss; wb.push(canvasCtx.measureText(s).width);
             canvasCtx.font = repSize + "pt " + wideCss; ww.push(canvasCtx.measureText(s).width);
           });
+          var jT = colPx - 0.28 * repSize * 96 / 72;
           var jNatural = wb.reduce(function (a, b) { return a + b; }, 0);
-          var jTarget = jNatural + elongShare * Math.max(0, colPx - jNatural);
+          var jTarget = jNatural + elongShare * Math.max(0, jT - jNatural);
           var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, jTarget);
           // Hybrid fill: font-swap elongation undershoots (only fasls with a
           // Kasheeda variant widen) — close the residual with capped hair-spaces
@@ -1673,7 +1674,7 @@
           for (var jgi = 0; jgi < sel.runs.length; jgi++) { if (sel.runs[jgi].text === " ") jGaps++; }
           canvasCtx.font = repSize + "pt " + baseCss;
           var jSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var jn = AshaarResidual.capMicroSpaces(colPx - sel.fill * jTarget, jGaps, jSpacePx, repSize * 96 / 72);
+          var jn = AshaarResidual.capMicroSpaces(jT - sel.fill * jTarget, jGaps, jSpacePx, repSize * 96 / 72);
           var jRuns = AshaarResidual.injectSpaceRuns(sel.runs, jn, MICRO_SPACE);
           var swapXml = AshaarWord.runsToMisraXml(jRuns, cellAlign, opts, repSize);
           plans.push({ cell: cell, ooxml: swapXml });
@@ -1701,8 +1702,9 @@
           var mwb = [], mww = [];
           canvasCtx.font = mehrFont;
           for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(canvasCtx.measureText(mtoks[mi]).width); mww.push(canvasCtx.measureText(melong[mi]).width); }
+          var mT = colPx - 0.28 * repSize * 96 / 72;
           var mNatural = mwb.reduce(function (a, b) { return a + b; }, 0);
-          var mTarget = mNatural + elongShare * Math.max(0, colPx - mNatural);
+          var mTarget = mNatural + elongShare * Math.max(0, mT - mNatural);
           var msel = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, mTarget);
           var mout = msel.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
           // Hybrid fill: Mehr elongates only at whitelisted word-endings, so it
@@ -1711,7 +1713,7 @@
           var mGaps = mout.split(" ").length - 1;
           canvasCtx.font = mehrFont;
           var mSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var mn = AshaarResidual.capMicroSpaces(colPx - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72);
+          var mn = AshaarResidual.capMicroSpaces(mT - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72);
           var mfinal = AshaarWord.distributeMicroSpaces([mout], mn, MICRO_SPACE)[0];
           if (mfinal !== current) plans.push({ cell: cell, flat: mfinal });
           return;
