@@ -18,7 +18,7 @@
     "update:ashaar": "node scripts/update-ashaar-vendor.mjs",
     "certs": "office-addin-dev-certs install --days 365",
     "certs:verify": "office-addin-dev-certs verify",
-    "test": "node tests/word-html.test.js && node tests/word-tabstop.test.js && node tests/poetry-corpus.test.js && node tests/table-adopt.test.js && node tests/separators.test.js && node tests/layout-grid.test.js && node tests/profiles.test.js && node tests/font-store.test.js && node tests/ashaar-justify-runs.test.js && node tests/ashaar-misra-runs.test.js && node tests/fonts.test.js && node tests/kashida-fontswap.test.js && node tests/kashida-residual.test.js"
+    "test": "node tests/word-html.test.js && node tests/word-tabstop.test.js && node tests/poetry-corpus.test.js && node tests/table-adopt.test.js && node tests/separators.test.js && node tests/layout-grid.test.js && node tests/profiles.test.js && node tests/font-store.test.js && node tests/ashaar-justify-runs.test.js && node tests/ashaar-misra-runs.test.js && node tests/fonts.test.js && node tests/kashida-fontswap.test.js && node tests/kashida-residual.test.js && node tests/natural-width-matrix.test.js"
   },
   "dependencies": {
     "office-addin-debugging": "^6.1.1"
