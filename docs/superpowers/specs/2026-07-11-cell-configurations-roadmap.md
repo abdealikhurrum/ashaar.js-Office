@@ -5,7 +5,7 @@
 
 "Spacing and content cell configurations" was decomposed into two sequential sub-projects. They split along one axis: **where the config lives and whether it needs a per-cell editing UI.** Each gets its own design spec, implementation plan, and build session.
 
-## Sub-project 1 — Bandh cell-map (content/spacing tag + positional labels)  *(this session)*
+## Sub-project 1 — Bandh cell-map (content/spacing tag + positional labels)  *(implemented; Tasks 1–6 done, Task 7 manual-verify pending)*
 
 - **Scope narrowed during brainstorming** to the minimal data model that makes table creation + justification user-friendly: a **content/spacing tag** and a **positional label within the bandh** (`A1/A2/B1…`) per cell, derived and **persisted at creation**.
 - Broader "roles" and styling were explicitly pushed later (see backlog) — only gap/spacing-vs-text and the cell-id are in scope now.
