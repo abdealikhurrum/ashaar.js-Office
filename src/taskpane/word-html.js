@@ -99,6 +99,17 @@
     return (s - 1) / 9;
   }
 
+  // Poetry Kashida strength (1–10) → max elongation positions K(s) for the
+  // concentrated generic path. Low strengths stay deliberately sparse:
+  // K(1)=1, K(2)=2, K(3)=3; s>=4 is unbounded (0, the engine's "no cap").
+  function strengthToMaxPositions(strength) {
+    var s = Number(strength);
+    if (!isFinite(s)) s = 1;
+    s = Math.max(1, Math.min(10, s));
+    if (s <= 3) return s;
+    return 0;
+  }
+
   function justifyText(text, opts, colWidthPx) {
     opts = opts || {};
     var count = Number(opts.tatweelCount || 0);
@@ -1474,6 +1485,7 @@
     coalesceRuns: coalesceRuns,
     distributeMicroSpaces: distributeMicroSpaces,
     strengthToElongationShare: strengthToElongationShare,
+    strengthToMaxPositions: strengthToMaxPositions,
     strengthToKashidaLevel: strengthToKashidaLevel,
     containsArabic: containsArabic,
     wordFillJc: wordFillJc,

@@ -516,6 +516,15 @@ assert.strictEqual(AshaarWord.strengthToElongationShare(0), 0);   // clamps low
 assert.strictEqual(AshaarWord.strengthToElongationShare(24), 1);  // clamps high
 assert.strictEqual(AshaarWord.strengthToElongationShare(undefined), 0);
 
+// ── strengthToMaxPositions: low-strength position cap K(s) ───────────────────
+assert.strictEqual(AshaarWord.strengthToMaxPositions(1), 1);
+assert.strictEqual(AshaarWord.strengthToMaxPositions(2), 2);
+assert.strictEqual(AshaarWord.strengthToMaxPositions(3), 3);
+assert.strictEqual(AshaarWord.strengthToMaxPositions(4), 0);   // unbounded
+assert.strictEqual(AshaarWord.strengthToMaxPositions(10), 0);
+assert.strictEqual(AshaarWord.strengthToMaxPositions(0), 1);   // clamps low → 1
+assert.strictEqual(AshaarWord.strengthToMaxPositions(undefined), 1);
+
 // ── containsArabic / wordFillJc ─────────────────────────────────────────────
 assert.equal(AshaarWord.containsArabic("العلم"), true);
 assert.equal(AshaarWord.containsArabic("hello"), false);
