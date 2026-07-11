@@ -1176,6 +1176,14 @@
     var mode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
     var csName = AshaarFonts.wordNameOf(mode);
     if (csName) rpr += '<w:rFonts w:cs="' + csName + '"/>';
+    // Size-preserving re-render: when the caller supplies the cell's point size
+    // (gap/width apply that rebuilds the poem), emit it so the rebuilt run keeps
+    // its size instead of reverting to Word's document default. Omitted on plain
+    // insert (no fontSizePt) so that path is unchanged.
+    if (opts.fontSizePt) {
+      var szHp = Math.round(Number(opts.fontSizePt) * 2);
+      rpr += '<w:sz w:val="' + szHp + '"/><w:szCs w:val="' + szHp + '"/>';
+    }
     rpr += "</w:rPr>";
     var ind = indTwips ? '<w:ind w:left="' + indTwips + '"/>' : "";
     // Shrink the paragraph mark when word-fill trailing break is emitted, so the

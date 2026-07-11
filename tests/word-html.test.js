@@ -570,6 +570,20 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
   assert.ok(xml.slice(0, pPrEnd).indexOf('w:sz w:val="4"') === -1, "no paragraph-mark shrink outside word-fill");
 }
 
+// ── misraParaXml: opts.fontSizePt preserves size on re-render ────────────────
+// A size-preserving re-render (gap/width apply that rebuilds) must carry the
+// cell's font size, or the rebuilt table reverts to Word's 12pt default.
+{
+  const xml = AshaarWord.misraParaXml("العلم", "right", false, { fontSizePt: 16 }, 0);
+  assert.ok(xml.indexOf('w:sz w:val="32"') !== -1, "fontSizePt 16 → body run w:sz 32 (half-points)");
+  assert.ok(xml.indexOf('w:szCs w:val="32"') !== -1, "fontSizePt 16 → body run w:szCs 32");
+}
+{
+  // no fontSizePt (e.g. plain insert) → no body-run size, Word default preserved
+  const xml = AshaarWord.misraParaXml("العلم", "right", false, {}, 0);
+  assert.ok(xml.indexOf('w:sz w:val=') === -1, "no fontSizePt → no w:sz (insert default unchanged)");
+}
+
 // ── soloRow (OOXML): solo/refrain lines are misra-width, not full-grid ──────
 // A marsiya's solo line and paired refrain lines used to stretch a single cell
 // across the FULL grid (gridSpan = si.GRID). That looks wrong: they should be

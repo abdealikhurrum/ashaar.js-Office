@@ -35,6 +35,28 @@ assert.strictEqual(AshaarFonts.mechanismForFontName(""), "generic");
 assert.strictEqual(AshaarFonts.mechanismForFontName(null), "generic");
 assert.strictEqual(AshaarFonts.mechanismForFontName("  Gulzar  "), "whitespace"); // trims whitespace
 
+// descriptorForFontName: the full registry descriptor for a run's real font,
+// so the per-cell dispatch can read wordName/kasheedaName/tatweelRules without
+// knowing the dropdown id. Unknown/empty → a synthetic "generic" descriptor.
+assert.strictEqual(AshaarFonts.descriptorForFontName("Mehr Nastaliq Web").id, "mehr");
+assert.strictEqual(AshaarFonts.descriptorForFontName("Mehr Nastaliq Web").mechanism, "tatweel");
+assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq").id, "jameel");        // base face
+assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq Kasheeda").id, "jameel"); // wide face → same descriptor
+assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq").kasheedaName, "Jameel Noori Nastaleeq Kasheeda");
+assert.strictEqual(AshaarFonts.descriptorForFontName("Noto Nastaliq Urdu").mechanism, "whitespace");
+// unknown → synthetic generic descriptor (no faces, generic mechanism)
+var gd = AshaarFonts.descriptorForFontName("Fatemi Maqala");
+assert.strictEqual(gd.id, "generic");
+assert.strictEqual(gd.mechanism, "generic");
+assert.strictEqual(gd.wordName, null);
+assert.strictEqual(gd.kasheedaName, null);
+assert.strictEqual(gd.tatweelRules, null);
+assert.strictEqual(AshaarFonts.descriptorForFontName("").id, "generic");
+assert.strictEqual(AshaarFonts.descriptorForFontName(null).id, "generic");
+assert.strictEqual(AshaarFonts.descriptorForFontName("  Mehr Nastaliq Web  ").id, "mehr"); // trims
+// mechanismForFontName is now a thin wrapper over the descriptor
+assert.strictEqual(AshaarFonts.descriptorForFontName("Gulzar").mechanism, AshaarFonts.mechanismForFontName("Gulzar"));
+
 // Word cs names line up with what callers emit
 assert.strictEqual(AshaarFonts.wordNameOf("mehr"), "Mehr Nastaliq Web");
 assert.strictEqual(AshaarFonts.wordNameOf("gulzar"), "Gulzar");

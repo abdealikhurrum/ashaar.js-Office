@@ -876,6 +876,12 @@
 
       // Measurement canvas at the selection's font — used for auto-fit, the nudge, and kashida.
       var fontSizeP = selFontP.font.size || 12;
+      // Size-preserving re-render: when REPLACING an existing poem (justify /
+      // adjust re-render), carry the selection's real font size into the rebuild
+      // so the replaced table keeps its size instead of reverting to Word's
+      // default. Only when the selection reports a single size (mixed → null →
+      // leave the default). Fresh insert (replaceSelection false) is unchanged.
+      if (replaceSelection && selFontP.font.size) opts.fontSizePt = selFontP.font.size;
       var modeP = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
       var fontNameP = AshaarFonts.wordNameOf(modeP)
                     || selFontP.font.name || "Times New Roman";
@@ -1446,7 +1452,14 @@
         allCells.forEach(function (cell) {
           (cell.__wordRanges.items || []).forEach(function (wr) {
             var f = wr.font;
-            faceStrs[runFontStr((f && f.name) || repName, (f && f.size) || repSize, !!(f && f.bold), !!(f && f.italic))] = true;
+            var nm = (f && f.name) || repName, sz = (f && f.size) || repSize;
+            faceStrs[runFontStr(nm, sz, !!(f && f.bold), !!(f && f.italic))] = true;
+            // A font-swap font (Jameel) also measures fasls in its wider Kasheeda
+            // face — load that too, or measureText falls back to a substitute and
+            // mis-ranks the swaps. Needed under any dropdown (incl. Document
+            // default), since per-cell dispatch may pick font-swap here.
+            var kn = AshaarFonts.descriptorForFontName(nm).kasheedaName;
+            if (kn) faceStrs[runFontStr(kn, sz, false, false)] = true;
           });
         });
         var faceLoads = [];
@@ -1463,16 +1476,25 @@
         if (!stripJustification(current)) return;
         var colPx = contentPx(cell);
 
+        // Resolve THIS cell's mechanism from its OWN real font (per-cell
+        // dispatch), not the pane dropdown — so any dropdown (incl. Document
+        // default) routes each cell to its font's correct mechanism instead of
+        // shattering Jameel/Mehr with generic tatweels. The dropdown font is
+        // only the fallback when a cell reports no resolvable font.
+        var cellFontName = (cell.body.font && cell.body.font.name) || repName;
+        var cellDesc = AshaarFonts.descriptorForFontName(cellFontName);
+        var cellMech = cellDesc.mechanism;
+
         // Jameel font-swap: measure each fasl (connected segment) in the base
         // vs Kasheeda face, greedily swap the highest-gain fasls to the wider
         // face until the misra fills the column, and rebuild the cell as
         // OOXML with a per-run w:cs. Its own path — no word-range/tatweel/
         // spacing handling applies, so it returns before that machinery.
-        if (mechanism === "font-swap") {
+        if (cellMech === "font-swap") {
           if (!canvasCtx || colPx <= 0) return; // no measurement context — leave the cell as-is
           var cellAlign = cellAlignOf(cell);
-          var wideCss = "\"" + (AshaarFonts.kasheedaNameOf(fontId) || repName) + "\"";
-          var baseCss = "\"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
+          var wideCss = "\"" + (cellDesc.kasheedaName || repName) + "\"";
+          var baseCss = "\"" + (cellDesc.wordName || repName) + "\"";
           var fss = AshaarKashidaFontswap.splitSpans(stripJustification(current));
           var wb = [], ww = [];
           fss.forEach(function (s) {
@@ -1500,10 +1522,10 @@
         // we measure with; Word-native highKashida does nothing for Mehr). So
         // Mehr fits by the SAME discrete subset-selection as Jameel — choose
         // which eligible words get a trailing tatweel. Single-font text output.
-        if (mechanism === "tatweel" && opts.justifyMode === "kashida") {
+        if (cellMech === "tatweel" && opts.justifyMode === "kashida") {
           if (!canvasCtx || colPx <= 0) return;
-          var mehrFont = repSize + "pt \"" + (AshaarFonts.wordNameOf(fontId) || repName) + "\"";
-          var mRules = AshaarFonts.tatweelRulesOf(fontId) || {};
+          var mehrFont = repSize + "pt \"" + (cellDesc.wordName || repName) + "\"";
+          var mRules = cellDesc.tatweelRules || {};
           var isoSet = {}, finSet = {};
           (mRules.isolatedInto || []).forEach(function (c) { isoSet[c] = true; });
           (mRules.finalInto || []).forEach(function (c) { finSet[c] = true; });
