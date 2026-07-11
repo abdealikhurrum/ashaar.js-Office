@@ -499,13 +499,13 @@ assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase,
   assert.deepEqual(AshaarWord.distributeMicroSpaces(["a b"], 0, HAIR), ["a b"]);
 }
 
-// ── strengthToKashidaLevel ──────────────────────────────────────────────────
-assert.equal(AshaarWord.strengthToKashidaLevel(0),  "lowKashida");
-assert.equal(AshaarWord.strengthToKashidaLevel(7),  "lowKashida");
-assert.equal(AshaarWord.strengthToKashidaLevel(8),  "mediumKashida");
-assert.equal(AshaarWord.strengthToKashidaLevel(15), "mediumKashida");
-assert.equal(AshaarWord.strengthToKashidaLevel(16), "highKashida");
-assert.equal(AshaarWord.strengthToKashidaLevel(24), "highKashida");
+// ── strengthToKashidaLevel — thirds of 1–10 ─────────────────────────────────
+assert.equal(AshaarWord.strengthToKashidaLevel(1),  "lowKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(3),  "lowKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(4),  "mediumKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(6),  "mediumKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(7),  "highKashida");
+assert.equal(AshaarWord.strengthToKashidaLevel(10), "highKashida");
 assert.equal(AshaarWord.strengthToKashidaLevel(undefined), "mediumKashida");
 
 // ── strengthToElongationShare: 1–10 → φ elongation share ─────────────────────
@@ -520,26 +520,33 @@ assert.strictEqual(AshaarWord.strengthToElongationShare(undefined), 0);
 assert.equal(AshaarWord.containsArabic("العلم"), true);
 assert.equal(AshaarWord.containsArabic("hello"), false);
 assert.equal(AshaarWord.containsArabic("۱۲۳"), true);   // Urdu digits are in-range
-assert.equal(AshaarWord.wordFillJc("العلم نور", 4),  "lowKashida");
-assert.equal(AshaarWord.wordFillJc("العلم نور", 20), "highKashida");
-assert.equal(AshaarWord.wordFillJc("hello world", 20), "distribute");
+assert.equal(AshaarWord.wordFillJc("العلم نور", 2),  "lowKashida");
+assert.equal(AshaarWord.wordFillJc("العلم نور", 7), "highKashida");
+assert.equal(AshaarWord.wordFillJc("hello world", 7), "distribute");
 
-// ── kashidaExpansionFraction ────────────────────────────────────────────────
-assert.equal(AshaarWord.kashidaExpansionFraction(0), 0);
-assert.equal(AshaarWord.kashidaExpansionFraction(24), 0.15);
-assert.equal(AshaarWord.kashidaExpansionFraction(12), 0.075);
-assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
+// ── kashidaExpansionFraction — 0 at 1, ~0.15 at 10 ───────────────────────
+assert.equal(AshaarWord.kashidaExpansionFraction(1), 0);
+assert.equal(AshaarWord.kashidaExpansionFraction(10), 0.15);
+assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
+
+// ── sliderToFill — 1–10 domain ──────────────────────────────────────────────
+assert.equal(AshaarWord.sliderToFill(1), 0.90);
+assert.equal(AshaarWord.sliderToFill(10), 1.00);
+assert.ok(Math.abs(AshaarWord.sliderToFill(5) - (0.90 + 4/9*0.10)) < 1e-9, "s5 → 0.90 + 4/9*0.10");
+assert.equal(AshaarWord.sliderToFill(0), 0.90);    // clamps low to 1
+assert.equal(AshaarWord.sliderToFill(11), 1.00);   // clamps high to 10
+assert.equal(AshaarWord.sliderToFill(undefined), 0.90); // defaults to 1
 
 // ── misraParaXml: word-fill mode ────────────────────────────────────────────
 {
-  const opts = { justifyMode: "css", tatweelCount: 20 };
+  const opts = { justifyMode: "css", tatweelCount: 10 };
   const xml = AshaarWord.misraParaXml("العلم نور", "center", false, opts, 0);
   assert.ok(xml.indexOf('w:jc w:val="highKashida"') !== -1, "Arabic → highKashida jc");
   assert.ok(xml.indexOf("<w:br/>") !== -1, "Arabic word-fill appends a trailing break");
   assert.ok(xml.indexOf('w:sz w:val="4"') !== -1, "trailing break run is shrunk");
 }
 {
-  const opts = { justifyMode: "css", tatweelCount: 20 };
+  const opts = { justifyMode: "css", tatweelCount: 10 };
   const xml = AshaarWord.misraParaXml("hello world", "center", false, opts, 0);
   assert.ok(xml.indexOf('w:jc w:val="distribute"') !== -1, "non-Arabic → distribute");
   assert.ok(xml.indexOf("<w:br/>") === -1, "distribute needs no trailing break");
@@ -553,9 +560,9 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
 
 // ── misraParaXml: word-fill emits one trailing break, tiny break run ────────
 {
-  const opts = { justifyMode: "css", tatweelCount: 12 };
+  const opts = { justifyMode: "css", tatweelCount: 5 };
   const xml = AshaarWord.misraParaXml("العلم نور", "center", false, opts, 0);
-  assert.ok(xml.indexOf('w:jc w:val="mediumKashida"') !== -1, "tatweelCount 12 -> mediumKashida");
+  assert.ok(xml.indexOf('w:jc w:val="mediumKashida"') !== -1, "tatweelCount 5 -> mediumKashida");
   assert.equal((xml.match(/<w:br\/>/g) || []).length, 1, "exactly one trailing break");
   assert.ok(xml.indexOf('<w:rPr><w:sz w:val="4"/><w:szCs w:val="4"/></w:rPr><w:br/>') !== -1,
     "the trailing break run keeps its own tiny size");
@@ -565,7 +572,7 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamped
 
 // ── misraParaXml: word-fill shrinks the paragraph mark (empty-line fix) ──────
 {
-  const xml = AshaarWord.misraParaXml("العلم نور", "center", false, { justifyMode: "css", tatweelCount: 12 }, 0);
+  const xml = AshaarWord.misraParaXml("العلم نور", "center", false, { justifyMode: "css", tatweelCount: 5 }, 0);
   // paragraph-mark rPr with sz 4 present inside pPr, before the first text run
   const pPrEnd = xml.indexOf("</w:pPr>");
   assert.ok(pPrEnd !== -1, "has pPr");

@@ -81,11 +81,12 @@
     return applyN(lo);
   }
 
-  // Map tatweelCount slider (0–24) to targetFill:
-  //   0  → off (return unchanged)
-  //   1–24 → 0.90 + count/24 * 0.10  (6 ≈ 0.925, 24 = 1.0 — full fill, "living on the edge")
+  // Map tatweelCount slider (1–10) to targetFill:
+  //   1  → 0.90
+  //   10 → 1.0 (full fill, "living on the edge")
   function sliderToFill(count) {
-    return 0.90 + (Number(count) / 24) * 0.10;
+    var s = Math.max(1, Math.min(10, Number(count) || 1));
+    return 0.90 + ((s - 1) / 9) * 0.10;
   }
 
   // Poetry Kashida strength (1–10) → elongation share φ ∈ [0,1]: the fraction of a
@@ -987,12 +988,12 @@
   }
 
   // Map the 0–24 stretch slider to Word's three native kashida jc levels, in
-  // thirds. Used by "Let Word fill it" (§3).
+  // Strength 1–10 → kashida level in thirds. Used by "Let Word fill it" (§3).
   function strengthToKashidaLevel(strength) {
     var s = Number(strength);
     if (!isFinite(s)) return "mediumKashida";
-    if (s < 8) return "lowKashida";
-    if (s < 16) return "mediumKashida";
+    if (s <= 3) return "lowKashida";
+    if (s <= 6) return "mediumKashida";
     return "highKashida";
   }
 
@@ -1007,11 +1008,11 @@
     return containsArabic(text) ? strengthToKashidaLevel(strength) : "distribute";
   }
 
-  // Column expansion allowance for "Let Word fill it": 0 at strength 0, ~15% at
-  // full strength (24). Applied qaseeda-proportionally by the justify path.
+  // Column expansion allowance for "Let Word fill it": 0 at strength 1, ~15% at
+  // full strength (10). Applied qaseeda-proportionally by the justify path.
   function kashidaExpansionFraction(strength) {
-    var s = Math.max(0, Math.min(24, Number(strength) || 0));
-    return Math.round((0.15 * s / 24) * 1000) / 1000;
+    var s = Math.max(1, Math.min(10, Number(strength) || 1));
+    return Math.round((0.15 * (s - 1) / 9) * 1000) / 1000;
   }
 
   // ── Mehr per-font tatweel (form-aware) ───────────────────────────────────
@@ -1477,6 +1478,7 @@
     containsArabic: containsArabic,
     wordFillJc: wordFillJc,
     kashidaExpansionFraction: kashidaExpansionFraction,
+    sliderToFill: sliderToFill,
     mehrElongate: mehrElongate,
     renderForWordOoxml: renderForWordOoxml,
     runsToMisraXml: runsToMisraXml,
