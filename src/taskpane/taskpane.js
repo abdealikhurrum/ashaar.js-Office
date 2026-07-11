@@ -1769,13 +1769,24 @@
           return AshaarFonts.mechanismForFontName(r.name) === "whitespace";
         });
         if (opts.justifyMode === "kashida" && !anyWhitespaceRun) {
+          // Fill target is the cell edge minus a 0.28em buffer; strength sets the
+          // elongation BUDGET (φ share of the gap), the engine concentrates it
+          // onto the best positions (few full kashidas), and micro-spaces backfill
+          // whatever elongation didn't cover — so low strength = spacing-dominant.
+          var gT = colPx - 0.28 * repSize * 96 / 72;
           var gNatural = primRuns.reduce(function (a, r) { return a + r.measure(r.text); }, 0);
-          var gTarget = gNatural + elongShare * Math.max(0, colPx - gNatural);
-          // φ is the only strength lever for kashida: force targetFill=1.0 for
-          // this call only (fill target is the column edge), without mutating
-          // the shared calibParams read by the spacing branch below.
-          var kout = AshaarJustify.justifyRuns(primRuns, gTarget, Object.assign({}, calibParams, { targetFill: 1.0 })); // same length/order
-          outTexts = kout.map(function (r) { return r.text; });
+          var gBudget = gNatural + elongShare * Math.max(0, gT - gNatural);
+          var conc = AshaarJustify.justifyRunsConcentrated(primRuns, gBudget, Object.assign({}, calibParams, {
+            perPositionEm: 0.5,
+            maxPositions: AshaarWord.strengthToMaxPositions(opts.tatweelCount)
+          }));
+          outTexts = conc.runs.map(function (r) { return r.text; });
+          // Spacing backfill: close achievedPx → gT with capped micro-spaces.
+          var gGaps = primRuns.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
+          canvasCtx.font = runFontStr(repName, repSize, false, false);
+          var gSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+          var gN = AshaarResidual.capMicroSpaces(gT - conc.achievedPx, gGaps, gSpacePx, repSize * 96 / 72);
+          outTexts = AshaarWord.distributeMicroSpaces(outTexts, gN, MICRO_SPACE);
         } else {
           // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
           sp = AshaarJustify.computeRunSpacing(primRuns, colPx, calibParams);
