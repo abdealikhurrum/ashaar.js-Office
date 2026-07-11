@@ -679,8 +679,9 @@
     qaseedaWidthMode.value = p.width.mode;
     qaseedaWidthPct.value = p.width.pct;
     qaseedaJustifyMode.value = p.justify.mode;
-    qaseedaStrength.value = p.justify.strength;
-    qaseedaStrengthValue.textContent = p.justify.strength;
+    var strength = AshaarProfiles.normalizeStrength(p.justify.strength);
+    qaseedaStrength.value = strength;
+    qaseedaStrengthValue.textContent = strength;
     var fonts = Object.keys(p.fontCorrections || {});
     qaseedaCorrFont.value = fonts[0] || "";
     qaseedaCorrFactor.value = fonts[0] ? p.fontCorrections[fonts[0]] : 1;

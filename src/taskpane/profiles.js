@@ -90,11 +90,17 @@
     return (px || 0) * 72 / 96 + 2 * (marginPt || 0);
   }
 
-  // Kashida-strength slider (0..24) → justify targetFill (0.90..1.0), matching
-  // word-html's sliderToFill. Values above 24 clamp to full fill.
+  // Kashida-strength slider (1..10) → justify targetFill (0.90..1.0), matching
+  // word-html's sliderToFill. Values outside [1,10] clamp.
   function strengthToTargetFill(strength) {
-    var s = Math.max(0, Math.min(24, Number(strength) || 0));
-    return 0.90 + (s / 24) * 0.10;
+    var s = Math.max(1, Math.min(10, Number(strength) || 1));
+    return 0.90 + ((s - 1) / 9) * 0.10;
+  }
+
+  // Sanitise a profile's stored strength to the 1–10 domain. Profiles are not yet
+  // in real use, so this is a plain clamp — no proportional legacy 0–24 remap.
+  function normalizeStrength(strength) {
+    return Math.max(1, Math.min(10, Number(strength) || 1));
   }
 
   return {
@@ -105,5 +111,6 @@
     deriveSharedWidths: deriveSharedWidths,
     columnPointsFromContentPx: columnPointsFromContentPx,
     strengthToTargetFill: strengthToTargetFill,
+    normalizeStrength: normalizeStrength,
   };
 }));

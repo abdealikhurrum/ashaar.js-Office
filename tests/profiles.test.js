@@ -7,6 +7,7 @@ const {
   deriveSharedWidths,
   columnPointsFromContentPx,
   strengthToTargetFill,
+  normalizeStrength,
 } = require("../src/taskpane/profiles");
 
 // ── defaultProfile ──────────────────────────────────────────────────────────
@@ -97,13 +98,22 @@ const {
   assert.ok(Math.abs(columnPointsFromContentPx(96, 0) - 72) < 1e-6, "no margin => pure px→pt");
 }
 
-// ── strengthToTargetFill (kashida-strength slider → targetFill) ───────────────
+// ── strengthToTargetFill (kashida-strength slider → targetFill, 1-10 domain) ──
 
 {
-  assert.ok(Math.abs(strengthToTargetFill(0) - 0.90) < 1e-9, "strength 0 => 0.90 fill");
-  assert.ok(Math.abs(strengthToTargetFill(24) - 1.0) < 1e-9, "strength 24 => 1.0 fill");
-  assert.ok(Math.abs(strengthToTargetFill(12) - 0.95) < 1e-9, "strength 12 => 0.95 fill");
-  assert.ok(Math.abs(strengthToTargetFill(48) - 1.0) < 1e-9, "clamps above 24 to 1.0");
+  // strength domain is now 1–10
+  assert.ok(Math.abs(strengthToTargetFill(1) - 0.90) < 1e-9, "strength 1 => 0.90 fill");
+  assert.ok(Math.abs(strengthToTargetFill(10) - 1.0) < 1e-9, "strength 10 => 1.0 fill");
+}
+
+// ── normalizeStrength (plain clamp to [1,10], no legacy remap) ────────────────
+
+{
+  // normalizeStrength is a plain clamp to [1,10] (no legacy remap)
+  assert.strictEqual(normalizeStrength(6), 6, "in-range => unchanged");
+  assert.strictEqual(normalizeStrength(0), 1, "clamps low");
+  assert.strictEqual(normalizeStrength(24), 10, "clamps high");
+  assert.strictEqual(normalizeStrength(undefined), 1, "undefined => 1");
 }
 
 console.log("profiles tests passed");
