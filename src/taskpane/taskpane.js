@@ -460,7 +460,8 @@
     if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to apply a qaseeda."); return; }
     var profile = getProfile(name);
     var CELL_MARGIN_PT = 5.76;
-    var targetFill = AshaarProfiles.strengthToTargetFill(profile.justify.strength);
+    var strength = AshaarProfiles.normalizeStrength(profile.justify.strength);
+    var targetFill = AshaarProfiles.strengthToTargetFill(strength);
     var doKashida = profile.justify.mode === "kashida";
     var fallbackName = profile.font || "Times New Roman";
     var summary = "";
