@@ -1414,9 +1414,15 @@
 
       var allCells = [];
       tables.items.forEach(function (tbl) {
-        tbl.rows.items.forEach(function (row) {
-          row.cells.items.forEach(function (cell) {
+        tbl.rows.items.forEach(function (row, ri) {
+          var cols = row.cells.items.length;
+          row.cells.items.forEach(function (cell, ci) {
             allCells.push(cell);
+            // Grid signature for the natural-width matrix. Cross-table (multi-
+            // stanza) cells at the same (row, col) group so corresponding misras
+            // balance to one width; `span` carries the row's cell count so
+            // different-shaped rows never group together.
+            cell.__matKey = AshaarMatrix.positionKey({ row: ri, col: ci, span: cols });
             cell.body.load("text");
             cell.body.font.load("name,size");
             // Alignment of the cell's own first paragraph — used by the
@@ -1654,6 +1660,23 @@
         try { await Promise.all(faceLoads); } catch (e) {}
       }
 
+      // Natural-width matrix (harmony): the longest tatweel-free width per grid
+      // position across every content cell in the work range. Natural-fit fills
+      // each cell up to its position's Wpos (φ=1 pushes further, to the edge).
+      var fillMode = opts.fillMode === "cell-fit" ? "cell-fit" : "natural-fit";
+      var matrixCells = [];
+      allCells.forEach(function (cell) {
+        var base = stripJustification(cell.body.text || "").replace(/\s+/g, " ").trim();
+        if (!AshaarMatrix.isContentCell(base)) return;
+        var mf = cell.body.font;
+        var mnm = (mf && mf.name) || repName, msz = (mf && mf.size) || repSize;
+        var natPx = 0;
+        if (canvasCtx) { canvasCtx.font = runFontStr(mnm, msz, false, false); natPx = canvasCtx.measureText(base).width; }
+        cell.__natPx = natPx;
+        matrixCells.push({ key: cell.__matKey, natural: natPx });
+      });
+      var widthMatrix = AshaarMatrix.buildMatrix(matrixCells);
+
       // Phase 1 (pure, no sync): rebuild each cell as an ordered list of style
       // runs and justify measuring each run in its OWN font. Produces per-cell
       // write plans consumed in phase 2.
@@ -1688,9 +1711,23 @@
             canvasCtx.font = repSize + "pt " + baseCss; wb.push(canvasCtx.measureText(s).width);
             canvasCtx.font = repSize + "pt " + wideCss; ww.push(canvasCtx.measureText(s).width);
           });
-          var jT = colPx - 0.28 * repSize * 96 / 72;
           var jNatural = wb.reduce(function (a, b) { return a + b; }, 0);
-          var jTarget = jNatural + elongShare * Math.max(0, jT - jNatural);
+          if (fillMode === "cell-fit") {
+            // Cell-fit: swap fasls up to the φ elongation budget (no buffer),
+            // then let Word distribute the residual to the true edge.
+            var jBudget = AshaarMatrix.cellFitBudget(jNatural, colPx, elongShare);
+            var jSelC = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, jBudget);
+            var jRunsC = jSelC.runs.map(function (r) {
+              return { text: r.text, csName: r.swap ? (cellDesc.kasheedaName || repName) : (cellDesc.wordName || repName), sizePt: repSize };
+            });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(jRunsC, repSize) });
+            return;
+          }
+          // Natural-fit: fill to the position's matrix width (φ pushes toward the
+          // buffered edge); capped hair-spaces backfill what the swaps miss.
+          var jReach = colPx - 0.28 * repSize * 96 / 72;
+          var jWpos = widthMatrix[cell.__matKey] || jNatural;
+          var jTarget = AshaarMatrix.naturalFitTarget(jWpos, jReach, elongShare);
           var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, jTarget);
           // Hybrid fill: font-swap elongation undershoots (only fasls with a
           // Kasheeda variant widen) — close the residual with capped hair-spaces
@@ -1699,7 +1736,7 @@
           for (var jgi = 0; jgi < sel.runs.length; jgi++) { if (sel.runs[jgi].text === " ") jGaps++; }
           canvasCtx.font = repSize + "pt " + baseCss;
           var jSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var jn = AshaarResidual.capMicroSpaces(jT - sel.fill * jTarget, jGaps, jSpacePx, repSize * 96 / 72);
+          var jn = AshaarResidual.capMicroSpaces(jTarget - sel.fill * jTarget, jGaps, jSpacePx, repSize * 96 / 72);
           var jRuns = AshaarResidual.injectSpaceRuns(sel.runs, jn, MICRO_SPACE);
           var swapXml = AshaarWord.runsToMisraXml(jRuns, cellAlign, opts, repSize);
           plans.push({ cell: cell, ooxml: swapXml });
@@ -1727,9 +1764,17 @@
           var mwb = [], mww = [];
           canvasCtx.font = mehrFont;
           for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(canvasCtx.measureText(mtoks[mi]).width); mww.push(canvasCtx.measureText(melong[mi]).width); }
-          var mT = colPx - 0.28 * repSize * 96 / 72;
           var mNatural = mwb.reduce(function (a, b) { return a + b; }, 0);
-          var mTarget = mNatural + elongShare * Math.max(0, mT - mNatural);
+          if (fillMode === "cell-fit") {
+            var mBudget = AshaarMatrix.cellFitBudget(mNatural, colPx, elongShare);
+            var mselC = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, mBudget);
+            var moutC = mselC.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml([{ text: moutC, csName: cellDesc.wordName || repName, sizePt: repSize }], repSize) });
+            return;
+          }
+          var mReach = colPx - 0.28 * repSize * 96 / 72;
+          var mWpos = widthMatrix[cell.__matKey] || mNatural;
+          var mTarget = AshaarMatrix.naturalFitTarget(mWpos, mReach, elongShare);
           var msel = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, mTarget);
           var mout = msel.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
           // Hybrid fill: Mehr elongates only at whitelisted word-endings, so it
@@ -1738,9 +1783,9 @@
           var mGaps = mout.split(" ").length - 1;
           canvasCtx.font = mehrFont;
           var mSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var mn = AshaarResidual.capMicroSpaces(mT - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72);
+          var mn = AshaarResidual.capMicroSpaces(mTarget - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72);
           var mfinal = AshaarWord.distributeMicroSpaces([mout], mn, MICRO_SPACE)[0];
-          if (mfinal !== current) plans.push({ cell: cell, flat: mfinal });
+          if (mfinal !== current) plans.push({ cell: cell, flat: mfinal, align: cellAlignOf(cell) });
           return;
         }
 
@@ -1796,23 +1841,29 @@
           return AshaarFonts.mechanismForFontName(r.name) === "whitespace";
         });
         if (opts.justifyMode === "kashida" && !anyWhitespaceRun) {
-          // Fill target is the cell edge minus a 0.28em buffer; strength sets the
-          // elongation BUDGET (φ share of the gap), the engine concentrates it
-          // onto the best positions (few full kashidas), and micro-spaces backfill
-          // whatever elongation didn't cover — so low strength = spacing-dominant.
-          var gT = colPx - 0.28 * repSize * 96 / 72;
           var gNatural = primRuns.reduce(function (a, r) { return a + r.measure(r.text); }, 0);
-          var gBudget = gNatural + elongShare * Math.max(0, gT - gNatural);
-          var conc = AshaarJustify.justifyRunsConcentrated(primRuns, gBudget, Object.assign({}, calibParams, {
-            perPositionEm: 0.5,
-            maxPositions: AshaarWord.strengthToMaxPositions(opts.tatweelCount)
-          }));
+          var gMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(opts.tatweelCount) };
+          if (fillMode === "cell-fit") {
+            // Cell-fit: concentrate tatweels to the φ budget (no buffer); Word's
+            // distribute jc stretches the inter-word gaps to the true edge.
+            var gBudgetC = AshaarMatrix.cellFitBudget(gNatural, colPx, elongShare);
+            var concC = AshaarJustify.justifyRunsConcentrated(primRuns, gBudgetC, Object.assign({}, calibParams, gMax));
+            var cfRuns = concC.runs.map(function (r, i) { return { text: r.text, csName: runs[i].name, sizePt: runs[i].size }; });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(cfRuns, repSize) });
+            return;
+          }
+          // Natural-fit: fill to the position's matrix width; capped micro-spaces
+          // backfill whatever the concentrated tatweels didn't cover — so low
+          // strength = spacing-dominant, harmony baseline at φ=0.
+          var gReach = colPx - 0.28 * repSize * 96 / 72;
+          var gWpos = widthMatrix[cell.__matKey] || gNatural;
+          var gTarget = AshaarMatrix.naturalFitTarget(gWpos, gReach, elongShare);
+          var conc = AshaarJustify.justifyRunsConcentrated(primRuns, gTarget, Object.assign({}, calibParams, gMax));
           outTexts = conc.runs.map(function (r) { return r.text; });
-          // Spacing backfill: close achievedPx → gT with capped micro-spaces.
           var gGaps = primRuns.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
           canvasCtx.font = runFontStr(repName, repSize, false, false);
           var gSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var gN = AshaarResidual.capMicroSpaces(gT - conc.achievedPx, gGaps, gSpacePx, repSize * 96 / 72);
+          var gN = AshaarResidual.capMicroSpaces(gTarget - conc.achievedPx, gGaps, gSpacePx, repSize * 96 / 72);
           outTexts = AshaarWord.distributeMicroSpaces(outTexts, gN, MICRO_SPACE);
         } else {
           // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
@@ -1850,14 +1901,24 @@
         var alignedOk = runs.every(function (r, i) {
           return outTexts[i].split(" ").length === r.refs.length;
         });
-        if (!alignedOk) { plans.push({ cell: cell, flat: outTexts.join(" ") }); return; }
+        if (!alignedOk) { plans.push({ cell: cell, flat: outTexts.join(" "), align: cellAlignOf(cell) }); return; }
 
-        plans.push({ cell: cell, runs: runs, outTexts: outTexts, sp: sp });
+        plans.push({ cell: cell, runs: runs, outTexts: outTexts, sp: sp, align: cellAlignOf(cell) });
       });
 
       // Phase 2 (write): one context.sync() per cell so a range failure on one
       // cell falls back to a flattened whole-cell replace without aborting the
       // batch (the run-aware write can only error at sync, not synchronously).
+      // Map a cell's own alignment → an Office enum. Applied on flat/run-aware
+      // writes so re-justifying a cell that was previously Cell-fit (paragraph
+      // jc=distribute) clears the distribute — Office.js has no "distribute"
+      // Alignment, so we re-assert the cell's intended side.
+      function officeAlign(a) {
+        if (a === "right") return Word.Alignment.right;
+        if (a === "left") return Word.Alignment.left;
+        return Word.Alignment.centered;
+      }
+
       var changed = 0;
       for (var pi = 0; pi < plans.length; pi++) {
         var p = plans[pi];
@@ -1873,7 +1934,9 @@
           continue;
         }
         if (p.flat != null) {
-          p.cell.body.paragraphs.getFirst().insertText(p.flat, Word.InsertLocation.replace);
+          var flatPara = p.cell.body.paragraphs.getFirst();
+          flatPara.insertText(p.flat, Word.InsertLocation.replace);
+          if (p.align) flatPara.alignment = officeAlign(p.align);
           await context.sync();
           changed++;
           continue;
@@ -1890,6 +1953,7 @@
               if (pieces[j] !== w.text) { w.range.insertText(pieces[j], Word.InsertLocation.replace); cellChanged = true; }
             });
           });
+          if (p.align) { p.cell.body.paragraphs.getFirst().alignment = officeAlign(p.align); cellChanged = true; }
           if (cellChanged) { await context.sync(); changed++; }
         } catch (e) {
           // Queued range write failed at sync (or count mismatch) — flatten.
