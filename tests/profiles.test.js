@@ -8,6 +8,7 @@ const {
   columnPointsFromContentPx,
   strengthToTargetFill,
   normalizeStrength,
+  normalizeFillMode,
 } = require("../src/taskpane/profiles");
 
 // ── defaultProfile ──────────────────────────────────────────────────────────
@@ -114,6 +115,22 @@ const {
   assert.strictEqual(normalizeStrength(0), 1, "clamps low");
   assert.strictEqual(normalizeStrength(24), 10, "clamps high");
   assert.strictEqual(normalizeStrength(undefined), 1, "undefined => 1");
+}
+
+// ── fillMode: default natural-fit, normalized, preserved through merge ────────
+{
+  const p = defaultProfile("Karbala");
+  assert.equal(p.justify.fillMode, "natural-fit", "defaults to natural-fit");
+}
+assert.equal(normalizeFillMode("cell-fit"), "cell-fit");
+assert.equal(normalizeFillMode("natural-fit"), "natural-fit");
+assert.equal(normalizeFillMode("bogus"), "natural-fit", "unknown => default");
+assert.equal(normalizeFillMode(undefined), "natural-fit");
+{
+  // A stored profile carrying cell-fit survives normalizeProfile.
+  const stored = { name: "Q", justify: { mode: "kashida", strength: 7, fillMode: "cell-fit" } };
+  const n = normalizeProfile(stored);
+  assert.equal(n.justify.fillMode, "cell-fit", "stored fillMode preserved");
 }
 
 console.log("profiles tests passed");

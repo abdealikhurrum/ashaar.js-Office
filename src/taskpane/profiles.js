@@ -21,7 +21,7 @@
     return {
       name: typeof name === "string" ? name : "",
       width: { mode: "auto-fit", pct: 50 },        // "auto-fit" | "fixed"
-      justify: { mode: "kashida", strength: 6 },   // "kashida" | "spacing" | "css" | "none"
+      justify: { mode: "kashida", strength: 6, fillMode: "natural-fit" },   // "kashida" | "spacing" | "css" | "none"
       gap: 4,
       misraSymbol: "",
       symbolColor: "",
@@ -103,6 +103,13 @@
     return Math.max(1, Math.min(10, Number(strength) || 1));
   }
 
+  // Sanitise a profile's stored fill mode. Cell-fit = fill to the true cell edge
+  // (Word distribute residual); Natural-fit = fill to the per-position matrix
+  // width (capped micro-space residual). Anything else defaults to natural-fit.
+  function normalizeFillMode(mode) {
+    return mode === "cell-fit" ? "cell-fit" : "natural-fit";
+  }
+
   return {
     defaultProfile: defaultProfile,
     normalizeProfile: normalizeProfile,
@@ -112,5 +119,6 @@
     columnPointsFromContentPx: columnPointsFromContentPx,
     strengthToTargetFill: strengthToTargetFill,
     normalizeStrength: normalizeStrength,
+    normalizeFillMode: normalizeFillMode,
   };
 }));
