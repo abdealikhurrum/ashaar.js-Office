@@ -529,14 +529,6 @@ assert.equal(AshaarWord.kashidaExpansionFraction(1), 0);
 assert.equal(AshaarWord.kashidaExpansionFraction(10), 0.15);
 assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
 
-// ── sliderToFill — 1–10 domain ──────────────────────────────────────────────
-assert.equal(AshaarWord.sliderToFill(1), 0.90);
-assert.equal(AshaarWord.sliderToFill(10), 1.00);
-assert.ok(Math.abs(AshaarWord.sliderToFill(5) - (0.90 + 4/9*0.10)) < 1e-9, "s5 → 0.90 + 4/9*0.10");
-assert.equal(AshaarWord.sliderToFill(0), 0.90);    // clamps low to 1
-assert.equal(AshaarWord.sliderToFill(11), 1.00);   // clamps high to 10
-assert.equal(AshaarWord.sliderToFill(undefined), 0.90); // defaults to 1
-
 // ── misraParaXml: word-fill mode ────────────────────────────────────────────
 {
   const opts = { justifyMode: "css", tatweelCount: 10 };

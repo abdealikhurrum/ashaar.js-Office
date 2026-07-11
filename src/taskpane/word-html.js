@@ -1478,7 +1478,6 @@
     containsArabic: containsArabic,
     wordFillJc: wordFillJc,
     kashidaExpansionFraction: kashidaExpansionFraction,
-    sliderToFill: sliderToFill,
     mehrElongate: mehrElongate,
     renderForWordOoxml: renderForWordOoxml,
     runsToMisraXml: runsToMisraXml,
