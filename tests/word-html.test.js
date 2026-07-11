@@ -508,6 +508,14 @@ assert.equal(AshaarWord.strengthToKashidaLevel(16), "highKashida");
 assert.equal(AshaarWord.strengthToKashidaLevel(24), "highKashida");
 assert.equal(AshaarWord.strengthToKashidaLevel(undefined), "mediumKashida");
 
+// ── strengthToElongationShare: 1–10 → φ elongation share ─────────────────────
+assert.strictEqual(AshaarWord.strengthToElongationShare(1), 0);
+assert.strictEqual(AshaarWord.strengthToElongationShare(10), 1);
+assert.ok(Math.abs(AshaarWord.strengthToElongationShare(5) - (4/9)) < 1e-9, "s5 → 4/9");
+assert.strictEqual(AshaarWord.strengthToElongationShare(0), 0);   // clamps low
+assert.strictEqual(AshaarWord.strengthToElongationShare(24), 1);  // clamps high
+assert.strictEqual(AshaarWord.strengthToElongationShare(undefined), 0);
+
 // ── containsArabic / wordFillJc ─────────────────────────────────────────────
 assert.equal(AshaarWord.containsArabic("العلم"), true);
 assert.equal(AshaarWord.containsArabic("hello"), false);

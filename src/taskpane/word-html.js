@@ -88,6 +88,16 @@
     return 0.90 + (Number(count) / 24) * 0.10;
   }
 
+  // Poetry Kashida strength (1–10) → elongation share φ ∈ [0,1]: the fraction of a
+  // line's fill-gap closed by the font's elongation mechanism (the rest by
+  // spacing). s=1 → 0 (all spacing); s=10 → 1 (all elongation, minor spacing).
+  function strengthToElongationShare(strength) {
+    var s = Number(strength);
+    if (!isFinite(s)) s = 1;
+    s = Math.max(1, Math.min(10, s));
+    return (s - 1) / 9;
+  }
+
   function justifyText(text, opts, colWidthPx) {
     opts = opts || {};
     var count = Number(opts.tatweelCount || 0);
@@ -1462,6 +1472,7 @@
     justifyPlainTextBlock: justifyPlainTextBlock,
     coalesceRuns: coalesceRuns,
     distributeMicroSpaces: distributeMicroSpaces,
+    strengthToElongationShare: strengthToElongationShare,
     strengthToKashidaLevel: strengthToKashidaLevel,
     containsArabic: containsArabic,
     wordFillJc: wordFillJc,
