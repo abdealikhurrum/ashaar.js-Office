@@ -440,6 +440,50 @@
     return qaseeda;
   }
 
+  // Read-only: show the bandh cell-map (labels + gaps) for the Ashaar Poem block
+  // at the cursor. No document mutation. Labels can't be shown on the Word page
+  // itself (no native per-cell text overlay), so the pane is their home.
+  async function showCellMap() {
+    var view = document.getElementById("cell-map-view");
+    if (!view) return;
+    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word."); return; }
+    var patterns = null;
+    try {
+      await Word.run(async function (context) {
+        var cc = context.document.getSelection().parentContentControlOrNullObject;
+        cc.load("title,tag");
+        await context.sync();
+        if (!cc.isNullObject && cc.title === "Ashaar Poem") {
+          var payload = AshaarWord.parseContentControlTag(cc.tag);
+          patterns = payload && payload.cells;
+        }
+      });
+    } catch (e) { /* leave patterns null */ }
+
+    if (!patterns || !patterns.length) {
+      view.hidden = false;
+      view.textContent = "No cell map on the block at the cursor (older or hand-drawn table).";
+      return;
+    }
+    var html = "";
+    patterns.forEach(function (pattern, bi) {
+      var map = AshaarCellMap.buildBandhCellMap(pattern);
+      html += "<div class=\"cell-map-bandh\"><b>Bandh " + (bi + 1) + "</b>";
+      var lastRow = -1, rowHtml = "";
+      function flush() { if (rowHtml) html += "<div class=\"cell-map-row\">" + rowHtml + "</div>"; rowHtml = ""; }
+      map.forEach(function (e) {
+        if (e.row !== lastRow) { flush(); lastRow = e.row; }
+        rowHtml += e.kind === "content"
+          ? "<span class=\"cell-map-cell\">" + e.label + "</span>"
+          : "<span class=\"cell-map-gap\">(gap)</span>";
+      });
+      flush();
+      html += "</div>";
+    });
+    view.hidden = false;
+    view.innerHTML = html;
+  }
+
   // ── Qaseeda apply/refresh engine (P3) ─────────────────────────────────────
   // Find every Ashaar Poem block linked to a qaseeda name.
   async function gatherQaseedaBlocks(context, name) {
@@ -2372,6 +2416,8 @@
     document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
+    var showMapBtn = document.getElementById("show-cell-map");
+    if (showMapBtn) showMapBtn.addEventListener("click", showCellMap);
     document.getElementById("re-render").addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);

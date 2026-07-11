@@ -683,3 +683,9 @@ button:hover {
 }
 .auto-fit-check input { width: 15px; height: 15px; accent-color: var(--accent); }
 input[type="range"][disabled] { opacity: 0.45; }
+
+.cell-map-view { margin-top: 8px; font-size: 12px; }
+.cell-map-bandh { margin-bottom: 6px; }
+.cell-map-row { display: flex; gap: 4px; margin: 2px 0; direction: rtl; }
+.cell-map-cell { padding: 1px 6px; border: 1px solid #888; border-radius: 3px; }
+.cell-map-gap { padding: 1px 6px; color: #999; }
