@@ -1,52 +1,43 @@
-# Session Handoff — 2026-07-12
+# Session Handoff — 2026-07-12 (width-engine rebuild + justify polish)
 
-**Read this first.** Branch: `feat/guided-justification-ux`. All work is **local, committed, unsigned** (`--no-gpg-sign`, 1Password agent locked) — **not pushed, no PR**. Node suite green (16 files). Dev server was running via `npm start` (port 3000, `Cache-Control: no-store`).
+**Read this first.** Branch: `feat/guided-justification-ux`. All work **local, committed, unpushed, unsigned** (`--no-gpg-sign`). Node suite green (17 files). Dev server runs via `npm start` (port 3000, `Cache-Control: no-store`); Word reloads JS only when you **reload the task pane**.
 
-## What this session did
+## Headline: the width engine now works in Word (verified)
 
-Started as Task 7 (manual Word verification of the justification modes) and turned into: **fix 3 real Word bugs**, then discover a **design gap** in the width/harmony engine, brainstorm + spec + plan it, and begin implementing.
+Last session shipped "Option A" (resize span tables via `columns.setWidth(slotPt,"SameWidth")`). **That approach is dead** — this session proved it garbles span (merged-cell) tables. The apply engine was re-architected to **rebuild the OOXML** and it now works end-to-end in Word.
 
-### Bugs found & fixed (committed, Word-verified)
-- `cc03e55` **Re-render in-place replace** — `insertOoxml("Replace")` on a whole content-control range throws `GeneralException`; now detect the enclosing "Ashaar Poem" control via range `intersectWithOrNullObject` and replace in place (insert after + wrap + delete old). Also added `describeError()` (surfaces `debugInfo.errorLocation` + `surroundingStatements` to the pane — this is how every Office.js error got diagnosed).
-- `e760669` **Qaseeda apply** — (a) `TableCell.shadingColor` rejects `""` and `"No color"`; clear with `"#FFFFFF"`. (b) auto-fit column resize invalidated captured cell proxies → re-map fresh proxies after resize.
-- Justify Selected Text (kashida) confirmed working.
+### What was wrong & the fix (root-caused live)
+- `columns.setWidth(pt,"SameWidth")` does NOT set per-grid-column widths on a span table. `RulerStyle.sameWidth` sets *all cells* to one value → grid columns collapse, equal-span cells render at wildly different widths (one misra went 1-char-per-line **vertical**). Per-column `setWidth` throws; `cell.columnWidth` is "uniform tables only". **There is no Office.js API to set per-grid-column widths on a span table.** (Memory `office-js-word-constraints.md` item 2b corrected; new memory `width-engine-rebuild-not-setwidth.md`.)
+- **Fix = rebuild.** Only re-authoring the table OOXML (`renderForWordOoxml` writes `<w:gridCol>`/`<w:tcW>`) resizes correctly — same thing the **Re-render** button does.
 
-### Design gap found (the reason for the new spec/plan)
-Save & Apply **cannot size/harmonize span-based poetry tables**: `width.pct` is dead code in apply; auto-fit crashes because `Table.columns`/`TableCell.columnWidth` are "uniform tables only"; and formatting is set in two disconnected places (top controls vs qaseeda profile). Full analysis in the spec.
+### Commits this session (all Word-verified except where noted)
+- `dad48a3` `stanzaCellGeometry`/`poemCellGeometry` — source-derived grid spans (Word can't report them for span tables). Node cross-check locks spans/kinds/cols to the generator.
+- `bd99715` first Option-A apply rewrite (setWidth) — **superseded**, keep for history.
+- `36c230f` **rebuild-based apply**: two passes — SIZE (rebuild every block at one shared `targetTwips` via `uniformSlotPx`, margin-aware → no wrap; same width for all bandhs → same-GRID bandhs get identical `cwt` = harmony) then JUSTIFY (fill each cell to `box = span×(target/GRID) − margins`, kashida + spacing, clamped no-wrap). Factored `captureQaseedaTables` (load/measure/geometry) shared by both passes.
+- `c005489` **SDT wrap**: `AshaarWord.wrapOoxmlControl` emits the content control *inside* the OOXML (block-level `w:sdt`) so it spans the whole table (not just row 1). Also closes the old multi-table re-wrap gap.
+- `f53f84e` removed temp DBG readout.
+- `1c1e1c1` **rebuild-gating**: only rebuild when the width signature (`targetTwips` + block source hashes, cached in-session in `_appliedSizeSig`) changes. Strength / fill mode / per-cell override are justify-only → skip the destructive rebuild → fast, non-destructive, and fixed the Word **crash** from repeated content-control surgery.
+- `e7dde61` **Cell-fit uses real micro-spaces** (not Word `distribute`, which no-ops on a single line). Both fill modes now share the micro-space(+tatweel) path; they differ only in target — Cell-fit → cell edge, Natural-fit → harmony width. Fill mode is now visibly distinct in both justify modes.
+- `9f165ef` space debug tint via `font.highlightColor` (spaces have no ink for `font.color`).
 
-### Brainstormed → spec → plan (committed)
-- Spec: `docs/superpowers/specs/2026-07-11-unified-formatting-width-engine-design.md`
-- Plan: `docs/superpowers/plans/2026-07-11-unified-formatting-width-engine.md`
-- Design in one line: **one block-first profile model** (drop the duplicated top controls; profile dropdown you can add to) + a **span-safe width engine** that computes widths from structure and sets them, reusing the same box as the kashida target (no wrap).
+### Verified in Word this session (user-confirmed)
+Auto-fit + fixed-% sizing; harmony across bandhs; no vertical text / no wrap; kashida tatweels + spacing both fill; full-table content-control wrap; strength sweep; spacing mode; idempotent re-apply; per-cell override; rebuild-gating (override/strength now light, no crash). Space-highlight + final Cell-fit-vs-Natural-fit distinction were the **last things handed for a look** — assume good unless the next session hears otherwise.
 
-### Execution progress (inline, via executing-plans)
-- ✅ **Spikes done.** Per-column `setWidth` is **impossible** on span tables (`columns.load` throws "mixed cell widths"); only collection-level uniform `columns.setWidth(pt, "SameWidth")` works. → **Decision: Option A — scale equal slots.** (Non-uniform cell widths survive because they come from integer spans of equal slots.) Recorded as a plan AMENDMENT block above Phase 2.
-- ✅ **Phase 1 pure math done + node-tested + committed:** `AshaarMatrix.computeTargetGrid` (`ed2c4c2`, `286b2ee` — the Option-B/per-column reference, kept but NOT on the shipped path) and **`AshaarMatrix.uniformSlotPx`** (`f197af5` — the Option-A slot sizer). Existing `buildMatrix`/`naturalFitTarget`/`cellFitBudget` reused.
-
-## ⏭️ NEXT STEP — the apply-engine rewrite (Option A)
-
-This is exactly where to resume. The math is ready; the Word orchestration is not. Verifiable only in Word (no headless test).
-
-1. **`word-html.js` geometry helper** — expose per-cell grid geometry from the poem SOURCE (GRID + each cell's span, row-major), reusing the private `stanzaGridInfo`/`stanzaColSpans`. Word cannot report this for span tables, so it must come from structure.
-2. **Rewrite the width step of `applyProfileToQaseeda`** (`taskpane.js`, the old `canResize`/`info.tbl.columns` block — now deleted-worthy):
-   - Reconstruct each block's source (as re-render does) → geometry helper → per content cell: `natural` (canvas px), `span`, table `GRID`.
-   - `slot = AshaarMatrix.uniformSlotPx(bandhs, {mode, pct, pagePx, headroom})`; set it with `table.columns.setWidth(slot_pt, "SameWidth")` (the ONLY width op that works).
-   - Stamp `c.box = span × slot`, `c.wpos = buildMatrix()[key]`.
-3. **Rewrite per-cell justify** to fill to the box under **both** kashida and spacing (ungate from `doKashida`): natural-fit `target = naturalFitTarget(wpos, box, phi)`; cell-fit `cellFitBudget(natural, box, phi)`; **clamp `target ≤ box`** (no-wrap). Reuse `justifyRunsConcentrated`/`distributeMicroSpaces`.
-4. Then Phase 3 (route insert/adopt/justify through the active profile), Phase 4 (UI: profile dropdown + block-first + remove top formatting controls), Phase 5 (Default profile + older-Word fallback), Phase 6 (manual Word verification checklist).
+## ⏭️ NEXT — remaining plan phases (plan: `docs/superpowers/plans/2026-07-11-unified-formatting-width-engine.md`)
+The width engine (Phases 1–2) is DONE. Left:
+- **Phase 3 (Task 6)** — `activeProfile()`; route `insertPoem`/`adoptTable`/`justifySelection` through the profile (not the top controls) so a fresh insert is sized/justified like an applied one. Factor the SIZE+JUSTIFY core into `formatBlocks` and call from both.
+- **Phase 4 (Tasks 7–9)** — profile dropdown + "＋ New"; block-first active-context sync; **remove the duplicated top formatting controls** (`#justify-mode`, `#table-width`, `#width-mode`, `#auto-fit*`, `#tatweel*`, `#gap-width`) so the profile is the sole source.
+- **Phase 5 (Task 10)** — `AshaarProfiles.DEFAULT_PROFILE_NAME`/`resolveProfileName`; older-Word fallback message (node-testable, independent — good quick start).
+- **Phase 6 (Task 11)** — manual Word verification checklist.
 
 ## Key facts so the next session doesn't rediscover them
-
-- **Never edit `src/vendor/`.** Pure modules stay DOM/Office-free (node-testable).
-- **Office.js width reality (memory `office-js-word-constraints.md`):** span tables expose NO column geometry; only uniform `columns.setWidth(pt,"SameWidth")` works; `shadingColor` clears with `"#FFFFFF"`; resize invalidates cell proxies; assignment errors surface at `context.sync()` (a `try/catch` around a property set never fires).
-- **`marsiya-test.docx` is PLAIN tables** (no managed blocks). To manage one: **Adopt Existing Table** (structure-aware). **Load Selection is the WRONG tool for tables** — it grabs raw `selection.text` (tabs/returns, no misra `\`) and garbles the rebuild; that was the source of earlier corruption confusion.
-- **Poetry tables are fixed-layout** (`stanzaTableOoxml`: `tblLayout fixed`, `tblW dxa`, uniform `gridCol=cwt`; cell of span S = S·cwt). Twips↔px `×96/1440`; pt↔px `×96/72`.
-- Two justify entry points share the per-cell model: `justifySelection` (one block) and `applyProfileToQaseeda` (all blocks of a qaseeda).
-
-## Known-open follow-ups (out of scope for the current plan)
-- Re-render / multi-table Adopt **content-control re-wrap** (partial wrap of multi-table ranges).
-- Adopt **"Review before replacing"** checkbox has no effect.
-- Fill mode being a no-op in Spacing mode — **folded into** the current plan (Phase 2 Task 5), not separate.
+- **Never edit `src/vendor/`.** Pure modules (`natural-width-matrix.js`, `word-html.js` helpers) stay DOM/Office-free + node-tested.
+- **Resize span tables ONLY by OOXML rebuild.** No `columns.setWidth`, no `cell.columnWidth`. See memory `width-engine-rebuild-not-setwidth.md`.
+- **Grid geometry comes from the SOURCE** (`poemCellGeometry`), never from Word. Geometry uses each block's OWN stored opts (tag payload gapWidth/layoutMode) so it matches the render.
+- **Content control = block-level `w:sdt` in the OOXML** (`wrapOoxmlControl`), not `insertContentControl()` on an inserted range (that caught only row 1 on Mac Word).
+- **Rebuild is gated** by `_appliedSizeSig[name]` (in-session). Justify-only changes skip it. First apply per session always rebuilds.
+- `applyProfileToQaseeda` = two passes: pass 1 SIZE (rebuild if width changed) → pass 2 JUSTIFY (fresh gather, fill to box). `captureQaseedaTables` is the shared load/measure/geometry helper.
+- `stripJustification` makes re-apply idempotent (strips old tatweels/spaces before re-filling).
 
 ## Continuity memory (auto-loaded)
-`~/.claude/projects/-Users-abdealikhurrum-ashaar-js-Office/memory/`: `office-js-word-constraints.md` (new), `justification-modes-state.md`, `cell-configurations-state.md`, `MEMORY.md` index.
+`~/.claude/projects/-Users-abdealikhurrum-ashaar-js-Office/memory/`: `width-engine-rebuild-not-setwidth.md` (new), `office-js-word-constraints.md` (2b corrected), `justification-modes-state.md` (updated), `cell-configurations-state.md`, `MEMORY.md` index.
