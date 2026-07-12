@@ -68,51 +68,60 @@
     opts = opts || {};
     var pagePx = Number(opts.pagePx) || 0;
     var headroom = Number(opts.headroom) || 0;
+    var mode = opts.mode === "fixed" ? "fixed" : "auto-fit";
+    var pctWant = (Number(opts.pct) || 100) / 100 * pagePx;
 
-    // sameShape: every bandh shares one GRID.
     var GRID = bandhs.length ? Number(bandhs[0].GRID) || 0 : 0;
     var sameShape = GRID > 0 && bandhs.every(function (b) { return Number(b.GRID) === GRID; });
 
-    // Cross-bandh matrix: longest natural per position (px).
-    var flat = [];
-    bandhs.forEach(function (b) { (b.cells || []).forEach(function (c) { flat.push(c); }); });
-    var matrix = buildMatrix(flat);
-
-    // Per-position width need = longest natural × (1 + headroom). Spread a
-    // position's need evenly across the grid columns it spans; a column's width
-    // is the max need imposed by any position covering it.
-    var need = {};
-    Object.keys(matrix).forEach(function (k) { need[k] = matrix[k] * (1 + headroom); });
-
-    var colPx = [];
-    for (var j0 = 0; j0 < GRID; j0++) colPx.push(0);
-    var layout = {};
-    (bandhs[0] && bandhs[0].cells || []).forEach(function (c) { layout[c.key] = { col: c.col, span: c.span }; });
-    Object.keys(need).forEach(function (k) {
-      var L = layout[k]; if (!L || !L.span) return;
-      var per = need[k] / L.span;
-      for (var j = L.col; j < L.col + L.span && j < GRID; j++) colPx[j] = Math.max(colPx[j], per);
-    });
-
-    var total = colPx.reduce(function (a, b) { return a + b; }, 0);
-    if (opts.mode === "fixed") {
-      var want = (Number(opts.pct) || 100) / 100 * pagePx;
-      if (total > 0 && want > 0) { var kf = want / total; colPx = colPx.map(function (w) { return w * kf; }); }
-    } else if (pagePx > 0 && total > pagePx) {
-      var ka = pagePx / total; colPx = colPx.map(function (w) { return w * ka; });
+    // colPx vector for one bandh: each position's need (longest natural × (1+headroom),
+    // from `matrix` when shared) spread evenly over its spanned columns; a column
+    // takes the max need of any position covering it.
+    function vectorFor(cells, grid, matrix) {
+      var v = []; for (var j = 0; j < grid; j++) v.push(0);
+      (cells || []).forEach(function (c) {
+        var w = ((matrix ? matrix[c.key] : c.natural) || 0) * (1 + headroom);
+        var per = w / c.span;
+        for (var j = c.col; j < c.col + c.span && j < grid; j++) v[j] = Math.max(v[j], per);
+      });
+      return v;
     }
-
-    var bandhTargets = bandhs.map(function (b) {
+    function totalOf(v) { return v.reduce(function (a, b) { return a + b; }, 0); }
+    function scaleTo(v, targetTotal) {
+      var tot = totalOf(v);
+      if (tot <= 0 || targetTotal <= 0) return v;
+      var k = targetTotal / tot; return v.map(function (w) { return w * k; });
+    }
+    function targetsFrom(cells, v, grid) {
       var t = {};
-      (b.cells || []).forEach(function (c) {
-        var sum = 0;
-        for (var j = c.col; j < c.col + c.span && j < GRID; j++) sum += colPx[j];
+      (cells || []).forEach(function (c) {
+        var sum = 0; for (var j = c.col; j < c.col + c.span && j < grid; j++) sum += v[j];
         t[c.key] = sum;
       });
       return t;
-    });
+    }
 
-    return { sameShape: sameShape, colPx: colPx, bandhTargets: bandhTargets };
+    if (sameShape) {
+      var flat = []; bandhs.forEach(function (b) { (b.cells || []).forEach(function (c) { flat.push(c); }); });
+      var matrix = buildMatrix(flat);
+      // Union of positions across all bandhs (a position may be absent from bandh[0]).
+      var layout = {};
+      bandhs.forEach(function (b) { (b.cells || []).forEach(function (c) { if (!layout[c.key]) layout[c.key] = { col: c.col, span: c.span, key: c.key }; }); });
+      var colPx = vectorFor(Object.keys(layout).map(function (k) { return { key: k, col: layout[k].col, span: layout[k].span }; }), GRID, matrix);
+      var total = totalOf(colPx);
+      if (mode === "fixed") colPx = scaleTo(colPx, pctWant);
+      else if (pagePx > 0 && total > pagePx) colPx = scaleTo(colPx, pagePx);
+      var bandhTargets = bandhs.map(function (b) { return targetsFrom(b.cells, colPx, GRID); });
+      return { sameShape: true, colPx: colPx, perBandhColPx: bandhs.map(function () { return colPx; }), bandhTargets: bandhTargets };
+    }
+
+    // Different shapes: per-bandh vectors, all scaled to one shared total.
+    var vecs = bandhs.map(function (b) { return vectorFor(b.cells, Number(b.GRID) || 0, null); });
+    var totals = vecs.map(totalOf);
+    var shared = mode === "fixed" ? pctWant : Math.min(pagePx || Infinity, Math.max.apply(null, totals.concat([0])));
+    var scaled = vecs.map(function (v) { return scaleTo(v, shared); });
+    var bt = bandhs.map(function (b, i) { return targetsFrom(b.cells, scaled[i], Number(b.GRID) || 0); });
+    return { sameShape: false, colPx: null, perBandhColPx: scaled, bandhTargets: bt };
   }
 
   return {

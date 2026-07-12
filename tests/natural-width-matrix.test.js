@@ -105,4 +105,25 @@ assert.strictEqual(AshaarMatrix.cellFitBudget(500, 400, 0.5), 500, "natural>colP
 }
 console.log("computeTargetGrid OK");
 
+{
+  // Different GRID counts → not same shape; each bandh keeps its own layout but
+  // shares one total width (max of the per-bandh needs, capped at page).
+  const bandhs = [
+    { GRID: 2, cells: [ { key: "0:0:1", natural: 100, col: 0, span: 1 }, { key: "0:1:1", natural: 100, col: 1, span: 1 } ] },
+    { GRID: 3, cells: [ { key: "0:0:1", natural: 90, col: 0, span: 1 }, { key: "0:1:2", natural: 210, col: 1, span: 2 } ] },
+  ];
+  const g = AshaarMatrix.computeTargetGrid(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0 });
+  assert.strictEqual(g.sameShape, false);
+  assert.strictEqual(g.colPx, null, "no shared column vector when shapes differ");
+  // per-bandh vectors present, one per bandh, with each bandh's own grid length
+  assert.strictEqual(g.perBandhColPx.length, 2);
+  assert.strictEqual(g.perBandhColPx[0].length, 2);
+  assert.strictEqual(g.perBandhColPx[1].length, 3);
+  // each bandh's targets present, summing to the same total
+  const t0 = Object.values(g.bandhTargets[0]).reduce((a, b) => a + b, 0);
+  const t1 = Object.values(g.bandhTargets[1]).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(t0 - t1) < 1, "different-shape bandhs share one total width");
+}
+console.log("computeTargetGrid different-shape OK");
+
 console.log("natural-width-matrix.test.js OK");
