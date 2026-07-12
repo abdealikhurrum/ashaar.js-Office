@@ -631,7 +631,6 @@
     var profile = getProfile(name);
     var CELL_MARGIN_PT = 5.76;
     var strength = AshaarProfiles.normalizeStrength(profile.justify.strength);
-    var elongShare = AshaarWord.strengthToElongationShare(strength); // φ ∈ [0,1]
     var fillMode = AshaarProfiles.normalizeFillMode(profile.justify.fillMode);
     var doKashida = profile.justify.mode === "kashida";
     var fallbackName = profile.font || "Times New Roman";
@@ -1563,7 +1562,6 @@
 
   async function justifySelectionInner() {
     var opts = options();
-    var elongShare = AshaarWord.strengthToElongationShare(opts.tatweelCount); // φ ∈ [0,1]
     var fontId = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
     var mechanism = AshaarFonts.mechanismOf(fontId);
 
