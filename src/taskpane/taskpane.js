@@ -490,6 +490,7 @@
   var _reflectBusy = false;          // suppress reflection while our own justify runs
   var _activeOvKey = null;           // override key of the content cell at the cursor (or null)
   var _activeDecorKey = null;        // slot-decor key of the spacing cell at the cursor (or null)
+  var _activeSlot = null;            // slot-position (e.g. "A#1") of the spacing cell at the cursor
 
   // Populate the pane's block-level controls from a parsed tag payload.
   function syncBlockControls(payload) {
@@ -564,6 +565,7 @@
       editor.hidden = true;
       _activeOvKey = null;
       _activeDecorKey = AshaarOverrides.overrideKey(tIdx, entry.slot);
+      _activeSlot = entry.slot;
       populateDecorEditor(entry.slot, (payload.slotDecor || {})[_activeDecorKey]);
       if (decorEl) decorEl.hidden = false;
     }
@@ -650,6 +652,31 @@
     if (clear) populateDecorEditor(document.getElementById("slot-decor-label").textContent, null);
     if (qname && loadProfileStore()[qname]) await applyProfileToQaseeda(qname);
     else setMessage("Gap decoration saved — apply a qaseeda to this block to render it.");
+  }
+
+  // Save the current decor editor values as the qaseeda profile default for this
+  // slot-position (e.g. every bandh's A#1), then re-apply across all blocks.
+  async function saveSlotDecorToProfile() {
+    if (!_activeSlot || typeof Word === "undefined") return;
+    var qname = "";
+    try {
+      await Word.run(async function (context) {
+        var cc = context.document.getSelection().parentContentControlOrNullObject;
+        cc.load("title,tag");
+        await context.sync();
+        if (!cc.isNullObject && cc.title === "Ashaar Poem") {
+          qname = (AshaarWord.parseContentControlTag(cc.tag) || {}).qaseeda || "";
+        }
+      });
+    } catch (e) { /* ignore */ }
+    if (!qname || !loadProfileStore()[qname]) { setMessage("Assign this block to a saved qaseeda first to set a profile-wide default."); return; }
+    var profile = getProfile(qname);
+    profile.spacingDecor = profile.spacingDecor || {};
+    var d = readDecorEditor();
+    if (d.symbol || d.fill || d.color) profile.spacingDecor[_activeSlot] = d;
+    else delete profile.spacingDecor[_activeSlot];
+    await putProfile(profile);
+    await applyProfileToQaseeda(qname);
   }
 
   // Debounced entry point for the DocumentSelectionChanged event.
@@ -2670,6 +2697,8 @@
     });
     var decorClear = document.getElementById("slot-decor-clear");
     if (decorClear) decorClear.addEventListener("click", function () { applySlotDecor(true); });
+    var decorSaveProfile = document.getElementById("slot-decor-save-profile");
+    if (decorSaveProfile) decorSaveProfile.addEventListener("click", saveSlotDecorToProfile);
     document.getElementById("re-render").addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
