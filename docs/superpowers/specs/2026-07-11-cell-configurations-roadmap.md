@@ -17,9 +17,10 @@
 
 - Stable **per-cell id**; per-cell **overrides** (style variance **and** justification variance) stored on the Ashaar block, keyed by id.
 - The pane **reflects the cell at the cursor** and edits its overrides — this IS the parked "pane reflects the active block's settings" feature.
-- Covers the fourth capability: **per-cell justification override** (the §4 under-resolved-cell variance) plus per-cell style overrides.
-- **Depends on SP1's** role model and on the parked pane-reflects-active-block UI.
-- Spec: `docs/superpowers/specs/YYYY-MM-DD-per-cell-overrides-design.md` *(future session)*.
+- Covers the fourth capability: **per-cell justification override** (the §4 under-resolved-cell variance). Per-cell *style* overrides were dropped from SP2's MVP → backlog.
+- MVP (approved): per-cell justify override (**strength / target width / cap lift**, keyed `"<tableIndex>:<label>"`, one cell) **+ full active-block sync** (pane reflects the block at the cursor). This absorbs the parked pane-reflects-active-block UI.
+- **Depends on SP1's** label + `cells` map (the per-cell identity).
+- Spec: `docs/superpowers/specs/2026-07-11-per-cell-overrides-design.md` ✅ written *(brainstormed; ready for planning)*.
 
 ## Backlog — future features (keep on the board)
 
