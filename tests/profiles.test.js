@@ -133,4 +133,11 @@ assert.equal(normalizeFillMode(undefined), "natural-fit");
   assert.equal(n.justify.fillMode, "cell-fit", "stored fillMode preserved");
 }
 
+// ── spacingDecor bucket ──────────────────────────────────────────────────────
+{
+  assert.deepStrictEqual(defaultProfile("Q").spacingDecor, {}, "defaults to empty");
+  const n = normalizeProfile({ name: "Q", spacingDecor: { "A#1": { symbol: "؎" } } });
+  assert.deepStrictEqual(n.spacingDecor, { "A#1": { symbol: "؎" } }, "carried through merge");
+}
+
 console.log("profiles tests passed");

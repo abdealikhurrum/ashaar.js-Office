@@ -32,5 +32,19 @@
     };
   }
 
-  return { overrideKey: overrideKey, resolveCellOverride: resolveCellOverride };
+  // Merge a per-slot decoration override onto the profile default. Per field: an
+  // override key present wins (empty string = explicit none); else inherit the
+  // profile; else "". Fields: symbol / fill / color.
+  function resolveSlotDecor(profileDecor, override) {
+    profileDecor = profileDecor || {};
+    override = override || {};
+    function pick(k) { return (k in override) ? (override[k] || "") : (profileDecor[k] || ""); }
+    return { symbol: pick("symbol"), fill: pick("fill"), color: pick("color") };
+  }
+
+  return {
+    overrideKey: overrideKey,
+    resolveCellOverride: resolveCellOverride,
+    resolveSlotDecor: resolveSlotDecor
+  };
 }));

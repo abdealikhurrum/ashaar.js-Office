@@ -54,4 +54,32 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
   assert.strictEqual(AshaarWord.setTagOverride("not-ashaar", "0:A1", { strength: 9 }), "not-ashaar");
 }
 
+// ── resolveSlotDecor: override wins per field; "" = explicit none; else inherit
+{
+  const prof = { symbol: "؎", fill: "f5f0e0", color: "a7352a" };
+  assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(prof, null),
+    { symbol: "؎", fill: "f5f0e0", color: "a7352a" }, "no override → profile");
+  assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(prof, { symbol: "*" }),
+    { symbol: "*", fill: "f5f0e0", color: "a7352a" }, "symbol overridden");
+  assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(prof, { symbol: "" }),
+    { symbol: "", fill: "f5f0e0", color: "a7352a" }, "empty string suppresses");
+  assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(null, null),
+    { symbol: "", fill: "", color: "" }, "nothing → all none");
+}
+
+// ── setTagSlotDecor: add / remove, round-trip, cells/overrides intact ────────
+{
+  const t0 = AshaarWord.contentControlTag("poem", { qaseeda: "Q" }, [[["c", "g", "c"]]]);
+  const t1 = AshaarWord.setTagSlotDecor(t0, "0:A#1", { symbol: "؎", fill: "eeeeee" });
+  const p1 = AshaarWord.parseContentControlTag(t1);
+  assert.deepStrictEqual(p1.slotDecor, { "0:A#1": { symbol: "؎", fill: "eeeeee" } });
+  assert.deepStrictEqual(p1.cells, [[["c", "g", "c"]]], "cells intact");
+  assert.equal(p1.qaseeda, "Q");
+  const t2 = AshaarWord.setTagSlotDecor(t1, "0:A#1", null);
+  assert.deepStrictEqual(AshaarWord.parseContentControlTag(t2).slotDecor, {}, "removed");
+  const t3 = AshaarWord.setTagSlotDecor(t1, "0:A#1", { symbol: "", fill: "", color: "" });
+  assert.deepStrictEqual(AshaarWord.parseContentControlTag(t3).slotDecor, {}, "all-empty removes");
+  assert.strictEqual(AshaarWord.setTagSlotDecor("nope", "0:A#1", { symbol: "x" }), "nope");
+}
+
 console.log("cell-overrides.test.js OK");

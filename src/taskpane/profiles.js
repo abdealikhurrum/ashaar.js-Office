@@ -26,6 +26,7 @@
       misraSymbol: "",
       symbolColor: "",
       debugColors: { tatweel: "", space: "" },
+      spacingDecor: {},                            // { "<slot>": { symbol, fill, color } }
       font: "",
       fontCorrections: {},                         // { <fontName>: factor }
       derived: { colWidthVector: null, calibrationRecipe: null },
@@ -43,7 +44,7 @@
     var p = partial || {};
     var keys = ["name", "gap", "misraSymbol", "symbolColor", "font"];
     keys.forEach(function (k) { out[k] = (k in p) ? p[k] : b[k]; });
-    var nested = ["width", "justify", "debugColors", "fontCorrections", "derived"];
+    var nested = ["width", "justify", "debugColors", "fontCorrections", "derived", "spacingDecor"];
     nested.forEach(function (k) {
       var bo = isObj(b[k]) ? b[k] : {};
       var po = isObj(p[k]) ? p[k] : {};

@@ -926,6 +926,7 @@
       if (typeof payload.qaseeda !== "string") payload.qaseeda = "";
       payload.cells = payload.cells || null;
       payload.overrides = (payload.overrides && typeof payload.overrides === "object") ? payload.overrides : {};
+      payload.slotDecor = (payload.slotDecor && typeof payload.slotDecor === "object") ? payload.slotDecor : {};
       return payload;
     } catch (e) {
       return null;
@@ -959,6 +960,23 @@
       delete ov[key];
     }
     payload.overrides = ov;
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // Return a copy of an "ashaar:" tag with one per-slot decoration set or removed.
+  // A null/all-empty decor deletes the key. Non-ashaar tags returned unchanged.
+  function setTagSlotDecor(tag, key, decor) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    var sd = payload.slotDecor && typeof payload.slotDecor === "object" ? payload.slotDecor : {};
+    var clean = {};
+    if (decor && typeof decor === "object") {
+      if (decor.symbol) clean.symbol = decor.symbol;
+      if (decor.fill) clean.fill = decor.fill;
+      if (decor.color) clean.color = decor.color;
+    }
+    if (clean.symbol || clean.fill || clean.color) sd[key] = clean; else delete sd[key];
+    payload.slotDecor = sd;
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
@@ -1561,6 +1579,7 @@
     parseContentControlTag: parseContentControlTag,
     setTagQaseeda: setTagQaseeda,
     setTagOverride: setTagOverride,
+    setTagSlotDecor: setTagSlotDecor,
     justifyPlainTextBlock: justifyPlainTextBlock,
     coalesceRuns: coalesceRuns,
     distributeMicroSpaces: distributeMicroSpaces,
