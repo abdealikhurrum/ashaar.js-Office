@@ -521,12 +521,83 @@
     } catch (e) { /* selection transient — ignore */ }
   }
 
-  // Cell-level reflection is filled in by Task 4; a no-op stub keeps the block
-  // sync self-contained until then.
+  // Show/populate the per-cell override editor for the content cell at the
+  // cursor. Resolves (tableIndex, label) via the SP1 cells map. Hides the editor
+  // for gaps, non-content, or maps-absent blocks.
   async function reflectActiveCell(context, sel, cc, isBlock, payload) {
     var editor = document.getElementById("cell-override");
-    if (editor) editor.hidden = true;
     _activeOvKey = null;
+    if (!editor) return;
+    if (!isBlock || !payload || !payload.cells) { editor.hidden = true; return; }
+
+    var tcell = sel.parentTableCellOrNullObject;
+    tcell.load("rowIndex,cellIndex,isNullObject");
+    var tbls = cc.getRange().tables;
+    tbls.load("items");
+    await context.sync();
+    if (tcell.isNullObject) { editor.hidden = true; return; }
+
+    // §6a: which block table contains the selection? (No stable table id, so
+    // match by range intersection.)
+    var selRange = sel.getRange();
+    var inters = tbls.items.map(function (tbl) {
+      var r = tbl.getRange().intersectWithOrNullObject(selRange); r.load("isNullObject"); return r;
+    });
+    await context.sync();
+    var tIdx = -1;
+    for (var k = 0; k < inters.length; k++) { if (!inters[k].isNullObject) { tIdx = k; break; } }
+    if (tIdx < 0 || !payload.cells[tIdx]) { editor.hidden = true; return; }
+
+    var map = AshaarCellMap.buildBandhCellMap(payload.cells[tIdx]);
+    var inRow = map.filter(function (e) { return e.row === tcell.rowIndex; });
+    var entry = inRow[tcell.cellIndex];
+    if (!entry || entry.kind !== "content") { editor.hidden = true; return; }
+
+    _activeOvKey = AshaarOverrides.overrideKey(tIdx, entry.label);
+    populateCellEditor(entry.label, (payload.overrides || {})[_activeOvKey]);
+    editor.hidden = false;
+  }
+
+  function populateCellEditor(label, ov) {
+    ov = ov || {};
+    var lbl = document.getElementById("cell-override-label");
+    if (lbl) lbl.textContent = label || "";
+    document.getElementById("cell-ov-strength").value = (ov.strength != null) ? ov.strength : "";
+    document.getElementById("cell-ov-width").value = (ov.widthPt != null) ? ov.widthPt : "";
+    document.getElementById("cell-ov-cap").value = (ov.capEm != null) ? ov.capEm : "";
+  }
+
+  function readCellEditor() {
+    function num(id) { var v = document.getElementById(id).value; return v === "" ? null : Number(v); }
+    var ov = {};
+    var s = num("cell-ov-strength"); if (s != null) ov.strength = Math.max(1, Math.min(10, s));
+    var w = num("cell-ov-width"); if (w != null) ov.widthPt = w;
+    var c = num("cell-ov-cap"); if (c != null) ov.capEm = c;
+    return ov;
+  }
+
+  // Write the editor state to the active cell's override on the block tag, then
+  // re-justify the whole block (via the existing path) for instant feedback.
+  async function applyCellOverride(clear) {
+    if (!_activeOvKey || typeof Word === "undefined") return;
+    var ov = clear ? null : readCellEditor();
+    _reflectBusy = true;
+    try {
+      await Word.run(async function (context) {
+        var cc = context.document.getSelection().parentContentControlOrNullObject;
+        cc.load("title,tag");
+        await context.sync();
+        if (cc.isNullObject || cc.title !== "Ashaar Poem") return;
+        cc.tag = AshaarWord.setTagOverride(cc.tag, _activeOvKey, ov);
+        await context.sync();
+        _lastBlockTag = cc.tag;
+      });
+    } catch (e) { /* ignore */ } finally { _reflectBusy = false; }
+    if (clear) {
+      var lbl = document.getElementById("cell-override-label");
+      populateCellEditor(lbl ? lbl.textContent : "", null);
+    }
+    await justifySelection(); // instant feedback via the existing path
   }
 
   // Debounced entry point for the DocumentSelectionChanged event.
@@ -2513,6 +2584,12 @@
         Office.context.document.addHandlerAsync && typeof Word !== "undefined") {
       Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChanged);
     }
+    ["cell-ov-strength", "cell-ov-width", "cell-ov-cap"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener("change", function () { applyCellOverride(false); });
+    });
+    var ovClear = document.getElementById("cell-ov-clear");
+    if (ovClear) ovClear.addEventListener("click", function () { applyCellOverride(true); });
     document.getElementById("re-render").addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);

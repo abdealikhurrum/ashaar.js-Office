@@ -689,3 +689,8 @@ input[type="range"][disabled] { opacity: 0.45; }
 .cell-map-row { display: flex; gap: 4px; margin: 2px 0; direction: rtl; }
 .cell-map-cell { padding: 1px 6px; border: 1px solid #888; border-radius: 3px; }
 .cell-map-gap { padding: 1px 6px; color: #999; }
+
+.cell-override { margin-top: 8px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; }
+.cell-override label { display: block; margin: 4px 0; }
+.cell-override input { width: 90px; }
+.cell-override-head { font-weight: 600; margin-bottom: 4px; }
