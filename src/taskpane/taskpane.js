@@ -1013,42 +1013,37 @@
                 var cPhi = AshaarWord.strengthToElongationShare(cRes.strength);
                 var cCapEm = cRes.capEm != null ? cRes.capEm : undefined;
                 var cMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(cRes.strength) };
-                if (fillMode === "cell-fit") {
-                  // Cell-fit: fill to the φ budget; Word's distribute jc spreads the
-                  // residual to the edge. Kashida elongates; Spacing spaces only.
-                  var cBudgetCf = Math.min(colPx, AshaarMatrix.cellFitBudget(cNatural, colPx, cPhi));
-                  var cTextCf = doKashida
-                    ? AshaarJustify.justifyRunsConcentrated(runOne, cBudgetCf, cMax).runs[0].text
-                    : c.base;
-                  c.ooxml = AshaarWord.misraDistributeXml([{ text: cTextCf, csName: fname, sizePt: csize }], csize);
-                  justified = null;
+                // Fill target by mode (a per-cell width override wins):
+                //   cell-fit    → toward the CELL EDGE:    natural + φ(box − natural)
+                //   natural-fit → toward the HARMONY WIDTH: Wpos   + φ(reach − Wpos)
+                // Both fill the same way — tatweels (kashida) then REAL micro-spaces —
+                // so the fill is visible and reliable. (Word's `distribute` jc silently
+                // no-ops on a single line, so we don't use it here.) Clamp ≤ box.
+                var cTarget;
+                if (cRes.widthPt != null) {
+                  cTarget = cRes.widthPt * 96 / 72;
+                } else if (fillMode === "cell-fit") {
+                  cTarget = AshaarMatrix.cellFitBudget(cNatural, colPx, cPhi);
                 } else {
-                  // Natural-fit: fill to the position's harmony width (or per-cell
-                  // override), CLAMPED to the box (no-wrap); micro-spaces backfill.
                   var cReach = Math.max(cNatural, colPx - 0.28 * csize * 96 / 72);
                   var cWpos = qMatrix[c.matKey] || cNatural;
-                  var cTarget = (cRes.widthPt != null) ? cRes.widthPt * 96 / 72
-                    : AshaarMatrix.naturalFitTarget(cWpos, cReach, cPhi);
-                  cTarget = Math.min(cTarget, colPx); // no-wrap invariant
-                  var cElong, cAchieved;
-                  if (doKashida) {
-                    var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cTarget, cMax);
-                    cElong = cConc.runs[0].text; cAchieved = cConc.achievedPx;
-                  } else {
-                    cElong = c.base; cAchieved = cNatural; // spacing: no tatweels
-                  }
-                  var cGaps = cElong.split(" ").length - 1;
-                  canvasCtx.font = csize + "pt \"" + fname + "\"";
-                  var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-                  var cN = AshaarResidual.capMicroSpaces(cTarget - cAchieved, cGaps, cSpacePx, csize * 96 / 72, cCapEm);
-                  justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
+                  cTarget = AshaarMatrix.naturalFitTarget(cWpos, cReach, cPhi);
                 }
+                cTarget = Math.min(cTarget, colPx); // no-wrap invariant
+                var cElong, cAchieved;
+                if (doKashida) {
+                  var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cTarget, cMax);
+                  cElong = cConc.runs[0].text; cAchieved = cConc.achievedPx;
+                } else {
+                  cElong = c.base; cAchieved = cNatural; // spacing: no tatweels
+                }
+                var cGaps = cElong.split(" ").length - 1;
+                canvasCtx.font = csize + "pt \"" + fname + "\"";
+                var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+                var cN = AshaarResidual.capMicroSpaces(cTarget - cAchieved, cGaps, cSpacePx, csize * 96 / 72, cCapEm);
+                justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
               }
-              if (c.ooxml) {
-                c.cell.body.clear();
-                c.cell.body.insertOoxml(AshaarWord.wrapOoxml(c.ooxml), Word.InsertLocation.replace);
-                changed++;
-              } else if (justified != null && justified !== c.current) {
+              if (justified != null && justified !== c.current) {
                 c.cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
                 changed++;
               }
