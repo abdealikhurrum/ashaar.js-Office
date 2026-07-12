@@ -1645,6 +1645,24 @@
       '<pkg:package ' + pkgns + '>' + rels + docPart + '</pkg:package>';
   }
 
+  // Wrap body content in a block-level Structured Document Tag (content control)
+  // carrying the title + tag, then package it. insertOoxml on this creates a
+  // Word content control that spans the ENTIRE content (all table rows) — unlike
+  // insertContentControl() on an insertOoxml-returned range, which on Mac Word
+  // wraps only the first block element (the row-1-only bug). w:id is a stable
+  // hash of the tag so re-applied blocks don't collide.
+  function wrapOoxmlControl(bodyContent, title, tag) {
+    var s = String(tag || title || ""), idNum = 0;
+    for (var i = 0; i < s.length; i++) idNum = ((idNum << 5) - idNum + s.charCodeAt(i)) | 0;
+    idNum = (Math.abs(idNum) % 2000000000) || 1;
+    var sdt = "<w:sdt><w:sdtPr>" +
+      '<w:alias w:val="' + escapeXml(title || "") + '"/>' +
+      '<w:tag w:val="' + escapeXml(tag || "") + '"/>' +
+      '<w:id w:val="' + idNum + '"/>' +
+      "</w:sdtPr><w:sdtContent>" + (bodyContent || "") + "</w:sdtContent></w:sdt>";
+    return wrapOoxml(sdt);
+  }
+
   return {
     fontFamilyStyle: fontFamilyStyle,
     renderForWord: renderForWord,
@@ -1681,6 +1699,7 @@
     runsToMisraXml: runsToMisraXml,
     misraDistributeXml: misraDistributeXml,
     wrapOoxml: wrapOoxml,
+    wrapOoxmlControl: wrapOoxmlControl,
     misraSpans: misraSpans,
     generateBareGrid12Ooxml: generateBareGrid12Ooxml,
     templateToOoxml: templateToOoxml,

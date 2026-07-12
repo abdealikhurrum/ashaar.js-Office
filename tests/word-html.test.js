@@ -814,4 +814,23 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   console.log("stanzaCellGeometry cross-check OK");
 }
 
+// ── wrapOoxmlControl: block-level SDT wraps the whole body ───────────────────
+{
+  const body = AshaarWord.renderForWordOoxml("الف \\ ب", { layoutMode: "balanced" }, require("../src/vendor/ashaar"), 9360);
+  const tag = AshaarWord.contentControlTag("الف \\ ب", { qaseeda: "Karbala" }, null);
+  const pkg = AshaarWord.wrapOoxmlControl(body, "Ashaar Poem", tag);
+  assert.match(pkg, /<w:sdt>/, "emits an SDT");
+  assert.match(pkg, /<w:alias w:val="Ashaar Poem"\/>/, "alias = title");
+  assert.match(pkg, /<w:tag w:val="ashaar:/, "carries the ashaar tag");
+  assert.match(pkg, /<w:id w:val="\d+"\/>/, "has a stable numeric id");
+  // the table lives INSIDE sdtContent (so the control spans all rows)
+  const inside = pkg.slice(pkg.indexOf("<w:sdtContent>"), pkg.indexOf("</w:sdtContent>"));
+  assert.match(inside, /<w:tbl>/, "the table is inside the control");
+  // same tag → same id (idempotent re-apply); different tag → different id
+  const id1 = pkg.match(/<w:id w:val="(\d+)"/)[1];
+  const id2 = AshaarWord.wrapOoxmlControl(body, "Ashaar Poem", tag).match(/<w:id w:val="(\d+)"/)[1];
+  assert.equal(id1, id2, "same tag → stable id");
+}
+console.log("wrapOoxmlControl OK");
+
 console.log("word-html tests passed");

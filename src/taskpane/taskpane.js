@@ -929,16 +929,14 @@
           if (blk.repSize) renderOpts.fontSizePt = blk.repSize;
           var ooxmlBody = AshaarWord.renderForWordOoxml(blk.source, renderOpts, Ashaar, targetTwips);
           if (!ooxmlBody) continue;
-          var ooxml = AshaarWord.wrapOoxml(ooxmlBody);
-          // insertOoxml("Replace") on a whole "Ashaar Poem" control throws; insert
-          // the rebuilt poem into the body just after it, wrap in a fresh control,
-          // then delete the old (the proven Re-render pattern).
+          // Embed the content control IN the OOXML (block-level w:sdt spanning all
+          // tables) so insertOoxml creates a control over the WHOLE poem. Wrapping
+          // the insertOoxml-returned range with insertContentControl() instead only
+          // caught row 1 on Mac Word. insertOoxml("Replace") on a whole control
+          // throws, so insert just after the old control, then delete the old.
+          var ooxml = AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", blk.oldTag);
           var afterRange = blk.cc.getRange("After");
-          var insertedRange = afterRange.insertOoxml(ooxml, Word.InsertLocation.start);
-          var newCC = insertedRange.insertContentControl();
-          newCC.title = "Ashaar Poem";
-          newCC.tag = blk.oldTag;
-          newCC.appearance = "BoundingBox";
+          afterRange.insertOoxml(ooxml, Word.InsertLocation.start);
           blk.cc.delete(false);
           await context.sync();
         }
@@ -950,6 +948,8 @@
       await Word.run(async function (context) {
         var blocks = await gatherQaseedaBlocks(context, name);
         if (!blocks.length) return;
+        // Ensure the rebuilt (SDT-created) controls show the block outline.
+        blocks.forEach(function (cc) { cc.appearance = "BoundingBox"; });
         var cap = await captureQaseedaTables(context, blocks, profile);
         var canvasCtx = cap.canvasCtx, repName = cap.repName, repSize = cap.repSize, qMatrix = cap.qMatrix;
         if (!canvasCtx) { summary = "Canvas unavailable; cannot measure."; return; }
