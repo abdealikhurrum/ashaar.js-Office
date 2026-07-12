@@ -1060,16 +1060,23 @@
           cap.blockInfos.forEach(function (blk) {
             blk.tableInfos.forEach(function (info) {
               info.cells.forEach(function (c) {
-                if (tatColor) { var st = c.cell.body.search("ـ"); st.load("items"); hits.push({ s: st, color: tatColor }); }
+                if (tatColor) { var st = c.cell.body.search("ـ"); st.load("items"); hits.push({ s: st, color: tatColor, hl: false }); }
                 if (spcColor) {
-                  var sh = c.cell.body.search(" "); sh.load("items"); hits.push({ s: sh, color: spcColor });
-                  var sn = c.cell.body.search(" "); sn.load("items"); hits.push({ s: sn, color: spcColor });
+                  var sh = c.cell.body.search(" "); sh.load("items"); hits.push({ s: sh, color: spcColor, hl: true });
+                  var sn = c.cell.body.search(" "); sn.load("items"); hits.push({ s: sn, color: spcColor, hl: true });
                 }
               });
             });
           });
           await context.sync();
-          hits.forEach(function (h) { h.s.items.forEach(function (r) { r.font.color = h.color; coloured++; }); });
+          // Spaces have no ink, so tint them with the HIGHLIGHT (background); tatweels
+          // are ink, so use the font color.
+          hits.forEach(function (h) {
+            h.s.items.forEach(function (r) {
+              if (h.hl) r.font.highlightColor = h.color; else r.font.color = h.color;
+              coloured++;
+            });
+          });
           await context.sync();
         }
       });
