@@ -22,7 +22,7 @@
 - **Depends on SP1's** label + `cells` map (the per-cell identity).
 - Spec: `docs/superpowers/specs/2026-07-11-per-cell-overrides-design.md` ✅ written *(brainstormed; ready for planning)*.
 
-## Sub-project 3 — Spacing-cell decorations (symbols + fill color)  *(spec written; ready for planning)*
+## Sub-project 3 — Spacing-cell decorations (symbols + fill color)  *(implemented; Tasks 1–3 done, Task 4 manual-verify pending)*
 
 - Put a **symbol** (hemistich / decorative glyph) and a **fill color** (+ symbol text color) into gap cells. Config = **both**: profile default by slot-position + per-slot override on the block tag; reuses SP2's editor/tag-writer/resolve pattern. Anchored on SP1's spacing `slot`.
 - Spec: `docs/superpowers/specs/2026-07-11-spacing-cell-decor-design.md` ✅.
