@@ -59,4 +59,50 @@ assert.strictEqual(AshaarMatrix.cellFitBudget(200, 400, 1), 400, "φ=1 → elong
 assert.strictEqual(AshaarMatrix.cellFitBudget(200, 400, 0.5), 300);
 assert.strictEqual(AshaarMatrix.cellFitBudget(500, 400, 0.5), 500, "natural>colPx → no negative budget");
 
+// ── computeTargetGrid: harmony + auto-fit + fixed-% ──────────────────────────
+{
+  // Two same-shape bandhs, GRID=6: cols 0..5. Position 0:0:3 and 0:3:3.
+  const bandhs = [
+    { GRID: 6, cells: [
+      { key: "0:0:3", natural: 180, col: 0, span: 3 },
+      { key: "0:3:3", natural: 120, col: 3, span: 3 },
+    ]},
+    { GRID: 6, cells: [
+      { key: "0:0:3", natural: 150, col: 0, span: 3 }, // shorter → matrix keeps 180
+      { key: "0:3:3", natural: 140, col: 3, span: 3 }, // longer  → matrix 140
+    ]},
+  ];
+  // auto-fit: each position = longest natural × (1+headroom); columns split evenly within a span.
+  const g = AshaarMatrix.computeTargetGrid(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0 });
+  assert.strictEqual(g.sameShape, true);
+  // position 0:0:3 longest=180 → 60/col; 0:3:3 longest=140 → ~46.67/col
+  assert.strictEqual(Math.round(g.colPx[0]), 60);
+  assert.strictEqual(Math.round(g.colPx[3]), 47);
+  // both bandhs get the SAME colPx vector (harmony)
+  assert.strictEqual(Math.round(g.bandhTargets[0]["0:0:3"]), 180);
+  assert.strictEqual(Math.round(g.bandhTargets[1]["0:0:3"]), 180, "shorter cell targets the shared 180");
+}
+{
+  // fixed-% scales the whole vector so the total = pct × pagePx, proportions from the matrix.
+  const bandhs = [{ GRID: 2, cells: [
+    { key: "0:0:1", natural: 100, col: 0, span: 1 },
+    { key: "0:1:1", natural: 300, col: 1, span: 1 },
+  ]}];
+  const g = AshaarMatrix.computeTargetGrid(bandhs, { mode: "fixed", pct: 50, pagePx: 1000 });
+  // total target = 500; proportions 100:300 → 125 and 375
+  assert.strictEqual(Math.round(g.colPx[0]), 125);
+  assert.strictEqual(Math.round(g.colPx[1]), 375);
+}
+{
+  // auto-fit total capped at pagePx.
+  const bandhs = [{ GRID: 2, cells: [
+    { key: "0:0:1", natural: 800, col: 0, span: 1 },
+    { key: "0:1:1", natural: 800, col: 1, span: 1 },
+  ]}];
+  const g = AshaarMatrix.computeTargetGrid(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0.2 });
+  const total = g.colPx.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(total - 1000) < 1, "capped at page width, got " + total);
+}
+console.log("computeTargetGrid OK");
+
 console.log("natural-width-matrix.test.js OK");

@@ -58,11 +58,69 @@
     return natural + (Number(phi) || 0) * Math.max(0, (Number(colPx) || 0) - natural);
   }
 
+  // Compute the shared per-grid-column width vector (px) for a set of same-shape
+  // bandhs plus each bandh's per-position fill target.
+  //   auto-fit: each position width = longest natural × (1 + headroom); total capped at pagePx.
+  //   fixed:    scale so total = (pct/100) × pagePx, proportions from the matrix.
+  // colPx[j] is the width of grid column j; a position's target = sum of its spanned colPx.
+  function computeTargetGrid(bandhs, opts) {
+    bandhs = bandhs || [];
+    opts = opts || {};
+    var pagePx = Number(opts.pagePx) || 0;
+    var headroom = Number(opts.headroom) || 0;
+
+    // sameShape: every bandh shares one GRID.
+    var GRID = bandhs.length ? Number(bandhs[0].GRID) || 0 : 0;
+    var sameShape = GRID > 0 && bandhs.every(function (b) { return Number(b.GRID) === GRID; });
+
+    // Cross-bandh matrix: longest natural per position (px).
+    var flat = [];
+    bandhs.forEach(function (b) { (b.cells || []).forEach(function (c) { flat.push(c); }); });
+    var matrix = buildMatrix(flat);
+
+    // Per-position width need = longest natural × (1 + headroom). Spread a
+    // position's need evenly across the grid columns it spans; a column's width
+    // is the max need imposed by any position covering it.
+    var need = {};
+    Object.keys(matrix).forEach(function (k) { need[k] = matrix[k] * (1 + headroom); });
+
+    var colPx = [];
+    for (var j0 = 0; j0 < GRID; j0++) colPx.push(0);
+    var layout = {};
+    (bandhs[0] && bandhs[0].cells || []).forEach(function (c) { layout[c.key] = { col: c.col, span: c.span }; });
+    Object.keys(need).forEach(function (k) {
+      var L = layout[k]; if (!L || !L.span) return;
+      var per = need[k] / L.span;
+      for (var j = L.col; j < L.col + L.span && j < GRID; j++) colPx[j] = Math.max(colPx[j], per);
+    });
+
+    var total = colPx.reduce(function (a, b) { return a + b; }, 0);
+    if (opts.mode === "fixed") {
+      var want = (Number(opts.pct) || 100) / 100 * pagePx;
+      if (total > 0 && want > 0) { var kf = want / total; colPx = colPx.map(function (w) { return w * kf; }); }
+    } else if (pagePx > 0 && total > pagePx) {
+      var ka = pagePx / total; colPx = colPx.map(function (w) { return w * ka; });
+    }
+
+    var bandhTargets = bandhs.map(function (b) {
+      var t = {};
+      (b.cells || []).forEach(function (c) {
+        var sum = 0;
+        for (var j = c.col; j < c.col + c.span && j < GRID; j++) sum += colPx[j];
+        t[c.key] = sum;
+      });
+      return t;
+    });
+
+    return { sameShape: sameShape, colPx: colPx, bandhTargets: bandhTargets };
+  }
+
   return {
     positionKey: positionKey,
     isContentCell: isContentCell,
     buildMatrix: buildMatrix,
     naturalFitTarget: naturalFitTarget,
     cellFitBudget: cellFitBudget,
+    computeTargetGrid: computeTargetGrid,
   };
 }));
