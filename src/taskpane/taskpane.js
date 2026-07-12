@@ -529,14 +529,22 @@
         await context.sync();
         var allTables = [];
         var allTablePatterns = [];
+        var allTableOverrides = [];
+        var allTableBlockIdx = [];
         var blockCells = blocks.map(function (cc) {
           var p = AshaarWord.parseContentControlTag(cc.tag);
           return (p && p.cells) || null;
+        });
+        var blockOverrides = blocks.map(function (cc) {
+          var p = AshaarWord.parseContentControlTag(cc.tag);
+          return (p && p.overrides) || {};
         });
         blockTables.forEach(function (t, bi) {
           t.items.forEach(function (tbl, j) {
             allTables.push(tbl);
             allTablePatterns.push(blockCells[bi] ? blockCells[bi][j] : null);
+            allTableOverrides.push(blockOverrides[bi] || {});
+            allTableBlockIdx.push(j);
           });
         });
         if (!allTables.length) { summary = "Qaseeda “" + name + "” has no tables to size."; return; }
@@ -580,12 +588,14 @@
                 measure: base.replace(/\s+/g, " ").trim(),
                 matKey: mapped ? (mapped.label || mapped.slot) : AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
                 kind: mapped ? mapped.kind : null,
+                ovKey: (mapped && mapped.kind === "content" && mapped.label)
+                  ? AshaarOverrides.overrideKey(allTableBlockIdx[ai], mapped.label) : null,
                 fontName: (f && f.name) || "",
                 fontSize: (f && f.size) || 0
               });
             });
           });
-          return { tbl: tbl, cells: cells };
+          return { tbl: tbl, cells: cells, overrides: allTableOverrides[ai] };
         });
 
         var pl = section.pageLayout;
@@ -710,26 +720,32 @@
                 measure: function (s) { canvasCtx.font = csize + "pt \"" + fname + "\""; return canvasCtx.measureText(s).width; }
               }];
               var cNatural = c.natPx != null ? c.natPx : canvasCtx.measureText(c.base).width;
-              var cMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(strength) };
+              // Per-cell override (SP2), merged onto the profile's justify defaults.
+              var cOv = c.ovKey ? info.overrides[c.ovKey] : null;
+              var cRes = AshaarOverrides.resolveCellOverride({ strength: strength, fillMode: fillMode }, cOv);
+              var cPhi = AshaarWord.strengthToElongationShare(cRes.strength);
+              var cCapEm = cRes.capEm != null ? cRes.capEm : undefined;
+              var cMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(cRes.strength) };
               if (fillMode === "cell-fit") {
                 // Cell-fit: concentrate to the φ budget (no buffer); the distribute
                 // OOXML paragraph fills the residual to the true edge.
-                var cBudgetCf = AshaarMatrix.cellFitBudget(cNatural, colPx, elongShare);
+                var cBudgetCf = AshaarMatrix.cellFitBudget(cNatural, colPx, cPhi);
                 var cConcCf = AshaarJustify.justifyRunsConcentrated(runOne, cBudgetCf, cMax);
                 c.ooxml = AshaarWord.misraDistributeXml([{ text: cConcCf.runs[0].text, csName: fname, sizePt: csize }], csize);
                 justified = null; // written via OOXML below
               } else {
-                // Natural-fit: fill to this position's matrix width; capped
-                // micro-spaces backfill whatever the tatweels didn't cover.
+                // Natural-fit: fill to this position's matrix width (or a per-cell
+                // target-width override); capped micro-spaces backfill the rest.
                 var cReach = colPx - 0.28 * csize * 96 / 72;
                 var cWpos = qMatrix[c.matKey] || cNatural;
-                var cTarget = AshaarMatrix.naturalFitTarget(cWpos, cReach, elongShare);
+                var cTarget = (cRes.widthPt != null) ? cRes.widthPt * 96 / 72
+                  : AshaarMatrix.naturalFitTarget(cWpos, cReach, cPhi);
                 var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cTarget, cMax);
                 var cElong = cConc.runs[0].text;
                 var cGaps = cElong.split(" ").length - 1;
                 canvasCtx.font = csize + "pt \"" + fname + "\"";
                 var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-                var cN = AshaarResidual.capMicroSpaces(cTarget - cConc.achievedPx, cGaps, cSpacePx, csize * 96 / 72);
+                var cN = AshaarResidual.capMicroSpaces(cTarget - cConc.achievedPx, cGaps, cSpacePx, csize * 96 / 72, cCapEm);
                 justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
               }
             }
@@ -1469,10 +1485,11 @@
 
       // Persisted bandh cell-map (content/spacing tag + labels) for this block,
       // when present — one pattern per stanza table, in document order.
-      var ccCells = null;
+      var ccCells = null, ccOverrides = {};
       if (!cc.isNullObject && cc.title === "Ashaar Poem") {
         var ccPayload = AshaarWord.parseContentControlTag(cc.tag);
         ccCells = ccPayload && ccPayload.cells;
+        ccOverrides = (ccPayload && ccPayload.overrides) || {};
       }
 
       var tables = workRange.tables;
@@ -1538,9 +1555,12 @@
             if (mapped) {
               cell.__kind = mapped.kind;
               cell.__matKey = mapped.label || mapped.slot;
+              cell.__ovKey = (mapped.kind === "content" && mapped.label)
+                ? AshaarOverrides.overrideKey(ti, mapped.label) : null;
             } else {
               cell.__kind = null;
               cell.__matKey = AshaarMatrix.positionKey({ row: ri, col: ci, span: cols });
+              cell.__ovKey = null;
             }
             cell.body.load("text");
             cell.body.font.load("name,size");
@@ -1807,6 +1827,14 @@
         if (!stripJustification(current)) return;
         var colPx = contentPx(cell);
 
+        // Per-cell override (SP2): strength / target width / cap-lift deviations
+        // for this one cell, merged onto the block's justify defaults.
+        var cellOv = cell.__ovKey ? ccOverrides[cell.__ovKey] : null;
+        var resolved = AshaarOverrides.resolveCellOverride({ strength: opts.tatweelCount, fillMode: fillMode }, cellOv);
+        var cellPhi = AshaarWord.strengthToElongationShare(resolved.strength);
+        var cellMaxPos = AshaarWord.strengthToMaxPositions(resolved.strength);
+        var cellCapEm = resolved.capEm != null ? resolved.capEm : undefined;
+
         // Resolve THIS cell's mechanism from its OWN real font (per-cell
         // dispatch), not the pane dropdown — so any dropdown (incl. Document
         // default) routes each cell to its font's correct mechanism instead of
@@ -1836,7 +1864,7 @@
           if (fillMode === "cell-fit") {
             // Cell-fit: swap fasls up to the φ elongation budget (no buffer),
             // then let Word distribute the residual to the true edge.
-            var jBudget = AshaarMatrix.cellFitBudget(jNatural, colPx, elongShare);
+            var jBudget = AshaarMatrix.cellFitBudget(jNatural, colPx, cellPhi);
             var jSelC = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, jBudget);
             var jRunsC = jSelC.runs.map(function (r) {
               return { text: r.text, csName: r.swap ? (cellDesc.kasheedaName || repName) : (cellDesc.wordName || repName), sizePt: repSize };
@@ -1848,7 +1876,8 @@
           // buffered edge); capped hair-spaces backfill what the swaps miss.
           var jReach = colPx - 0.28 * repSize * 96 / 72;
           var jWpos = widthMatrix[cell.__matKey] || jNatural;
-          var jTarget = AshaarMatrix.naturalFitTarget(jWpos, jReach, elongShare);
+          var jTarget = (resolved.widthPt != null) ? resolved.widthPt * 96 / 72
+            : AshaarMatrix.naturalFitTarget(jWpos, jReach, cellPhi);
           var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, jTarget);
           // Hybrid fill: font-swap elongation undershoots (only fasls with a
           // Kasheeda variant widen) — close the residual with capped hair-spaces
@@ -1857,7 +1886,7 @@
           for (var jgi = 0; jgi < sel.runs.length; jgi++) { if (sel.runs[jgi].text === " ") jGaps++; }
           canvasCtx.font = repSize + "pt " + baseCss;
           var jSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var jn = AshaarResidual.capMicroSpaces(jTarget - sel.fill * jTarget, jGaps, jSpacePx, repSize * 96 / 72);
+          var jn = AshaarResidual.capMicroSpaces(jTarget - sel.fill * jTarget, jGaps, jSpacePx, repSize * 96 / 72, cellCapEm);
           var jRuns = AshaarResidual.injectSpaceRuns(sel.runs, jn, MICRO_SPACE);
           var swapXml = AshaarWord.runsToMisraXml(jRuns, cellAlign, opts, repSize);
           plans.push({ cell: cell, ooxml: swapXml });
@@ -1887,7 +1916,7 @@
           for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(canvasCtx.measureText(mtoks[mi]).width); mww.push(canvasCtx.measureText(melong[mi]).width); }
           var mNatural = mwb.reduce(function (a, b) { return a + b; }, 0);
           if (fillMode === "cell-fit") {
-            var mBudget = AshaarMatrix.cellFitBudget(mNatural, colPx, elongShare);
+            var mBudget = AshaarMatrix.cellFitBudget(mNatural, colPx, cellPhi);
             var mselC = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, mBudget);
             var moutC = mselC.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
             plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml([{ text: moutC, csName: cellDesc.wordName || repName, sizePt: repSize }], repSize) });
@@ -1895,7 +1924,8 @@
           }
           var mReach = colPx - 0.28 * repSize * 96 / 72;
           var mWpos = widthMatrix[cell.__matKey] || mNatural;
-          var mTarget = AshaarMatrix.naturalFitTarget(mWpos, mReach, elongShare);
+          var mTarget = (resolved.widthPt != null) ? resolved.widthPt * 96 / 72
+            : AshaarMatrix.naturalFitTarget(mWpos, mReach, cellPhi);
           var msel = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, mTarget);
           var mout = msel.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
           // Hybrid fill: Mehr elongates only at whitelisted word-endings, so it
@@ -1904,7 +1934,7 @@
           var mGaps = mout.split(" ").length - 1;
           canvasCtx.font = mehrFont;
           var mSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var mn = AshaarResidual.capMicroSpaces(mTarget - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72);
+          var mn = AshaarResidual.capMicroSpaces(mTarget - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72, cellCapEm);
           var mfinal = AshaarWord.distributeMicroSpaces([mout], mn, MICRO_SPACE)[0];
           if (mfinal !== current) plans.push({ cell: cell, flat: mfinal, align: cellAlignOf(cell) });
           return;
@@ -1963,11 +1993,11 @@
         });
         if (opts.justifyMode === "kashida" && !anyWhitespaceRun) {
           var gNatural = primRuns.reduce(function (a, r) { return a + r.measure(r.text); }, 0);
-          var gMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(opts.tatweelCount) };
+          var gMax = { perPositionEm: 0.5, maxPositions: cellMaxPos };
           if (fillMode === "cell-fit") {
             // Cell-fit: concentrate tatweels to the φ budget (no buffer); Word's
             // distribute jc stretches the inter-word gaps to the true edge.
-            var gBudgetC = AshaarMatrix.cellFitBudget(gNatural, colPx, elongShare);
+            var gBudgetC = AshaarMatrix.cellFitBudget(gNatural, colPx, cellPhi);
             var concC = AshaarJustify.justifyRunsConcentrated(primRuns, gBudgetC, Object.assign({}, calibParams, gMax));
             var cfRuns = concC.runs.map(function (r, i) { return { text: r.text, csName: runs[i].name, sizePt: runs[i].size }; });
             plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(cfRuns, repSize) });
@@ -1978,13 +2008,14 @@
           // strength = spacing-dominant, harmony baseline at φ=0.
           var gReach = colPx - 0.28 * repSize * 96 / 72;
           var gWpos = widthMatrix[cell.__matKey] || gNatural;
-          var gTarget = AshaarMatrix.naturalFitTarget(gWpos, gReach, elongShare);
+          var gTarget = (resolved.widthPt != null) ? resolved.widthPt * 96 / 72
+            : AshaarMatrix.naturalFitTarget(gWpos, gReach, cellPhi);
           var conc = AshaarJustify.justifyRunsConcentrated(primRuns, gTarget, Object.assign({}, calibParams, gMax));
           outTexts = conc.runs.map(function (r) { return r.text; });
           var gGaps = primRuns.reduce(function (a, r) { return a + (r.text.split(" ").length - 1); }, 0);
           canvasCtx.font = runFontStr(repName, repSize, false, false);
           var gSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-          var gN = AshaarResidual.capMicroSpaces(gTarget - conc.achievedPx, gGaps, gSpacePx, repSize * 96 / 72);
+          var gN = AshaarResidual.capMicroSpaces(gTarget - conc.achievedPx, gGaps, gSpacePx, repSize * 96 / 72, cellCapEm);
           outTexts = AshaarWord.distributeMicroSpaces(outTexts, gN, MICRO_SPACE);
         } else {
           // spacing/scale: single wordSpacing + uniform fontScale from run-aware widths.
