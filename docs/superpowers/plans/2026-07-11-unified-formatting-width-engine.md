@@ -79,7 +79,7 @@ Record which happens:
 
 Edit the line below to the observed value, then remove the temp button + handler from `taskpane.html`/`taskpane.js`.
 
-> **SPIKE RESULT:** `MECHANISM = ______` (fill in)
+> **SPIKE RESULT (2026-07-11):** `MECHANISM = setWidth` — `TableColumnCollection.setWidth(pt, "SameWidth")` was accepted on a span-based marsiya table and changed the columns. Phase 2 uses the in-place `setWidth` path; **Task 4b (rebuild) is skipped**, and `stanzaGridTwips` is not needed.
 
 - [ ] **Step 4: Commit the removal (no spike code ships)**
 
