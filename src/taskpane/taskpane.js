@@ -876,7 +876,7 @@
     // Both kashida and spacing fill the cell to its box; only "none"/"css" skip.
     var doFill = doKashida || profile.justify.mode === "spacing";
     var summary = "";
-    var blockCount = 0, targetTwips = 0, slotPxDbg = 0, maxGRIDDbg = 0;
+    var blockCount = 0, targetTwips = 0;
 
     try {
       // ── Pass 1: SIZE — rebuild each block at one shared target width ───────────
@@ -897,16 +897,16 @@
             bandhs.push({ GRID: info.grid || 0, cells: gcells });
           });
         });
-        maxGRIDDbg = bandhs.reduce(function (m, b) { return Math.max(m, b.GRID || 0); }, 0);
+        var maxGRID = bandhs.reduce(function (m, b) { return Math.max(m, b.GRID || 0); }, 0);
         var pagePx = cap.pagePt * 96 / 72;
-        slotPxDbg = AshaarMatrix.uniformSlotPx(bandhs, {
+        var slotPx = AshaarMatrix.uniformSlotPx(bandhs, {
           mode: profile.width.mode === "fixed" ? "fixed" : "auto-fit",
           pct: profile.width.pct, pagePx: pagePx, headroom: HEADROOM, marginPx: MARGIN_PX
         });
         // One target width for all bandhs → same-GRID bandhs share an identical
         // cwt (harmony); a smaller-GRID bandh gets a wider cwt (still no wrap).
         // Capped at the page.
-        targetTwips = Math.min(cap.pageTwips, Math.round(slotPxDbg * maxGRIDDbg * 1440 / 96));
+        targetTwips = Math.min(cap.pageTwips, Math.round(slotPx * maxGRID * 1440 / 96));
         if (targetTwips <= 0) targetTwips = cap.pageTwips;
 
         // Rebuild LAST block first so earlier blocks' ranges don't shift. Render
@@ -1067,8 +1067,7 @@
       });
 
       summary = "Applied qaseeda “" + name + "” to " + blockCount + " block(s); justified " + changed + " cell(s)"
-        + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + "."
-        + "  ⟨DBG target=" + targetTwips + "tw slot=" + (slotPxDbg || 0).toFixed(1) + "px maxGRID=" + maxGRIDDbg + "⟩";
+        + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + ".";
       if (profile.width.mode === "auto-fit") { profile.derived = profile.derived || {}; await putProfile(profile); }
     } catch (error) {
       summary = "Apply failed: " + describeError(error);
