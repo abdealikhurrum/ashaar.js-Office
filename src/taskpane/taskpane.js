@@ -488,7 +488,8 @@
   var _lastBlockTag = null;          // last-reflected block tag (resync only on change)
   var _reflectPending = false;       // debounce guard
   var _reflectBusy = false;          // suppress reflection while our own justify runs
-  var _activeOvKey = null;           // override key of the cell at the cursor (or null)
+  var _activeOvKey = null;           // override key of the content cell at the cursor (or null)
+  var _activeDecorKey = null;        // slot-decor key of the spacing cell at the cursor (or null)
 
   // Populate the pane's block-level controls from a parsed tag payload.
   function syncBlockControls(payload) {
@@ -551,11 +552,21 @@
     var map = AshaarCellMap.buildBandhCellMap(payload.cells[tIdx]);
     var inRow = map.filter(function (e) { return e.row === tcell.rowIndex; });
     var entry = inRow[tcell.cellIndex];
-    if (!entry || entry.kind !== "content") { editor.hidden = true; return; }
-
-    _activeOvKey = AshaarOverrides.overrideKey(tIdx, entry.label);
-    populateCellEditor(entry.label, (payload.overrides || {})[_activeOvKey]);
-    editor.hidden = false;
+    var decorEl = document.getElementById("slot-decor");
+    if (!entry) { editor.hidden = true; if (decorEl) decorEl.hidden = true; _activeOvKey = null; _activeDecorKey = null; return; }
+    if (entry.kind === "content") {
+      if (decorEl) decorEl.hidden = true;
+      _activeDecorKey = null;
+      _activeOvKey = AshaarOverrides.overrideKey(tIdx, entry.label);
+      populateCellEditor(entry.label, (payload.overrides || {})[_activeOvKey]);
+      editor.hidden = false;
+    } else { // spacing → decoration editor
+      editor.hidden = true;
+      _activeOvKey = null;
+      _activeDecorKey = AshaarOverrides.overrideKey(tIdx, entry.slot);
+      populateDecorEditor(entry.slot, (payload.slotDecor || {})[_activeDecorKey]);
+      if (decorEl) decorEl.hidden = false;
+    }
   }
 
   function populateCellEditor(label, ov) {
@@ -598,6 +609,47 @@
       populateCellEditor(lbl ? lbl.textContent : "", null);
     }
     await justifySelection(); // instant feedback via the existing path
+  }
+
+  function hexToWord(v) { return (v || "").replace(/^#/, ""); }
+  function populateDecorEditor(slot, d) {
+    d = d || {};
+    var lbl = document.getElementById("slot-decor-label"); if (lbl) lbl.textContent = slot || "";
+    document.getElementById("slot-decor-symbol").value = d.symbol || "";
+    document.getElementById("slot-decor-fill-on").checked = !!d.fill;
+    if (d.fill) document.getElementById("slot-decor-fill").value = "#" + d.fill;
+    if (d.color) document.getElementById("slot-decor-color").value = "#" + d.color;
+  }
+  function readDecorEditor() {
+    var d = {};
+    var sym = document.getElementById("slot-decor-symbol").value;
+    if (sym) d.symbol = sym;
+    if (document.getElementById("slot-decor-fill-on").checked) d.fill = hexToWord(document.getElementById("slot-decor-fill").value);
+    if (sym) d.color = hexToWord(document.getElementById("slot-decor-color").value);
+    return d;
+  }
+  // Write the editor state to the active gap's per-slot decoration on the block
+  // tag, then re-decorate via the qaseeda apply pass (needs a saved qaseeda).
+  async function applySlotDecor(clear) {
+    if (!_activeDecorKey || typeof Word === "undefined") return;
+    var d = clear ? null : readDecorEditor();
+    _reflectBusy = true;
+    var qname = "";
+    try {
+      await Word.run(async function (context) {
+        var cc = context.document.getSelection().parentContentControlOrNullObject;
+        cc.load("title,tag");
+        await context.sync();
+        if (cc.isNullObject || cc.title !== "Ashaar Poem") return;
+        cc.tag = AshaarWord.setTagSlotDecor(cc.tag, _activeDecorKey, d);
+        await context.sync();
+        _lastBlockTag = cc.tag;
+        qname = (AshaarWord.parseContentControlTag(cc.tag) || {}).qaseeda || "";
+      });
+    } catch (e) { /* ignore */ } finally { _reflectBusy = false; }
+    if (clear) populateDecorEditor(document.getElementById("slot-decor-label").textContent, null);
+    if (qname && loadProfileStore()[qname]) await applyProfileToQaseeda(qname);
+    else setMessage("Gap decoration saved — apply a qaseeda to this block to render it.");
   }
 
   // Debounced entry point for the DocumentSelectionChanged event.
@@ -2612,6 +2664,12 @@
     });
     var ovClear = document.getElementById("cell-ov-clear");
     if (ovClear) ovClear.addEventListener("click", function () { applyCellOverride(true); });
+    ["slot-decor-symbol", "slot-decor-fill", "slot-decor-color", "slot-decor-fill-on"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener("change", function () { applySlotDecor(false); });
+    });
+    var decorClear = document.getElementById("slot-decor-clear");
+    if (decorClear) decorClear.addEventListener("click", function () { applySlotDecor(true); });
     document.getElementById("re-render").addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
