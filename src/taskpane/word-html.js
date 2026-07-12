@@ -925,6 +925,7 @@
       if (!payload || typeof payload !== "object") return null;
       if (typeof payload.qaseeda !== "string") payload.qaseeda = "";
       payload.cells = payload.cells || null;
+      payload.overrides = (payload.overrides && typeof payload.overrides === "object") ? payload.overrides : {};
       return payload;
     } catch (e) {
       return null;
@@ -937,6 +938,27 @@
     var payload = parseContentControlTag(tag);
     if (!payload) return tag;
     payload.qaseeda = name || "";
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // Return a copy of an "ashaar:" tag with one per-cell override set or removed.
+  // A null/empty override deletes the key. Non-ashaar tags returned unchanged.
+  function setTagOverride(tag, key, override) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    var ov = payload.overrides && typeof payload.overrides === "object" ? payload.overrides : {};
+    var has = override && typeof override === "object" &&
+      (override.strength != null || override.widthPt != null || override.capEm != null);
+    if (has) {
+      var clean = {};
+      if (override.strength != null) clean.strength = override.strength;
+      if (override.widthPt != null) clean.widthPt = override.widthPt;
+      if (override.capEm != null) clean.capEm = override.capEm;
+      ov[key] = clean;
+    } else {
+      delete ov[key];
+    }
+    payload.overrides = ov;
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
@@ -1538,6 +1560,7 @@
     contentControlTag: contentControlTag,
     parseContentControlTag: parseContentControlTag,
     setTagQaseeda: setTagQaseeda,
+    setTagOverride: setTagOverride,
     justifyPlainTextBlock: justifyPlainTextBlock,
     coalesceRuns: coalesceRuns,
     distributeMicroSpaces: distributeMicroSpaces,
