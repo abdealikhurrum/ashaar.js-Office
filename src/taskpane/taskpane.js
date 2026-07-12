@@ -1002,6 +1002,15 @@
               if (doFill && colPx > 0) {
                 var fname = c.fontName || repName;
                 var csize = c.fontSize || repSize;
+                // Per-cell kashida decision from the REAL font: injected tatweels
+                // SHATTER whitespace-shaping fonts (Noto Nastaliq/Gulzar/Scheherazade)
+                // and are wrong for font-swap fonts (Jameel Nastaleeq). Only elongate
+                // fonts the tatweel engine handles (generic Arabic, Mehr); everything
+                // else fills with spacing even under a kashida profile. Mirrors the
+                // per-run guard in justifySelection.
+                var fmech = (typeof AshaarFonts !== "undefined" && AshaarFonts.mechanismForFontName)
+                  ? AshaarFonts.mechanismForFontName(fname) : "generic";
+                var cKashida = doKashida && fmech !== "whitespace" && fmech !== "font-swap";
                 canvasCtx.font = csize + "pt \"" + fname + "\"";
                 var runOne = [{
                   text: c.base, fontSize: csize, fontProfile: null,
@@ -1031,11 +1040,11 @@
                 }
                 cTarget = Math.min(cTarget, colPx); // no-wrap invariant
                 var cElong, cAchieved;
-                if (doKashida) {
+                if (cKashida) {
                   var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cTarget, cMax);
                   cElong = cConc.runs[0].text; cAchieved = cConc.achievedPx;
                 } else {
-                  cElong = c.base; cAchieved = cNatural; // spacing: no tatweels
+                  cElong = c.base; cAchieved = cNatural; // spacing / shaping-safe: no tatweels
                 }
                 var cGaps = cElong.split(" ").length - 1;
                 canvasCtx.font = csize + "pt \"" + fname + "\"";
