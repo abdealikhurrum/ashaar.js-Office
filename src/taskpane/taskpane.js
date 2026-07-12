@@ -661,11 +661,17 @@
           var p = AshaarWord.parseContentControlTag(cc.tag);
           return (p && p.overrides) || {};
         });
+        var blockSlotDecor = blocks.map(function (cc) {
+          var p = AshaarWord.parseContentControlTag(cc.tag);
+          return (p && p.slotDecor) || {};
+        });
+        var allTableSlotDecor = [];
         blockTables.forEach(function (t, bi) {
           t.items.forEach(function (tbl, j) {
             allTables.push(tbl);
             allTablePatterns.push(blockCells[bi] ? blockCells[bi][j] : null);
             allTableOverrides.push(blockOverrides[bi] || {});
+            allTableSlotDecor.push(blockSlotDecor[bi] || {});
             allTableBlockIdx.push(j);
           });
         });
@@ -710,6 +716,9 @@
                 measure: base.replace(/\s+/g, " ").trim(),
                 matKey: mapped ? (mapped.label || mapped.slot) : AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
                 kind: mapped ? mapped.kind : null,
+                slot: (mapped && mapped.kind === "spacing") ? mapped.slot : null,
+                decorKey: (mapped && mapped.kind === "spacing" && mapped.slot)
+                  ? AshaarOverrides.overrideKey(allTableBlockIdx[ai], mapped.slot) : null,
                 ovKey: (mapped && mapped.kind === "content" && mapped.label)
                   ? AshaarOverrides.overrideKey(allTableBlockIdx[ai], mapped.label) : null,
                 fontName: (f && f.name) || "",
@@ -717,7 +726,7 @@
               });
             });
           });
-          return { tbl: tbl, cells: cells, overrides: allTableOverrides[ai] };
+          return { tbl: tbl, cells: cells, overrides: allTableOverrides[ai], slotDecor: allTableSlotDecor[ai] };
         });
 
         var pl = section.pageLayout;
@@ -828,7 +837,22 @@
 
         tableInfos.forEach(function (info) {
           info.cells.forEach(function (c) {
-            if (c.kind === "spacing") return;              // structural gap — never justified
+            if (c.kind === "spacing") {
+              // Decorate (not justify) a structural gap: profile default for its
+              // slot-position + the block's per-slot override.
+              var pDecor = c.slot ? (profile.spacingDecor || {})[c.slot] : null;
+              var oDecor = c.decorKey ? info.slotDecor[c.decorKey] : null;
+              var decor = AshaarOverrides.resolveSlotDecor(pDecor, oDecor);
+              c.cell.body.clear();
+              if (decor.symbol) {
+                c.cell.body.insertText(decor.symbol, Word.InsertLocation.replace);
+                c.cell.body.font.color = decor.color || "black";
+              }
+              try { c.cell.shadingColor = decor.fill || "No color"; } catch (e) {}
+              c.cell.body.paragraphs.getFirst().alignment = Word.Alignment.centered;
+              changed++;
+              return;
+            }
             if (!c.base && c.kind !== "content") return;   // empty & not known-content → skip
             if (!c.base) return;
             var colPx = Math.max(1, (c.cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
