@@ -158,4 +158,12 @@ console.log("computeTargetGrid different-shape OK");
 }
 console.log("uniformSlotPx OK");
 
+// ── no-wrap invariant: a fill target computed against a box never exceeds it ──
+// The apply engine clamps to this so justified text cannot overflow its cell.
+[0, 0.5, 1].forEach(function (phi) {
+  assert.ok(AshaarMatrix.naturalFitTarget(300, 300, phi) <= 300 + 1e-9, "naturalFit target ≤ box at phi=" + phi);
+  assert.ok(AshaarMatrix.cellFitBudget(120, 300, phi) <= 300 + 1e-9, "cellFit budget ≤ box at phi=" + phi);
+});
+console.log("no-wrap invariant OK");
+
 console.log("natural-width-matrix.test.js OK");
