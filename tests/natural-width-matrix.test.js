@@ -156,6 +156,14 @@ console.log("computeTargetGrid different-shape OK");
   // rawSlot=300; cap = pagePx/maxGRID = 1000/4 = 250 → slot 250.
   assert.strictEqual(AshaarMatrix.uniformSlotPx(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0 }), 250);
 }
+{
+  // marginPx folds 2·margin into the raw need so the box (span·slot − 2·margin)
+  // still holds the natural text: (180 + 2×15) / 3 = 70.
+  const bandhs = [{ GRID: 6, cells: [{ natural: 180, span: 3 }] }];
+  assert.strictEqual(AshaarMatrix.uniformSlotPx(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0, marginPx: 15 }), 70);
+  // and the box at that slot indeed ≥ natural: 3×70 − 2×15 = 180 ≥ 180.
+  assert.ok(3 * 70 - 2 * 15 >= 180);
+}
 console.log("uniformSlotPx OK");
 
 // ── no-wrap invariant: a fill target computed against a box never exceeds it ──

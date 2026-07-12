@@ -725,172 +725,125 @@
   // each cell with the profile's params. Additive — leaves justifySelection
   // untouched. In-place resize needs WordApiDesktop 1.3; without it, only the
   // re-justify runs (at current widths).
-  async function applyProfileToQaseeda(name) {
-    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to apply a qaseeda."); return; }
-    var profile = getProfile(name);
-    var CELL_MARGIN_PT = 5.76;
-    var strength = AshaarProfiles.normalizeStrength(profile.justify.strength);
-    var fillMode = AshaarProfiles.normalizeFillMode(profile.justify.fillMode);
-    var doKashida = profile.justify.mode === "kashida";
-    // Both kashida and spacing fill the cell to its box; only "none"/"css" skip.
-    var doFill = doKashida || profile.justify.mode === "spacing";
+  // Capture a qaseeda's blocks as measured tables ready for width sizing + justify.
+  // Loads each block's tables/rows/cells (text + real font), captures plain values
+  // (later edits invalidate proxies, so we never re-read body.*), reconstructs each
+  // block's SOURCE, derives each content cell's grid span from that source (Word
+  // can't report span-table column geometry), and measures natural (tatweel-free)
+  // widths on a canvas. Geometry uses each block's OWN stored opts (from its tag)
+  // so it matches how the block was/will be rendered. Returns everything both the
+  // rebuild and justify passes need.
+  async function captureQaseedaTables(context, blocks, profile) {
     var fallbackName = profile.font || "Times New Roman";
-    var summary = "";
 
-    try {
-      await Word.run(async function (context) {
-        var blocks = await gatherQaseedaBlocks(context, name);
-        if (!blocks.length) { summary = "No blocks are tagged with qaseeda “" + name + "”."; return; }
+    var section = context.document.sections.getFirst();
+    section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
 
-        var section = context.document.sections.getFirst();
-        section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+    var blockTables = blocks.map(function (cc) { var t = cc.getRange().tables; t.load("items"); return t; });
+    await context.sync();
+    blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.load("items"); }); });
+    await context.sync();
+    blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); }); });
+    await context.sync();
+    blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) {
+      row.cells.items.forEach(function (cell) { cell.body.load("text"); cell.body.font.load("name,size"); });
+    }); }); });
+    await context.sync();
 
-        // Load each block's tables → rows → cells (text, real font, columnWidth).
-        var blockTables = blocks.map(function (cc) { var t = cc.getRange().tables; t.load("items"); return t; });
-        await context.sync();
-        blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.load("items"); }); });
-        await context.sync();
-        var allTables = [];
-        var allTablePatterns = [];
-        var allTableOverrides = [];
-        var allTableBlockIdx = [];
-        var blockCells = blocks.map(function (cc) {
-          var p = AshaarWord.parseContentControlTag(cc.tag);
-          return (p && p.cells) || null;
-        });
-        var blockOverrides = blocks.map(function (cc) {
-          var p = AshaarWord.parseContentControlTag(cc.tag);
-          return (p && p.overrides) || {};
-        });
-        var blockSlotDecor = blocks.map(function (cc) {
-          var p = AshaarWord.parseContentControlTag(cc.tag);
-          return (p && p.slotDecor) || {};
-        });
-        var allTableSlotDecor = [];
-        blockTables.forEach(function (t, bi) {
-          t.items.forEach(function (tbl, j) {
-            allTables.push(tbl);
-            allTablePatterns.push(blockCells[bi] ? blockCells[bi][j] : null);
-            allTableOverrides.push(blockOverrides[bi] || {});
-            allTableSlotDecor.push(blockSlotDecor[bi] || {});
-            allTableBlockIdx.push(j);
-          });
-        });
-        if (!allTables.length) { summary = "Qaseeda “" + name + "” has no tables to size."; return; }
+    var pl = section.pageLayout;
+    var pagePt = pl && pl.width ? (pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) : 468;
+    var pageTwips = Math.round(pagePt * 20);
 
-        // Stage 1: load each row's cells (must sync before reading cells.items).
-        allTables.forEach(function (tbl) {
-          tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
-        });
-        await context.sync();
-        // Stage 2: now cells.items is available — load each cell's text + real font.
-        allTables.forEach(function (tbl) {
-          tbl.rows.items.forEach(function (row) {
-            row.cells.items.forEach(function (cell) { cell.body.load("text"); cell.body.font.load("name,size"); });
-          });
-        });
-        await context.sync();
-
-        // Capture cell proxies + their text/font as plain values ONCE. Later
-        // collection reloads (for the resized columnWidth) drop body.text from
-        // freshly-derived items, so we never re-read body.* — only columnWidth
-        // (which survives on the captured proxy) and insertText (a method).
-        var tableInfos = allTables.map(function (tbl, ai) {
-          var pattern = allTablePatterns[ai];
-          var perRowCounts = tbl.rows.items.map(function (row) { return row.cells.items.length; });
-          var tblMap = AshaarCellMap.alignPatternToTable(perRowCounts, pattern)
-            ? AshaarCellMap.buildBandhCellMap(pattern) : null;
-          var seq = 0;
-          var cells = [];
-          var rowsText = []; // row-major raw cell text → source reconstruction for the width engine
-          tbl.rows.items.forEach(function (row, ri) {
-            var cols = row.cells.items.length;
-            var rowText = [];
-            row.cells.items.forEach(function (cell, ci) {
-              var f = cell.body.font;
-              var current = (cell.body.text || "").trim();
-              var base = stripJustification(current);
-              var mapped = tblMap ? tblMap[seq] : null;
-              seq++;
-              rowText.push(cell.body.text || "");
-              cells.push({
-                cell: cell,
-                current: current,
-                base: base,
-                measure: base.replace(/\s+/g, " ").trim(),
-                matKey: mapped ? (mapped.label || mapped.slot) : AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
-                kind: mapped ? mapped.kind : null,
-                slot: (mapped && mapped.kind === "spacing") ? mapped.slot : null,
-                decorKey: (mapped && mapped.kind === "spacing" && mapped.slot)
-                  ? AshaarOverrides.overrideKey(allTableBlockIdx[ai], mapped.slot) : null,
-                ovKey: (mapped && mapped.kind === "content" && mapped.label)
-                  ? AshaarOverrides.overrideKey(allTableBlockIdx[ai], mapped.label) : null,
-                fontName: (f && f.name) || "",
-                fontSize: (f && f.size) || 0
-              });
+    var blockInfos = blocks.map(function (cc, bi) {
+      var payload = AshaarWord.parseContentControlTag(cc.tag) || {};
+      var pattern = payload.cells || null;
+      var overrides = payload.overrides || {};
+      var slotDecor = payload.slotDecor || {};
+      var repFont = "", repSize = 0;
+      var tableInfos = blockTables[bi].items.map(function (tbl, j) {
+        var perRowCounts = tbl.rows.items.map(function (row) { return row.cells.items.length; });
+        var tablePattern = pattern ? pattern[j] : null;
+        var tblMap = AshaarCellMap.alignPatternToTable(perRowCounts, tablePattern)
+          ? AshaarCellMap.buildBandhCellMap(tablePattern) : null;
+        var seq = 0, cells = [], rowsText = [];
+        tbl.rows.items.forEach(function (row, ri) {
+          var cols = row.cells.items.length, rowText = [];
+          row.cells.items.forEach(function (cell, ci) {
+            var f = cell.body.font;
+            var current = (cell.body.text || "").trim();
+            var base = stripJustification(current);
+            var mapped = tblMap ? tblMap[seq] : null;
+            seq++;
+            rowText.push(cell.body.text || "");
+            if (f && f.name && !repFont) { repFont = f.name; if (f.size) repSize = f.size; }
+            cells.push({
+              cell: cell, current: current, base: base,
+              measure: base.replace(/\s+/g, " ").trim(),
+              matKey: mapped ? (mapped.label || mapped.slot) : AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
+              kind: mapped ? mapped.kind : null,
+              slot: (mapped && mapped.kind === "spacing") ? mapped.slot : null,
+              decorKey: (mapped && mapped.kind === "spacing" && mapped.slot) ? AshaarOverrides.overrideKey(j, mapped.slot) : null,
+              ovKey: (mapped && mapped.kind === "content" && mapped.label) ? AshaarOverrides.overrideKey(j, mapped.label) : null,
+              fontName: (f && f.name) || "", fontSize: (f && f.size) || 0
             });
-            rowsText.push(rowText);
           });
-          return { tbl: tbl, cells: cells, rowsText: rowsText, overrides: allTableOverrides[ai], slotDecor: allTableSlotDecor[ai] };
+          rowsText.push(rowText);
         });
+        return { tbl: tbl, cells: cells, rowsText: rowsText, overrides: overrides, slotDecor: slotDecor, blockIdx: j, grid: 0 };
+      });
+      var source = tableInfos.map(function (ti) {
+        return AshaarTableAdopt.adoptTableToSource(ti.rowsText, { direction: "rtl" });
+      }).filter(function (s) { return s.trim(); }).join("\n\n");
+      return { cc: cc, oldTag: cc.tag, payload: payload, source: source, repFont: repFont, repSize: repSize, tableInfos: tableInfos };
+    });
 
-        var pl = section.pageLayout;
-        var pagePt = pl && pl.width ? (pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) : 468;
-
-        // Representative font for the canvas baseline (first captured cell with one).
-        var repName = fallbackName, repSize = 16;
-        for (var ti = 0; ti < tableInfos.length && repName === fallbackName; ti++) {
-          var cs0 = tableInfos[ti].cells;
-          for (var ci = 0; ci < cs0.length; ci++) {
-            if (cs0[ci].fontName) { repName = cs0[ci].fontName; if (cs0[ci].fontSize) repSize = cs0[ci].fontSize; break; }
-          }
+    // Representative font for the canvas baseline.
+    var repName = fallbackName, repSize = 16;
+    for (var b0 = 0; b0 < blockInfos.length && repName === fallbackName; b0++) {
+      var tis = blockInfos[b0].tableInfos;
+      for (var t0 = 0; t0 < tis.length && repName === fallbackName; t0++) {
+        var cs0 = tis[t0].cells;
+        for (var c0 = 0; c0 < cs0.length; c0++) {
+          if (cs0[c0].fontName) { repName = cs0[c0].fontName; if (cs0[c0].fontSize) repSize = cs0[c0].fontSize; break; }
         }
+      }
+    }
 
-        var canvasCtx = document.createElement("canvas").getContext("2d");
-        if (!canvasCtx) { summary = "Canvas unavailable; cannot measure."; return; }
-        canvasCtx.font = repSize + "pt \"" + repName + "\"";
-        if (document.fonts && document.fonts.load) { try { await document.fonts.load(repSize + "pt \"" + repName + "\""); } catch (e) {} }
+    var canvasCtx = document.createElement("canvas").getContext("2d");
+    if (canvasCtx) {
+      canvasCtx.font = repSize + "pt \"" + repName + "\"";
+      if (document.fonts && document.fonts.load) { try { await document.fonts.load(repSize + "pt \"" + repName + "\""); } catch (e) {} }
+    }
 
-        // Source-derived grid geometry. Word cannot report column spans for span
-        // (merged-cell) poetry tables, so reconstruct each block's source (as
-        // Re-render does) and mirror the generator's emission to recover each
-        // content cell's grid span + the bandh's GRID. Zips onto the captured
-        // cells by row-major emission order (same order AshaarCellMap aligns to).
-        var geomOpts = options(); // structural opts (gapWidth, layoutMode) for span derivation
-        var pageTwips = Math.round(pagePt * 20);
-        tableInfos.forEach(function (info) {
-          var flatGeo = [], grid = 0;
-          try {
-            var src = AshaarTableAdopt.adoptTableToSource(info.rowsText, { direction: "rtl" });
-            AshaarWord.poemCellGeometry(src, geomOpts, Ashaar, pageTwips).forEach(function (st) {
-              grid = Math.max(grid, st.GRID || 0);
-              st.rows.forEach(function (row) { row.forEach(function (g) { flatGeo.push(g); }); });
-            });
-          } catch (e) { flatGeo = []; }
-          if (flatGeo.length === info.cells.length) {
-            info.cells.forEach(function (c, i) { c.gridCol = flatGeo[i].col; c.gridSpan = flatGeo[i].span; });
-            info.grid = grid;
-          } else {
-            // Reconstruction didn't round-trip the shape (hand-edited/odd table):
-            // degrade to span 1 per cell so the engine still runs (equal slots).
-            info.cells.forEach(function (c, i) { c.gridSpan = 1; c.gridCol = i; });
-            info.grid = info.cells.length;
-          }
-        });
+    // Grid geometry per table from its OWN source + the block's stored opts (so it
+    // matches the rendered table). Zips onto captured cells by emission order.
+    blockInfos.forEach(function (blk) {
+      var p = blk.payload;
+      var geomOpts = { gapWidth: Number(p.gapWidth || 4), layoutMode: p.layoutMode || "balanced" };
+      blk.tableInfos.forEach(function (info) {
+        var flatGeo = [], grid = 0;
+        try {
+          var src = AshaarTableAdopt.adoptTableToSource(info.rowsText, { direction: "rtl" });
+          AshaarWord.poemCellGeometry(src, geomOpts, Ashaar, pageTwips).forEach(function (st) {
+            grid = Math.max(grid, st.GRID || 0);
+            st.rows.forEach(function (row) { row.forEach(function (g) { flatGeo.push(g); }); });
+          });
+        } catch (e) { flatGeo = []; }
+        if (flatGeo.length === info.cells.length) {
+          info.cells.forEach(function (c, i) { c.gridCol = flatGeo[i].col; c.gridSpan = flatGeo[i].span; });
+          info.grid = grid;
+        } else {
+          info.cells.forEach(function (c, i) { c.gridSpan = 1; c.gridCol = i; });
+          info.grid = info.cells.length;
+        }
+      });
+    });
 
-        // Re-justify every cell with the profile's params (captured values only).
-        var changed = 0;
-        // Micro-space glyph used to realize word-spacing in Word (text-mutating).
-        // Declared locally here — NOT module-level; mirrors justifySelection's
-        // own local declaration (taskpane.js, "hair space" / "thin space" fallback).
-        var MICRO_SPACE = " "; // hair space
-        canvasCtx.font = repSize + "pt \"" + repName + "\"";
-        if (canvasCtx.measureText(MICRO_SPACE).width <= 0) MICRO_SPACE = " "; // thin space
-
-        // Cross-block natural-width matrix: longest natural per position across
-        // ALL blocks of this qaseeda (harmony). Measured in each cell's own font.
-        var qMatrixCells = [];
-        tableInfos.forEach(function (info) {
+    // Measure natural widths + build the cross-block harmony matrix.
+    var qMatrixCells = [];
+    if (canvasCtx) {
+      blockInfos.forEach(function (blk) {
+        blk.tableInfos.forEach(function (info) {
           info.cells.forEach(function (c) {
             if (!AshaarMatrix.isContentCell(c.measure)) return;
             var fnm = c.fontName || repName, fsz = c.fontSize || repSize;
@@ -899,182 +852,223 @@
             qMatrixCells.push({ key: c.matKey, natural: c.natPx });
           });
         });
-        var qMatrix = AshaarMatrix.buildMatrix(qMatrixCells);
+      });
+    }
+    var qMatrix = AshaarMatrix.buildMatrix(qMatrixCells);
 
-        // ── Option A width engine: one uniform grid slot for every column ───────
-        // Non-uniform CELL widths come from cells spanning different numbers of
-        // equal slots, so a single slot size — set via the ONLY span-table-safe
-        // op, columns.setWidth(pt,"SameWidth") — preserves the skinny-gap/wide-
-        // text layout and harmonizes same-shape bandhs (same GRID + same slot →
-        // matching-position cells equal). Slot is sized to fit every cell's
-        // natural width (+kashida headroom) in auto-fit, or pct-of-page in fixed.
-        var pagePx = pagePt * 96 / 72;
-        var HEADROOM = doKashida ? 0.18 : 0.06; // kashida needs room to stretch
-        var bandhsForGrid = tableInfos.map(function (info) {
-          var gcells = [];
-          info.cells.forEach(function (c) {
-            if (c.natPx == null) return; // content cells only (measured above)
-            gcells.push({ natural: c.natPx, span: c.gridSpan || 1 });
+    return { blockInfos: blockInfos, pagePt: pagePt, pageTwips: pageTwips, repName: repName, repSize: repSize, canvasCtx: canvasCtx, qMatrix: qMatrix };
+  }
+
+  // Apply a qaseeda's profile across ALL its blocks so they stay consistent. Two
+  // passes: (1) SIZE — rebuild every block's table OOXML at one shared target
+  // width (the only way to resize span tables; columns.setWidth garbles them —
+  // see memory width-engine-rebuild-not-setwidth); same width for all bandhs →
+  // same-GRID bandhs get an identical gridCol (harmony). (2) JUSTIFY — re-gather
+  // the fresh bare tables and fill each cell to its box = span × (target/GRID).
+  async function applyProfileToQaseeda(name) {
+    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to apply a qaseeda."); return; }
+    var profile = getProfile(name);
+    var CELL_MARGIN_PT = 5.76;
+    var MARGIN_PX = CELL_MARGIN_PT * 96 / 72;
+    var strength = AshaarProfiles.normalizeStrength(profile.justify.strength);
+    var fillMode = AshaarProfiles.normalizeFillMode(profile.justify.fillMode);
+    var doKashida = profile.justify.mode === "kashida";
+    // Both kashida and spacing fill the cell to its box; only "none"/"css" skip.
+    var doFill = doKashida || profile.justify.mode === "spacing";
+    var summary = "";
+    var blockCount = 0, targetTwips = 0, slotPxDbg = 0, maxGRIDDbg = 0;
+
+    try {
+      // ── Pass 1: SIZE — rebuild each block at one shared target width ───────────
+      await Word.run(async function (context) {
+        var blocks = await gatherQaseedaBlocks(context, name);
+        if (!blocks.length) { summary = "No blocks are tagged with qaseeda “" + name + "”."; return; }
+        blockCount = blocks.length;
+        var cap = await captureQaseedaTables(context, blocks, profile);
+
+        // Shared slot (px): auto-fit sizes it to hold every cell's natural text
+        // (+kashida headroom, +cell margins → no wrap); fixed uses pct-of-page.
+        var HEADROOM = doKashida ? 0.18 : 0.06;
+        var bandhs = [];
+        cap.blockInfos.forEach(function (blk) {
+          blk.tableInfos.forEach(function (info) {
+            var gcells = [];
+            info.cells.forEach(function (c) { if (c.natPx != null) gcells.push({ natural: c.natPx, span: c.gridSpan || 1 }); });
+            bandhs.push({ GRID: info.grid || 0, cells: gcells });
           });
-          return { GRID: info.grid || 0, cells: gcells };
         });
-        var slotPx = AshaarMatrix.uniformSlotPx(bandhsForGrid, {
+        maxGRIDDbg = bandhs.reduce(function (m, b) { return Math.max(m, b.GRID || 0); }, 0);
+        var pagePx = cap.pagePt * 96 / 72;
+        slotPxDbg = AshaarMatrix.uniformSlotPx(bandhs, {
           mode: profile.width.mode === "fixed" ? "fixed" : "auto-fit",
-          pct: profile.width.pct, pagePx: pagePx, headroom: HEADROOM
+          pct: profile.width.pct, pagePx: pagePx, headroom: HEADROOM, marginPx: MARGIN_PX
         });
+        // One target width for all bandhs → same-GRID bandhs share an identical
+        // cwt (harmony); a smaller-GRID bandh gets a wider cwt (still no wrap).
+        // Capped at the page.
+        targetTwips = Math.min(cap.pageTwips, Math.round(slotPxDbg * maxGRIDDbg * 1440 / 96));
+        if (targetTwips <= 0) targetTwips = cap.pageTwips;
 
-        // setWidth needs desktop Word (WordApiDesktop 1.3). Elsewhere, widths stay
-        // as-is (message notes it); the kashida target is clamped to the intended
-        // box so text still fills sensibly.
-        var canResize = slotPx > 0
-          && (typeof Office !== "undefined" && Office.context && Office.context.requirements
-            && Office.context.requirements.isSetSupported
-            && Office.context.requirements.isSetSupported("WordApiDesktop", "1.3"));
-
-        var MARGIN_PX = CELL_MARGIN_PT * 96 / 72;
-        if (canResize) {
-          var slotPt = slotPx * 72 / 96;
-          tableInfos.forEach(function (info) { info.tbl.columns.setWidth(slotPt, "SameWidth"); });
+        // Rebuild LAST block first so earlier blocks' ranges don't shift. Render
+        // BARE (justifyMode none) with the block's own structural opts + pinned
+        // font/size; the pattern is unchanged, so the old tag stays valid.
+        for (var bi = cap.blockInfos.length - 1; bi >= 0; bi--) {
+          var blk = cap.blockInfos[bi];
+          if (!blk.source.trim()) continue;
+          var p = blk.payload;
+          var renderOpts = {
+            layoutMode: p.layoutMode || "balanced",
+            gapWidth: Number(p.gapWidth || 4),
+            fontMode: p.fontMode || "document",
+            misraPattern: p.misraPattern || "paired",
+            misraCount: Number(p.misraCount || 4),
+            tatweelCount: 0,
+            justifyMode: "none"
+          };
+          if (blk.repFont) renderOpts.fontCsName = blk.repFont;
+          if (blk.repSize) renderOpts.fontSizePt = blk.repSize;
+          var ooxmlBody = AshaarWord.renderForWordOoxml(blk.source, renderOpts, Ashaar, targetTwips);
+          if (!ooxmlBody) continue;
+          var ooxml = AshaarWord.wrapOoxml(ooxmlBody);
+          // insertOoxml("Replace") on a whole "Ashaar Poem" control throws; insert
+          // the rebuilt poem into the body just after it, wrap in a fresh control,
+          // then delete the old (the proven Re-render pattern).
+          var afterRange = blk.cc.getRange("After");
+          var insertedRange = afterRange.insertOoxml(ooxml, Word.InsertLocation.start);
+          var newCC = insertedRange.insertContentControl();
+          newCC.title = "Ashaar Poem";
+          newCC.tag = blk.oldTag;
+          newCC.appearance = "BoundingBox";
+          blk.cc.delete(false);
           await context.sync();
-          // setWidth can recreate cells → captured proxies go stale (later
-          // shadingColor/insert throws GeneralException). Re-map fresh proxies by
-          // row-major order (uniform width set never changes cell count). The
-          // geometry (gridSpan/gridCol) rides plain values, so only c.cell needs
-          // refreshing.
-          tableInfos.forEach(function (info) { info.tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
-          await context.sync();
-          tableInfos.forEach(function (info) {
-            var fresh = [];
-            info.tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) { fresh.push(cell); }); });
-            info.cells.forEach(function (c, i) { if (fresh[i]) c.cell = fresh[i]; });
-          });
-          // Fill box per content cell = span × slot, minus cell margins (text area).
-          tableInfos.forEach(function (info) {
-            info.cells.forEach(function (c) {
-              if (c.natPx == null) return;
-              c.boxPx = Math.max(1, (c.gridSpan || 1) * slotPx - 2 * MARGIN_PX);
-            });
-          });
         }
+      });
+      if (summary) { setMessage(summary); return; }
 
-        tableInfos.forEach(function (info) {
-          info.cells.forEach(function (c) {
-            if (c.kind === "spacing") {
-              // Decorate (not justify) a structural gap: profile default for its
-              // slot-position + the block's per-slot override.
-              var pDecor = c.slot ? (profile.spacingDecor || {})[c.slot] : null;
-              var oDecor = c.decorKey ? info.slotDecor[c.decorKey] : null;
-              var decor = AshaarOverrides.resolveSlotDecor(pDecor, oDecor);
-              c.cell.body.clear();
-              if (decor.symbol) {
-                c.cell.body.insertText(decor.symbol, Word.InsertLocation.replace);
-                c.cell.body.font.color = decor.color || "black";
-              }
-              // shadingColor takes only "#RRGGBB" or a color name — this build
-              // rejects both "No color" and "" (InvalidArgument). Apply the fill
-              // when present, else white to clear any shading a prior apply left
-              // (visually blank on a white page). A try/catch is useless here —
-              // the failure surfaces at context.sync(), outside this block.
-              c.cell.shadingColor = decor.fill || "#FFFFFF";
-              c.cell.body.paragraphs.getFirst().alignment = Word.Alignment.centered;
-              changed++;
-              return;
-            }
-            if (!c.base && c.kind !== "content") return;   // empty & not known-content → skip
-            if (!c.base) return;
-            // Fill box = the computed span×slot text area (Option A). When Word
-            // couldn't be resized (older host), fall back to the cell's reported
-            // width so the target still tracks the real cell.
-            var colPx = (c.boxPx != null) ? c.boxPx
-              : Math.max(1, (c.cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
-            var justified = c.base;
-            if (doFill && colPx > 0) {
-              var fname = c.fontName || repName;
-              var csize = c.fontSize || repSize;
-              canvasCtx.font = csize + "pt \"" + fname + "\"";
-              var runOne = [{
-                text: c.base, fontSize: csize, fontProfile: null,
-                measure: function (s) { canvasCtx.font = csize + "pt \"" + fname + "\""; return canvasCtx.measureText(s).width; }
-              }];
-              var cNatural = c.natPx != null ? c.natPx : canvasCtx.measureText(c.base).width;
-              // Per-cell override (SP2), merged onto the profile's justify defaults.
-              var cOv = c.ovKey ? info.overrides[c.ovKey] : null;
-              var cRes = AshaarOverrides.resolveCellOverride({ strength: strength, fillMode: fillMode }, cOv);
-              var cPhi = AshaarWord.strengthToElongationShare(cRes.strength);
-              var cCapEm = cRes.capEm != null ? cRes.capEm : undefined;
-              var cMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(cRes.strength) };
-              if (fillMode === "cell-fit") {
-                // Cell-fit: fill to the φ budget; Word's distribute jc spreads the
-                // residual to the true edge. Kashida elongates with tatweels;
-                // Spacing leaves the text and lets distribute spread spaces only.
-                var cBudgetCf = Math.min(colPx, AshaarMatrix.cellFitBudget(cNatural, colPx, cPhi));
-                var cTextCf = doKashida
-                  ? AshaarJustify.justifyRunsConcentrated(runOne, cBudgetCf, cMax).runs[0].text
-                  : c.base;
-                c.ooxml = AshaarWord.misraDistributeXml([{ text: cTextCf, csName: fname, sizePt: csize }], csize);
-                justified = null; // written via OOXML below
-              } else {
-                // Natural-fit: fill to this position's harmony width (or a per-cell
-                // target override), CLAMPED to the box (no-wrap); capped micro-
-                // spaces backfill the rest. Kashida elongates; Spacing spaces only.
-                var cReach = Math.max(cNatural, colPx - 0.28 * csize * 96 / 72);
-                var cWpos = qMatrix[c.matKey] || cNatural;
-                var cTarget = (cRes.widthPt != null) ? cRes.widthPt * 96 / 72
-                  : AshaarMatrix.naturalFitTarget(cWpos, cReach, cPhi);
-                cTarget = Math.min(cTarget, colPx); // no-wrap invariant
-                var cElong, cAchieved;
-                if (doKashida) {
-                  var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cTarget, cMax);
-                  cElong = cConc.runs[0].text; cAchieved = cConc.achievedPx;
-                } else {
-                  cElong = c.base; cAchieved = cNatural; // spacing: no tatweels
+      // ── Pass 2: JUSTIFY — fill each cell of the fresh tables to its box ────────
+      var changed = 0, coloured = 0;
+      await Word.run(async function (context) {
+        var blocks = await gatherQaseedaBlocks(context, name);
+        if (!blocks.length) return;
+        var cap = await captureQaseedaTables(context, blocks, profile);
+        var canvasCtx = cap.canvasCtx, repName = cap.repName, repSize = cap.repSize, qMatrix = cap.qMatrix;
+        if (!canvasCtx) { summary = "Canvas unavailable; cannot measure."; return; }
+
+        var MICRO_SPACE = " "; // hair space
+        canvasCtx.font = repSize + "pt \"" + repName + "\"";
+        if (canvasCtx.measureText(MICRO_SPACE).width <= 0) MICRO_SPACE = " "; // thin space
+
+        cap.blockInfos.forEach(function (blk) {
+          blk.tableInfos.forEach(function (info) {
+            // Cell box comes from the width we just rebuilt to: cwt = target/GRID.
+            var cwtPx = info.grid > 0 ? (targetTwips / info.grid) * 96 / 1440 : 0;
+            info.cells.forEach(function (c) {
+              if (c.kind === "spacing") {
+                // Decorate (not justify) a structural gap.
+                var pDecor = c.slot ? (profile.spacingDecor || {})[c.slot] : null;
+                var oDecor = c.decorKey ? info.slotDecor[c.decorKey] : null;
+                var decor = AshaarOverrides.resolveSlotDecor(pDecor, oDecor);
+                c.cell.body.clear();
+                if (decor.symbol) {
+                  c.cell.body.insertText(decor.symbol, Word.InsertLocation.replace);
+                  c.cell.body.font.color = decor.color || "black";
                 }
-                var cGaps = cElong.split(" ").length - 1;
-                canvasCtx.font = csize + "pt \"" + fname + "\"";
-                var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
-                var cN = AshaarResidual.capMicroSpaces(cTarget - cAchieved, cGaps, cSpacePx, csize * 96 / 72, cCapEm);
-                justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
+                // shadingColor rejects "" / "No color"; use "#FFFFFF" to clear.
+                c.cell.shadingColor = decor.fill || "#FFFFFF";
+                c.cell.body.paragraphs.getFirst().alignment = Word.Alignment.centered;
+                changed++;
+                return;
               }
-            }
-            if (c.ooxml) {
-              c.cell.body.clear();
-              c.cell.body.insertOoxml(AshaarWord.wrapOoxml(c.ooxml), Word.InsertLocation.replace);
-              changed++;
-            } else if (justified != null && justified !== c.current) {
-              c.cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
-              changed++;
-            }
+              if (!c.base && c.kind !== "content") return;
+              if (!c.base) return;
+              // Fill box = span × cwt − cell margins (the text area we rebuilt to).
+              var colPx = cwtPx > 0
+                ? Math.max(1, (c.gridSpan || 1) * cwtPx - 2 * MARGIN_PX)
+                : Math.max(1, (c.cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
+              var justified = c.base;
+              if (doFill && colPx > 0) {
+                var fname = c.fontName || repName;
+                var csize = c.fontSize || repSize;
+                canvasCtx.font = csize + "pt \"" + fname + "\"";
+                var runOne = [{
+                  text: c.base, fontSize: csize, fontProfile: null,
+                  measure: function (s) { canvasCtx.font = csize + "pt \"" + fname + "\""; return canvasCtx.measureText(s).width; }
+                }];
+                var cNatural = c.natPx != null ? c.natPx : canvasCtx.measureText(c.base).width;
+                var cOv = c.ovKey ? info.overrides[c.ovKey] : null;
+                var cRes = AshaarOverrides.resolveCellOverride({ strength: strength, fillMode: fillMode }, cOv);
+                var cPhi = AshaarWord.strengthToElongationShare(cRes.strength);
+                var cCapEm = cRes.capEm != null ? cRes.capEm : undefined;
+                var cMax = { perPositionEm: 0.5, maxPositions: AshaarWord.strengthToMaxPositions(cRes.strength) };
+                if (fillMode === "cell-fit") {
+                  // Cell-fit: fill to the φ budget; Word's distribute jc spreads the
+                  // residual to the edge. Kashida elongates; Spacing spaces only.
+                  var cBudgetCf = Math.min(colPx, AshaarMatrix.cellFitBudget(cNatural, colPx, cPhi));
+                  var cTextCf = doKashida
+                    ? AshaarJustify.justifyRunsConcentrated(runOne, cBudgetCf, cMax).runs[0].text
+                    : c.base;
+                  c.ooxml = AshaarWord.misraDistributeXml([{ text: cTextCf, csName: fname, sizePt: csize }], csize);
+                  justified = null;
+                } else {
+                  // Natural-fit: fill to the position's harmony width (or per-cell
+                  // override), CLAMPED to the box (no-wrap); micro-spaces backfill.
+                  var cReach = Math.max(cNatural, colPx - 0.28 * csize * 96 / 72);
+                  var cWpos = qMatrix[c.matKey] || cNatural;
+                  var cTarget = (cRes.widthPt != null) ? cRes.widthPt * 96 / 72
+                    : AshaarMatrix.naturalFitTarget(cWpos, cReach, cPhi);
+                  cTarget = Math.min(cTarget, colPx); // no-wrap invariant
+                  var cElong, cAchieved;
+                  if (doKashida) {
+                    var cConc = AshaarJustify.justifyRunsConcentrated(runOne, cTarget, cMax);
+                    cElong = cConc.runs[0].text; cAchieved = cConc.achievedPx;
+                  } else {
+                    cElong = c.base; cAchieved = cNatural; // spacing: no tatweels
+                  }
+                  var cGaps = cElong.split(" ").length - 1;
+                  canvasCtx.font = csize + "pt \"" + fname + "\"";
+                  var cSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
+                  var cN = AshaarResidual.capMicroSpaces(cTarget - cAchieved, cGaps, cSpacePx, csize * 96 / 72, cCapEm);
+                  justified = AshaarWord.distributeMicroSpaces([cElong], cN, MICRO_SPACE)[0];
+                }
+              }
+              if (c.ooxml) {
+                c.cell.body.clear();
+                c.cell.body.insertOoxml(AshaarWord.wrapOoxml(c.ooxml), Word.InsertLocation.replace);
+                changed++;
+              } else if (justified != null && justified !== c.current) {
+                c.cell.body.paragraphs.getFirst().insertText(justified, Word.InsertLocation.replace);
+                changed++;
+              }
+            });
           });
         });
         await context.sync();
 
-        // Debug colouring: tint the tatweels / micro-spaces that justification
-        // inserted, so they're visible. Best-effort via Word search (the spaces
-        // are exact code points; some hosts may not surface them).
+        // Debug colouring: tint inserted tatweels / micro-spaces so they're visible.
         var tatColor = (profile.debugColors && profile.debugColors.tatweel) || "";
         var spcColor = (profile.debugColors && profile.debugColors.space) || "";
-        var coloured = 0;
         if (tatColor || spcColor) {
           var hits = [];
-          tableInfos.forEach(function (info) {
-            info.cells.forEach(function (c) {
-              if (tatColor) { var st = c.cell.body.search("ـ"); st.load("items"); hits.push({ s: st, color: tatColor }); }
-              if (spcColor) {
-                var sh = c.cell.body.search(" "); sh.load("items"); hits.push({ s: sh, color: spcColor });
-                var sn = c.cell.body.search(" "); sn.load("items"); hits.push({ s: sn, color: spcColor });
-              }
+          cap.blockInfos.forEach(function (blk) {
+            blk.tableInfos.forEach(function (info) {
+              info.cells.forEach(function (c) {
+                if (tatColor) { var st = c.cell.body.search("ـ"); st.load("items"); hits.push({ s: st, color: tatColor }); }
+                if (spcColor) {
+                  var sh = c.cell.body.search(" "); sh.load("items"); hits.push({ s: sh, color: spcColor });
+                  var sn = c.cell.body.search(" "); sn.load("items"); hits.push({ s: sn, color: spcColor });
+                }
+              });
             });
           });
           await context.sync();
           hits.forEach(function (h) { h.s.items.forEach(function (r) { r.font.color = h.color; coloured++; }); });
           await context.sync();
         }
-
-        summary = "Applied qaseeda “" + name + "” to " + blocks.length + " block(s); justified " + changed + " cell(s)"
-          + (coloured ? "; coloured " + coloured + " artifact(s)" : "")
-          + (canResize ? "." : " (widths unchanged — desktop Word needed to resize).");
       });
-      // Hybrid refresh: remember that this qaseeda was applied (widths cached lazily next pass).
+
+      summary = "Applied qaseeda “" + name + "” to " + blockCount + " block(s); justified " + changed + " cell(s)"
+        + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + "."
+        + "  ⟨DBG target=" + targetTwips + "tw slot=" + (slotPxDbg || 0).toFixed(1) + "px maxGRID=" + maxGRIDDbg + "⟩";
       if (profile.width.mode === "auto-fit") { profile.derived = profile.derived || {}; await putProfile(profile); }
     } catch (error) {
       summary = "Apply failed: " + describeError(error);
