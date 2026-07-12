@@ -13,7 +13,7 @@
 - **No dependency** on any parked feature — ships standalone.
 - Spec: `docs/superpowers/specs/2026-07-11-bandh-cell-map-design.md` ✅ written.
 
-## Sub-project 2 — Per-cell identity + select-cell → pane editing  *(follow-on)*
+## Sub-project 2 — Per-cell overrides + active-block sync  *(implemented; Tasks 1–4 done, Task 5 manual-verify pending)*
 
 - Stable **per-cell id**; per-cell **overrides** (style variance **and** justification variance) stored on the Ashaar block, keyed by id.
 - The pane **reflects the cell at the cursor** and edits its overrides — this IS the parked "pane reflects the active block's settings" feature.
