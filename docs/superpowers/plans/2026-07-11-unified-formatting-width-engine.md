@@ -79,7 +79,11 @@ Record which happens:
 
 Edit the line below to the observed value, then remove the temp button + handler from `taskpane.html`/`taskpane.js`.
 
-> **SPIKE RESULT (2026-07-11):** `MECHANISM = setWidth` — `TableColumnCollection.setWidth(pt, "SameWidth")` was accepted on a span-based marsiya table and changed the columns. Phase 2 uses the in-place `setWidth` path; **Task 4b (rebuild) is skipped**, and `stanzaGridTwips` is not needed.
+> **SPIKE RESULT (2026-07-11):**
+> - Spike 1 — collection-level `columns.setWidth(pt, "SameWidth")` (all columns one width): **OK**.
+> - Spike 2 — per-column `columns.items[j].setWidth(...)` (each column its own width): **FAIL** — even loading `columns.items` throws `GeneralException: Cannot access individual columns … the table has mixed cell widths`.
+>
+> Therefore per-column in-place resize is impossible on span tables. **`MECHANISM = rebuild`** (Task 4b active) for true per-column widths; collection-level uniform `setWidth` remains available as a lighter option if a uniform-grid approach is chosen. See the design amendment below (uniform-grid vs. rebuild).
 
 - [ ] **Step 4: Commit the removal (no spike code ships)**
 
