@@ -719,12 +719,13 @@
     });
   }
 
-  // Apply a qaseeda's profile across ALL its blocks so they stay consistent:
-  // size every block's table to one shared width (auto-fit to the widest cell
-  // across all blocks with kashida headroom, capped at the page) and re-justify
-  // each cell with the profile's params. Additive — leaves justifySelection
-  // untouched. In-place resize needs WordApiDesktop 1.3; without it, only the
-  // re-justify runs (at current widths).
+  // Per-qaseeda cache (this pane session) of the width signature last applied.
+  // Rebuilding a block's OOXML is destructive (delete + re-insert its content
+  // control) and heavy, so we only do it when the target WIDTH changes. Justify-
+  // only changes (strength, fill mode, per-cell override) keep the same signature
+  // → skip the rebuild and just re-justify the existing (already-sized) tables.
+  var _appliedSizeSig = {};
+
   // Capture a qaseeda's blocks as measured tables ready for width sizing + justify.
   // Loads each block's tables/rows/cells (text + real font), captures plain values
   // (later edits invalidate proxies, so we never re-read body.*), reconstructs each
@@ -876,7 +877,7 @@
     // Both kashida and spacing fill the cell to its box; only "none"/"css" skip.
     var doFill = doKashida || profile.justify.mode === "spacing";
     var summary = "";
-    var blockCount = 0, targetTwips = 0;
+    var blockCount = 0, targetTwips = 0, sizeSig = "";
 
     try {
       // ── Pass 1: SIZE — rebuild each block at one shared target width ───────────
@@ -908,6 +909,18 @@
         // Capped at the page.
         targetTwips = Math.min(cap.pageTwips, Math.round(slotPx * maxGRID * 1440 / 96));
         if (targetTwips <= 0) targetTwips = cap.pageTwips;
+
+        // Width signature: the target + each block's source. If unchanged since the
+        // last apply this session, the tables are already sized correctly — skip
+        // the destructive rebuild and let pass 2 just re-justify. Only a real width
+        // change (mode/pct/text) triggers the rebuild.
+        var srcSig = cap.blockInfos.map(function (b) {
+          var h = 0, s = b.source; for (var i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+          return (h >>> 0).toString(16);
+        }).join(",");
+        sizeSig = targetTwips + "|" + srcSig;
+        var needRebuild = _appliedSizeSig[name] !== sizeSig;
+        if (!needRebuild) return; // pass 2 re-justifies the already-sized tables
 
         // Rebuild LAST block first so earlier blocks' ranges don't shift. Render
         // BARE (justifyMode none) with the block's own structural opts + pinned
@@ -1066,9 +1079,11 @@
         }
       });
 
+      // Remember the width we sized to, so a later justify-only apply (strength,
+      // fill mode, per-cell override) skips the destructive rebuild.
+      if (sizeSig) _appliedSizeSig[name] = sizeSig;
       summary = "Applied qaseeda “" + name + "” to " + blockCount + " block(s); justified " + changed + " cell(s)"
         + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + ".";
-      if (profile.width.mode === "auto-fit") { profile.derived = profile.derived || {}; await putProfile(profile); }
     } catch (error) {
       summary = "Apply failed: " + describeError(error);
     }
