@@ -367,6 +367,18 @@ git commit -m "feat(matrix): different-shape fallback equalizes on total width"
 
 ---
 
+## AMENDMENT (2026-07-11, after spikes) — Option A: scale equal slots
+
+Both spikes ran. Per-column widths are impossible on span tables; only collection-level uniform resize works. The team chose **Option A: uniform grid slots** (the non-uniform *cell* widths come from cells spanning different numbers of equal slots, which uniform scaling preserves). This **supersedes the mechanism in Tasks 3–5 below**:
+
+- **Set widths** via `table.columns.setWidth(slotPt, "SameWidth")` (one slot size for all grid columns). No per-column `items` access (it throws), no rebuild. Task 4b (rebuild) and `stanzaGridTwips` are **dropped**.
+- **Slot sizing** (new pure fn `AshaarMatrix.uniformSlotPx`, Task 1b): let `rawSlot = max over content cells of (natural × (1+headroom)) / span` (the smallest slot that fits every cell). Auto-fit: `slot = min(rawSlot, pagePx / GRID)`. Fixed %: `slot = (pct/100 × pagePx) / GRID`.
+- **Harmony:** same-shape bandhs use the same `GRID` and the same computed `slot` → matching cells (same span) get identical width by construction.
+- **Per-cell targets:** a cell's box = `span × slot`; its natural-fit fill target = `naturalFitTarget(Wpos, box, phi)` where `Wpos = buildMatrix()[key]` (longest natural at that position). Clamp `target ≤ box` (no-wrap).
+- `computeTargetGrid` (Tasks 1–2) stays committed as the Option-B/per-column reference but is **not on the shipped path**; Option A uses `buildMatrix` + `uniformSlotPx`.
+
+Read Tasks 3–5 with this amendment applied.
+
 ## Phase 2 — Apply engine rewrite
 
 ### Task 3: `setTableGridWidths` helper (spike-selected mechanism)

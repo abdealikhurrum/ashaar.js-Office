@@ -124,6 +124,37 @@
     return { sameShape: false, colPx: null, perBandhColPx: scaled, bandhTargets: bt };
   }
 
+  // Option A: the single grid-slot width (px) for the whole qaseeda. Non-uniform
+  // CELL widths come from cells spanning different numbers of these equal slots,
+  // so one slot size preserves the skinny-gap / wide-text layout and harmonizes
+  // same-shape bandhs (same GRID + same slot → matching cells equal).
+  //   rawSlot   = max over content cells of natural×(1+headroom) / span
+  //   auto-fit  = min(rawSlot, pagePx / maxGRID)   — widest bandh fits the page
+  //   fixed     = (pct/100 × pagePx) / maxGRID     — widest bandh = pct of page
+  function uniformSlotPx(bandhs, opts) {
+    bandhs = bandhs || [];
+    opts = opts || {};
+    var pagePx = Number(opts.pagePx) || 0;
+    var headroom = Number(opts.headroom) || 0;
+    var maxGRID = 0;
+    bandhs.forEach(function (b) { maxGRID = Math.max(maxGRID, Number(b.GRID) || 0); });
+    if (maxGRID <= 0) return 0;
+
+    if (opts.mode === "fixed") {
+      return (Number(opts.pct) || 100) / 100 * pagePx / maxGRID;
+    }
+    var rawSlot = 0;
+    bandhs.forEach(function (b) {
+      (b.cells || []).forEach(function (c) {
+        var span = Number(c.span) || 1;
+        var need = (Number(c.natural) || 0) * (1 + headroom) / span;
+        if (need > rawSlot) rawSlot = need;
+      });
+    });
+    var cap = pagePx > 0 ? pagePx / maxGRID : Infinity;
+    return Math.min(rawSlot, cap);
+  }
+
   return {
     positionKey: positionKey,
     isContentCell: isContentCell,
@@ -131,5 +162,6 @@
     naturalFitTarget: naturalFitTarget,
     cellFitBudget: cellFitBudget,
     computeTargetGrid: computeTargetGrid,
+    uniformSlotPx: uniformSlotPx,
   };
 }));

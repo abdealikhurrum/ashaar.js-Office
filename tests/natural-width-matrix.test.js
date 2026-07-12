@@ -126,4 +126,36 @@ console.log("computeTargetGrid OK");
 }
 console.log("computeTargetGrid different-shape OK");
 
+// ── uniformSlotPx: the single grid-slot size (Option A) ──────────────────────
+{
+  // One bandh, GRID 6. A span-3 text cell of natural 180 needs 60/slot.
+  const bandhs = [{ GRID: 6, cells: [{ natural: 180, span: 3 }, { natural: 120, span: 3 }] }];
+  assert.strictEqual(AshaarMatrix.uniformSlotPx(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0 }), 60);
+}
+{
+  // headroom scales the raw need: (180 × 1.2) / 3 = 72.
+  const bandhs = [{ GRID: 6, cells: [{ natural: 180, span: 3 }] }];
+  assert.strictEqual(AshaarMatrix.uniformSlotPx(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0.2 }), 72);
+}
+{
+  // auto-fit caps so the widest bandh fits the page: slot ≤ pagePx / GRID.
+  const bandhs = [{ GRID: 2, cells: [{ natural: 800, span: 1 }] }];
+  assert.strictEqual(AshaarMatrix.uniformSlotPx(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0 }), 500);
+}
+{
+  // fixed %: slot = (pct/100 × pagePx) / GRID, regardless of content.
+  const bandhs = [{ GRID: 2, cells: [{ natural: 100, span: 1 }] }];
+  assert.strictEqual(AshaarMatrix.uniformSlotPx(bandhs, { mode: "fixed", pct: 50, pagePx: 1000 }), 250);
+}
+{
+  // different-shape bandhs share one slot; cap uses the largest GRID.
+  const bandhs = [
+    { GRID: 2, cells: [{ natural: 300, span: 1 }] },
+    { GRID: 4, cells: [{ natural: 300, span: 1 }] },
+  ];
+  // rawSlot=300; cap = pagePx/maxGRID = 1000/4 = 250 → slot 250.
+  assert.strictEqual(AshaarMatrix.uniformSlotPx(bandhs, { mode: "auto-fit", pagePx: 1000, headroom: 0 }), 250);
+}
+console.log("uniformSlotPx OK");
+
 console.log("natural-width-matrix.test.js OK");
