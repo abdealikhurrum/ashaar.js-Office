@@ -281,6 +281,22 @@
     message.textContent = text || "";
   }
 
+  // Office.js collapses many failures into the opaque string "GeneralException".
+  // The useful detail (which API statement threw) lives in error.debugInfo. This
+  // surfaces code + errorLocation to the pane and dumps the full error + debugInfo
+  // to the WebView console (open devtools to see the stack / surrounding statements).
+  function describeError(error) {
+    try { console.error("[ashaar] error:", error, error && error.debugInfo); } catch (e) {}
+    if (!error) return "Unknown error.";
+    var di = error.debugInfo || {};
+    var parts = [];
+    var head = error.message || error.code || String(error);
+    parts.push(head);
+    if (di.code && di.code !== error.message) parts.push("code=" + di.code);
+    if (di.errorLocation) parts.push("at " + di.errorLocation);
+    return parts.join(" — ");
+  }
+
   function setMode(mode) {
     var isTable = mode === "table";
     modeTable.classList.toggle("is-active", isTable);
@@ -355,7 +371,7 @@
       await Word.run(callback);
       setMessage("Done.");
     } catch (error) {
-      setMessage(error && error.message ? error.message : String(error));
+      setMessage(describeError(error));
     }
   }
 
@@ -1015,7 +1031,7 @@
       // Hybrid refresh: remember that this qaseeda was applied (widths cached lazily next pass).
       if (profile.width.mode === "auto-fit") { profile.derived = profile.derived || {}; await putProfile(profile); }
     } catch (error) {
-      summary = "Apply failed: " + (error && error.message ? error.message : String(error));
+      summary = "Apply failed: " + describeError(error);
     }
     setMessage(summary);
   }
@@ -1295,12 +1311,60 @@
       if (!ooxmlBody) { setMessage("No content generated."); return; }
 
       var ooxml = AshaarWord.wrapOoxml(ooxmlBody);
+      var newTag = AshaarWord.contentControlTag(source, opts, AshaarWord.poemCellPatterns(source, opts, Ashaar));
       var selection = context.document.getSelection();
+
+      // In-place re-render (Re-render / word-fill re-render). insertOoxml("Replace")
+      // on a Range that spans an ENTIRE "Ashaar Poem" content control — its boundary
+      // markers plus the poem tables — throws GeneralException. Replace the control's
+      // CONTENT instead (ContentControl.insertOoxml keeps the wrapper), so nothing
+      // crosses the boundary and we don't nest a second control inside the old one.
+      // Fresh inserts and manual "Replace Selection" over plain text fall through
+      // to the original selection-scope insert unchanged.
+      if (replaceSelection) {
+        // Robustly find the enclosing "Ashaar Poem" control. We can't use
+        // parentContentControlOrNullObject: Re-render selects the control's WHOLE
+        // range (boundary markers included), so the selection has no strict parent
+        // control and that lookup returns null (which is why the boundary-crossing
+        // Range.insertOoxml still fired). Intersect each control's range with the
+        // selection instead — the SP2 detection pattern — which matches even when
+        // the selection spans the whole control.
+        var poemCCs = context.document.contentControls;
+        poemCCs.load("items/title");
+        await context.sync();
+        var xs = poemCCs.items.map(function (c) {
+          return { cc: c, hit: c.getRange().intersectWithOrNullObject(selection) };
+        });
+        xs.forEach(function (x) { x.hit.load("isNullObject"); });
+        await context.sync();
+        var poemCC = null;
+        for (var xi = 0; xi < xs.length; xi++) {
+          if (xs[xi].cc.title === "Ashaar Poem" && !xs[xi].hit.isNullObject) { poemCC = xs[xi].cc; break; }
+        }
+        if (poemCC) {
+          // This build also rejects ContentControl.insertOoxml("Replace") with
+          // tables (GeneralException) — replacing INTO a control with block tables
+          // fails at every scope. Only body-scope table insert works (proven by the
+          // End path). So insert the rebuilt poem into the BODY just after the old
+          // control, wrap it in a fresh "Ashaar Poem" control, then delete the old
+          // control and its content. Net effect: the poem is replaced in place.
+          var afterRange = poemCC.getRange("After");
+          var insertedRange = afterRange.insertOoxml(ooxml, Word.InsertLocation.start);
+          var newControl = insertedRange.insertContentControl();
+          newControl.title = "Ashaar Poem";
+          newControl.tag = newTag;
+          newControl.appearance = "BoundingBox";
+          poemCC.delete(false); // remove old control + its content
+          await context.sync();
+          return;
+        }
+      }
+
       var inserted = selection.insertOoxml(ooxml,
         replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
       var control = inserted.insertContentControl();
       control.title = "Ashaar Poem";
-      control.tag = AshaarWord.contentControlTag(source, opts, AshaarWord.poemCellPatterns(source, opts, Ashaar));
+      control.tag = newTag;
       control.appearance = "BoundingBox";
       await context.sync();
     });
