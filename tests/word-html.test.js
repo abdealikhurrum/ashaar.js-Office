@@ -769,4 +769,49 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   assert.strictEqual(AshaarWord.parseContentControlTag(tag).cells, null, "absent cells → null");
 }
 
+// ── cross-check: geometry spans/kinds/cols == the generator's actual <w:tc> ──
+// stanzaCellGeometry must reproduce, per row, the exact <w:gridSpan> values and
+// content/gap kinds baytRowsOoxml emits, with cols running left→right and spans
+// summing to GRID. This locks the apply engine's source-derived geometry to the
+// generator (Word cannot report span-table column geometry).
+{
+  const Ashaar3 = require("../src/vendor/ashaar");
+  const tablesOf = (xml) => xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) || [];
+  const rowsOf = (t) => t.match(/<w:tr>[\s\S]*?<\/w:tr>/g) || [];
+  const cellsOf = (tr) => tr.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || [];
+  const spanOf = (tc) => { const m = tc.match(/<w:gridSpan w:val="(\d+)"\/>/); return m ? Number(m[1]) : 1; };
+  const kindOf = (tc) => (/<w:r[ >]/.test(tc) ? "content" : "spacing");
+
+  const cases = [
+    { src: "دل ناداں \\ آخر اس درد", opts: { layoutMode: "balanced" } },
+    { src: "تنہا مصرعہ |", opts: { layoutMode: "balanced" } },
+    { src: "دل ناداں \\ آخر اس درد", opts: { layoutMode: "stacked" } },
+    { src: "الف \\ ب\n\nج \\ د", opts: { layoutMode: "balanced" } }, // two stanzas
+  ];
+  cases.forEach(function (c, ci) {
+    const body = AshaarWord.renderForWordOoxml(c.src, c.opts, Ashaar3, 9360);
+    const geo = AshaarWord.poemCellGeometry(c.src, c.opts, Ashaar3, 9360);
+    const tbls = tablesOf(body);
+    assert.equal(tbls.length, geo.length, "case " + ci + ": table count == geometry count");
+    tbls.forEach(function (tbl, ti) {
+      const rows = rowsOf(tbl);
+      assert.equal(rows.length, geo[ti].rows.length, "case " + ci + " tbl " + ti + ": row count");
+      rows.forEach(function (tr, ri) {
+        const cells = cellsOf(tr);
+        const gcells = geo[ti].rows[ri];
+        assert.equal(cells.length, gcells.length, "case " + ci + " tbl " + ti + " row " + ri + ": cell count");
+        var colAcc = 0;
+        cells.forEach(function (tc, cj) {
+          assert.equal(spanOf(tc), gcells[cj].span, "case " + ci + " tbl " + ti + " row " + ri + " cell " + cj + ": span");
+          assert.equal(kindOf(tc), gcells[cj].kind, "case " + ci + " tbl " + ti + " row " + ri + " cell " + cj + ": kind");
+          assert.equal(gcells[cj].col, colAcc, "case " + ci + " tbl " + ti + " row " + ri + " cell " + cj + ": col");
+          colAcc += gcells[cj].span;
+        });
+        assert.equal(colAcc, geo[ti].GRID, "case " + ci + " tbl " + ti + " row " + ri + ": spans sum to GRID");
+      });
+    });
+  });
+  console.log("stanzaCellGeometry cross-check OK");
+}
+
 console.log("word-html tests passed");

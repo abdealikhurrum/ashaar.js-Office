@@ -1419,6 +1419,89 @@
     return pats;
   }
 
+  // The grid SPANS + content/gap KIND a bayt contributes, per row — mirrors
+  // baytRowsOoxml's branches (solo → pad/content/pad; K-misra row → content+gap;
+  // stacked → one solo row per misra) but emits geometry instead of OOXML. The
+  // apply engine needs each cell's grid span because Word cannot report column
+  // geometry for span (merged-cell) tables. A cross-check test locks this to the
+  // generator's actual <w:gridSpan> values.
+  function baytCellGeometryRows(bayt, si, opts) {
+    var N = si.N, gapCols = si.gapCols;
+    var stacked = (opts || {}).layoutMode === "stacked";
+
+    function soloCells() {
+      var span = BASE_CPM;
+      var pad = Math.max(0, si.GRID - span);
+      var left = Math.floor(pad / 2), right = pad - left;
+      var out = [];
+      if (left > 0) out.push({ kind: "spacing", span: left });
+      out.push({ kind: "content", span: span });
+      if (right > 0) out.push({ kind: "spacing", span: right });
+      return out;
+    }
+    function misraCells(texts) {
+      var K = texts.length;
+      var kContentCols = si.GRID - (K - 1) * gapCols;
+      var spans = (K === si.N && si.colSpans)
+        ? si.colSpans
+        : misraSpans(texts, kContentCols, (opts || {})._justifyCtx || null);
+      var out = [];
+      for (var i = 0; i < K; i++) {
+        out.push({ kind: "content", span: spans[i] });
+        if (i < K - 1) out.push({ kind: "spacing", span: gapCols });
+      }
+      return out;
+    }
+
+    if (bayt.type === "row") {
+      var misras = bayt.misras || [];
+      var K = misras.length;
+      if (K === 0) return [];
+      if (K === 1) return [soloCells()];
+      if (stacked) return misras.slice(0, N).map(function () { return soloCells(); });
+      return [misraCells(misras.map(function (m) { return m.text; }))];
+    }
+    if (!bayt.ajuz) return [soloCells()];
+    if (stacked) return [soloCells(), soloCells()];
+    return [misraCells([bayt.sadr, bayt.ajuz])];
+  }
+
+  // Per-cell grid geometry for a stanza, in the SAME emission order as
+  // baytRowsOoxml / stanzaCellPattern (so it zips against a live table's
+  // row-major cells and the persisted pattern). Returns
+  //   { GRID, rows: [ [ { kind:"content"|"spacing", col, span } … ] … ] }
+  // where col/span are grid-column coordinates (col = running left→right sum).
+  // textWidthTwips only feeds stanzaGridInfo's cwt (unused here); any positive
+  // value works.
+  function stanzaCellGeometry(stanza, opts, textWidthTwips) {
+    var si = stanzaGridInfo(stanza, opts, textWidthTwips || 9360);
+    si.colSpans = stanzaColSpans(stanza, si, opts);
+    var rows = [];
+    (stanza.bayts || []).forEach(function (bayt) {
+      baytCellGeometryRows(bayt, si, opts).forEach(function (rowCells) {
+        var col = 0;
+        rows.push(rowCells.map(function (c) {
+          var e = { kind: c.kind, col: col, span: c.span };
+          col += c.span;
+          return e;
+        }));
+      });
+    });
+    return { GRID: si.GRID, rows: rows };
+  }
+
+  // Per-stanza geometry for a whole poem source (parallels poemCellPatterns).
+  function poemCellGeometry(text, opts, Ashaar, textWidthTwips) {
+    var poems = parsePoetry(String(text || ""), Ashaar);
+    var out = [];
+    poems.forEach(function (poem) {
+      (poem.stanzas || []).forEach(function (stanza) {
+        out.push(stanzaCellGeometry(stanza, opts, textWidthTwips));
+      });
+    });
+    return out;
+  }
+
   function stanzaTableOoxml(stanza, opts, textWidthTwips) {
     var si = stanzaGridInfo(stanza, opts, textWidthTwips);
     si.colSpans = stanzaColSpans(stanza, si, opts); // shared spans → columns align across rows
@@ -1593,6 +1676,8 @@
     renderForWordOoxml: renderForWordOoxml,
     stanzaCellPattern: stanzaCellPattern,
     poemCellPatterns: poemCellPatterns,
+    stanzaCellGeometry: stanzaCellGeometry,
+    poemCellGeometry: poemCellGeometry,
     runsToMisraXml: runsToMisraXml,
     misraDistributeXml: misraDistributeXml,
     wrapOoxml: wrapOoxml,
