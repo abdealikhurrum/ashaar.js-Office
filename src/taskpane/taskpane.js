@@ -294,6 +294,10 @@
     parts.push(head);
     if (di.code && di.code !== error.message) parts.push("code=" + di.code);
     if (di.errorLocation) parts.push("at " + di.errorLocation);
+    // surroundingStatements pinpoints the API calls around the throw when
+    // errorLocation is an internal resolver (e.g. _GetObjectByReferenceId).
+    var ss = di.surroundingStatements;
+    if (ss && ss.length) parts.push("near: " + ss.join(" | "));
     return parts.join(" — ");
   }
 
@@ -902,9 +906,19 @@
             });
           }
           await context.sync();
-          // Re-read columnWidth on the captured proxies (justifySelection-proven).
+          // Resizing columns invalidates the cell proxies captured above (Word can
+          // recreate the cells), so a later shadingColor / insert on them throws
+          // GeneralException at _GetObjectByReferenceId. Reload the cells and RE-MAP
+          // fresh proxies into tableInfos by position — row-major, matching the
+          // capture order, and cell count is unchanged by a width-only resize.
+          // columnWidth rides the fresh proxies for the width math below.
           tableInfos.forEach(function (info) { info.tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); }); });
           await context.sync();
+          tableInfos.forEach(function (info) {
+            var fresh = [];
+            info.tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) { fresh.push(cell); }); });
+            info.cells.forEach(function (c, i) { if (fresh[i]) c.cell = fresh[i]; });
+          });
         }
 
         // Re-justify every cell with the profile's params (captured values only).
@@ -943,7 +957,12 @@
                 c.cell.body.insertText(decor.symbol, Word.InsertLocation.replace);
                 c.cell.body.font.color = decor.color || "black";
               }
-              try { c.cell.shadingColor = decor.fill || "No color"; } catch (e) {}
+              // shadingColor takes only "#RRGGBB" or a color name — this build
+              // rejects both "No color" and "" (InvalidArgument). Apply the fill
+              // when present, else white to clear any shading a prior apply left
+              // (visually blank on a white page). A try/catch is useless here —
+              // the failure surfaces at context.sync(), outside this block.
+              c.cell.shadingColor = decor.fill || "#FFFFFF";
               c.cell.body.paragraphs.getFirst().alignment = Word.Alignment.centered;
               changed++;
               return;
