@@ -484,6 +484,58 @@
     view.innerHTML = html;
   }
 
+  // ── Active-block / active-cell reflection (SP2) ───────────────────────────
+  var _lastBlockTag = null;          // last-reflected block tag (resync only on change)
+  var _reflectPending = false;       // debounce guard
+  var _reflectBusy = false;          // suppress reflection while our own justify runs
+  var _activeOvKey = null;           // override key of the cell at the cursor (or null)
+
+  // Populate the pane's block-level controls from a parsed tag payload.
+  function syncBlockControls(payload) {
+    if (!payload) return;
+    if (payload.fontMode) fontMode.value = payload.fontMode;
+    if (payload.justifyMode) justifyMode.value = payload.justifyMode;
+    if (justifyFillMode && payload.fillMode) justifyFillMode.value = AshaarProfiles.normalizeFillMode(payload.fillMode);
+    if (payload.tatweelCount != null) { tatweelCount.value = payload.tatweelCount; if (tatweelValue) tatweelValue.textContent = String(payload.tatweelCount); }
+    if (payload.tableWidthPct != null && tableWidth) { tableWidth.value = payload.tableWidthPct; if (tableWidthValue) tableWidthValue.textContent = String(payload.tableWidthPct); }
+    if (payload.qaseeda) { var st = loadProfileStore()[payload.qaseeda]; if (st) profileToPanel(st); }
+  }
+
+  // Reflect the Ashaar block (and the cell, Task 4) at the cursor in the pane.
+  async function reflectActiveContext() {
+    if (typeof Word === "undefined" || _reflectBusy) return;
+    try {
+      await Word.run(async function (context) {
+        var sel = context.document.getSelection();
+        var cc = sel.parentContentControlOrNullObject;
+        cc.load("title,tag");
+        await context.sync();
+        var isBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
+        var payload = isBlock ? AshaarWord.parseContentControlTag(cc.tag) : null;
+        // Resync block-level controls only when the active block changes, so
+        // moving the cursor within a block never clobbers a mid-edit control.
+        if (isBlock && cc.tag !== _lastBlockTag) { _lastBlockTag = cc.tag; syncBlockControls(payload); }
+        if (!isBlock) { _lastBlockTag = null; }
+        await reflectActiveCell(context, sel, cc, isBlock, payload);
+      });
+    } catch (e) { /* selection transient — ignore */ }
+  }
+
+  // Cell-level reflection is filled in by Task 4; a no-op stub keeps the block
+  // sync self-contained until then.
+  async function reflectActiveCell(context, sel, cc, isBlock, payload) {
+    var editor = document.getElementById("cell-override");
+    if (editor) editor.hidden = true;
+    _activeOvKey = null;
+  }
+
+  // Debounced entry point for the DocumentSelectionChanged event.
+  function onSelectionChanged() {
+    if (_reflectPending) return;
+    _reflectPending = true;
+    window.setTimeout(function () { _reflectPending = false; reflectActiveContext(); }, 150);
+  }
+
   // ── Qaseeda apply/refresh engine (P3) ─────────────────────────────────────
   // Find every Ashaar Poem block linked to a qaseeda name.
   async function gatherQaseedaBlocks(context, name) {
@@ -1430,7 +1482,15 @@
     await insertPoem(true);
   }
 
+  // Wrapper: suppress active-context reflection while our own justify mutates
+  // the document/selection, and guarantee the flag resets on every path.
   async function justifySelection() {
+    _reflectBusy = true;
+    try { return await justifySelectionInner(); }
+    finally { _reflectBusy = false; }
+  }
+
+  async function justifySelectionInner() {
     var opts = options();
     var elongShare = AshaarWord.strengthToElongationShare(opts.tatweelCount); // φ ∈ [0,1]
     var fontId = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
@@ -2449,6 +2509,10 @@
     document.getElementById("justify-selection").addEventListener("click", justifySelection);
     var showMapBtn = document.getElementById("show-cell-map");
     if (showMapBtn) showMapBtn.addEventListener("click", showCellMap);
+    if (typeof Office !== "undefined" && Office.context && Office.context.document &&
+        Office.context.document.addHandlerAsync && typeof Word !== "undefined") {
+      Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChanged);
+    }
     document.getElementById("re-render").addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
