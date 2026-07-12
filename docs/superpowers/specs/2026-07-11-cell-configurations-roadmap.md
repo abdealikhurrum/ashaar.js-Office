@@ -22,17 +22,20 @@
 - **Depends on SP1's** label + `cells` map (the per-cell identity).
 - Spec: `docs/superpowers/specs/2026-07-11-per-cell-overrides-design.md` ✅ written *(brainstormed; ready for planning)*.
 
+## Sub-project 3 — Spacing-cell decorations (symbols + fill color)  *(spec written; ready for planning)*
+
+- Put a **symbol** (hemistich / decorative glyph) and a **fill color** (+ symbol text color) into gap cells. Config = **both**: profile default by slot-position + per-slot override on the block tag; reuses SP2's editor/tag-writer/resolve pattern. Anchored on SP1's spacing `slot`.
+- Spec: `docs/superpowers/specs/2026-07-11-spacing-cell-decor-design.md` ✅.
+- **Fast-follow:** auto-numbering (bandh/verse counters in a slot) — own spec (numbering scheme).
+
 ## Backlog — future features (keep on the board)
 
-Requested / raised but deliberately out of SP1's scope. Each becomes its own spec + session when picked up. The SP1 cell-map (content/spacing tag + label + spacing `slot`) is the anchor these hang off.
+Each becomes its own spec + session. The SP1 cell-map (content/spacing tag + label + spacing `slot`) is the anchor these hang off.
 
-- **Special gaps** — turn a spacing cell into a purposed slot:
-  - **Hemistich symbols** (the `*`/refrain marker rendered in a gap).
-  - **Bandh numbers** (stanza numbering in a gap/margin cell).
-  - **Annotations** (notes attached to a gap slot).
-  - **In-gap labels** (showing the cell label on the page — deferred; Word has no clean cell-text overlay).
-- **Block-level roles + styling** — sadr/ajuz/solo/refrain classification; role-based content-cell text color/shade; spacing-cell fill glyphs / dot-leaders / shading. Extends the unused `profile.misraSymbol` / `profile.symbolColor` fields.
-- **Per-cell overrides + select-cell→pane editing** — SP2 below (justification variance + style variance keyed by label; the parked "pane reflects the active block" UI). SP1's read-only pane view is its seed.
+- **Auto-numbering** — bandh/verse counters rendered in a slot (which slot, per-bandh vs global, format `۱ ۲ ۳` / `1.`). SP3's fast-follow.
+- **Annotations** — richer notes attached to a gap slot (beyond a static symbol).
+- **In-gap labels** — showing the cell label on the page (deferred; Word has no clean cell-text overlay).
+- **Block-level roles + content-cell styling** — sadr/ajuz/solo/refrain classification; role-based content-cell text color/shade; multi-glyph rules / dot-leaders. (SP3 covers spacing-cell symbol + fill; content-cell shading and repeated-fill leaders remain here.)
 
 ## Related prior specs
 
