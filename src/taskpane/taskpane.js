@@ -881,8 +881,13 @@
           info.cells.forEach(function (c) {
             if (!AshaarMatrix.isContentCell(c.measure)) return;
             var fnm = c.fontName || repName, fsz = c.fontSize || repSize;
-            canvasCtx.font = fsz + "pt \"" + fnm + "\"";
-            c.natPx = AshaarProfiles.applyFontCorrection(canvasCtx.measureText(c.measure).width, fnm, profile.fontCorrections);
+            // Measure in the BASE face: a re-applied Jameel cell reports the wider
+            // Kasheeda face, which would inflate the harmony width and drift the
+            // target on each apply. wordName maps Kasheeda→base; leaves others.
+            var mfnm = (typeof AshaarFonts !== "undefined" && AshaarFonts.descriptorForFontName)
+              ? (AshaarFonts.descriptorForFontName(fnm).wordName || fnm) : fnm;
+            canvasCtx.font = fsz + "pt \"" + mfnm + "\"";
+            c.natPx = AshaarProfiles.applyFontCorrection(canvasCtx.measureText(c.measure).width, mfnm, profile.fontCorrections);
             qMatrixCells.push({ key: c.matKey, natural: c.natPx });
           });
         });
@@ -1108,17 +1113,53 @@
           var rep0Name = origRuns[0].name, rep0Size = origRuns[0].size;
           function measIn(text, nm, sz) { canvasCtx.font = sz + "pt \"" + nm + "\""; return canvasCtx.measureText(text).width; }
 
-          // No fill (justify none/css) → still re-emit the runs so per-word fonts
-          // are restored after the rebuild.
-          if (!doFill || !(colPx > 0)) {
-            return AshaarWord.misraRunsXml(origRuns.map(function (r) {
-              return { text: r.text, csName: r.name, sizePt: r.size, color: r.color };
-            }), align, rep0Size, { indentTwips: indentTwips });
+          // Regroup consecutive runs of the same FONT FAMILY into segments: both
+          // Jameel faces map to one wordName (so a re-applied Jameel word, read
+          // back with mixed base+Kasheeda faces, regroups into one segment and
+          // re-derives its swap from clean text — idempotent); generic fonts key
+          // on their own name so Amiri ≠ Fatemi. Each segment fills by its family's
+          // mechanism. Natural widths are measured in the BASE face so a widened
+          // Kasheeda read-back doesn't inflate the target on re-apply.
+          function baseFaceOf(name) { return AshaarFonts.descriptorForFontName(name).wordName || name; }
+          var segs = [];
+          origRuns.forEach(function (r) {
+            var d = AshaarFonts.descriptorForFontName(r.name);
+            var fam = d.wordName || r.name;
+            var prev = segs[segs.length - 1];
+            if (prev && prev.fam === fam && prev.size === r.size && prev.color === r.color) {
+              prev.text += " " + r.text;
+            } else {
+              segs.push({ fam: fam, mech: d.mechanism, desc: d, name: r.name, size: r.size, color: r.color, text: r.text });
+            }
+          });
+          var interSpacePx = measIn(" ", baseFaceOf(segs[0].name), segs[0].size);
+
+          // Flatten per-segment output runs, re-inserting the inter-segment space
+          // (in the left segment's base face) that coalescing drops — so words
+          // across a font boundary keep their gap instead of touching.
+          function flattenSegs(segOut) {
+            var out = [];
+            segOut.forEach(function (arr, si) {
+              if (si > 0) out.push({ text: " ", csName: baseFaceOf(segs[si - 1].name), sizePt: segs[si - 1].size, color: undefined });
+              (arr || []).forEach(function (rr) { out.push(rr); });
+            });
+            return out;
           }
 
-          // Shared fill target (a per-cell width override wins). cell-fit → toward
-          // the CELL EDGE; natural-fit → toward the position's HARMONY width.
-          var cNatural = origRuns.reduce(function (a, r) { return a + measIn(r.text, r.name, r.size); }, 0);
+          // No fill (justify none/css) → re-emit each segment's text unchanged
+          // (fonts + inter-segment spaces preserved), no elongation.
+          if (!doFill || !(colPx > 0)) {
+            var passOut = flattenSegs(segs.map(function (seg) {
+              return [{ text: seg.text, csName: baseFaceOf(seg.name), sizePt: seg.size, color: seg.color }];
+            }));
+            return AshaarWord.misraRunsXml(passOut, align, rep0Size, { indentTwips: indentTwips });
+          }
+
+          // Natural width in BASE faces + the inter-segment spaces. Stable on
+          // re-apply. Shared fill target (a per-cell width override wins): cell-fit
+          // → toward the CELL EDGE; natural-fit → toward the position's HARMONY.
+          var cNatural = segs.reduce(function (a, seg) { return a + measIn(seg.text, baseFaceOf(seg.name), seg.size); }, 0)
+            + Math.max(0, segs.length - 1) * interSpacePx;
           var cOv = c.ovKey ? info.overrides[c.ovKey] : null;
           var cRes = AshaarOverrides.resolveCellOverride({ strength: strength, fillMode: fillMode }, cOv);
           var cPhi = AshaarWord.strengthToElongationShare(cRes.strength);
@@ -1134,84 +1175,72 @@
           }
           cTarget = Math.min(cTarget, colPx); // no-wrap invariant
 
-          // Mechanism + family from the REAL per-run fonts. Detect the whole-cell
-          // Jameel/Mehr branches by FAMILY (wordName), not exact face — after an
-          // apply a Jameel cell holds a mix of base + Kasheeda faces, so an
-          // exact-name "uniform" test would fail on re-apply and wrongly route it
-          // to the generic tatweel path (shattering the Nastaliq). Both faces of a
-          // family resolve to the same wordName, so this stays stable on re-apply.
-          var descs = origRuns.map(function (r) { return AshaarFonts.descriptorForFontName(r.name); });
-          var mechs = descs.map(function (d) { return d.mechanism; });
-          var fam0 = descs[0].wordName || rep0Name;
-          var uniformFamily = descs.every(function (d, i) { return (d.wordName || origRuns[i].name) === fam0; });
-          var allSwap = mechs.every(function (m) { return m === "font-swap"; });
-          var allTatweel = mechs.every(function (m) { return m === "tatweel"; });
-          var anyWhitespace = mechs.indexOf("whitespace") !== -1;
-
-          // UNIFORM Jameel: whole-cell fasl swap to the wider Kasheeda face.
-          if (doKashida && allSwap && uniformFamily) {
-            var jd = AshaarFonts.descriptorForFontName(rep0Name);
-            var swBase = jd.wordName || rep0Name, swWide = jd.kasheedaName || swBase;
-            var fss = AshaarKashidaFontswap.splitSpans(c.base);
-            var wb = [], ww = [];
-            fss.forEach(function (s) { wb.push(measIn(s, swBase, rep0Size)); ww.push(measIn(s, swWide, rep0Size)); });
-            var swSel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, cTarget);
-            var swGaps = 0; swSel.runs.forEach(function (r) { if (r.text === " ") swGaps++; });
-            var swSpacePx = measIn(MICRO_SPACE, swBase, rep0Size) || 1;
-            var swN = AshaarResidual.capMicroSpaces(cTarget - swSel.fill * cTarget, swGaps, swSpacePx, rep0Size * 96 / 72, cCapEm);
-            var swRuns = AshaarResidual.injectSpaceRuns(swSel.runs, swN, MICRO_SPACE).map(function (r) {
-              return { text: r.text, csName: r.swap ? swWide : swBase, sizePt: rep0Size, color: origRuns[0].color };
-            });
-            return AshaarWord.misraRunsXml(swRuns, align, rep0Size, { indentTwips: indentTwips });
-          }
-
-          // UNIFORM Mehr: discrete trailing tatweels on eligible word-endings.
-          if (doKashida && allTatweel && uniformFamily) {
-            var md = AshaarFonts.descriptorForFontName(rep0Name);
-            var mBase = md.wordName || rep0Name, mRules = md.tatweelRules || {};
-            var isoSet = {}, finSet = {};
-            (mRules.isolatedInto || []).forEach(function (x) { isoSet[x] = true; });
-            (mRules.finalInto || []).forEach(function (x) { finSet[x] = true; });
-            var mparts = c.base.split(" "), mtoks = [];
-            mparts.forEach(function (wd, i) { if (i) mtoks.push(" "); mtoks.push(wd); });
-            var melong = mtoks.map(function (t) { return t !== " " ? AshaarWord.mehrElongate(t, isoSet, finSet) : t; });
-            var mwb = [], mww = [];
-            for (var mi = 0; mi < mtoks.length; mi++) { mwb.push(measIn(mtoks[mi], mBase, rep0Size)); mww.push(measIn(melong[mi], mBase, rep0Size)); }
-            var mSel = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, cTarget);
-            var mText = mSel.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
-            var mAch = measIn(mText, mBase, rep0Size);
-            var mGaps = mText.split(" ").length - 1;
-            var mSpacePx = measIn(MICRO_SPACE, mBase, rep0Size) || 1;
-            var mN = AshaarResidual.capMicroSpaces(cTarget - mAch, mGaps, mSpacePx, rep0Size * 96 / 72, cCapEm);
-            var mFinal = AshaarWord.distributeMicroSpaces([mText], mN, MICRO_SPACE)[0];
-            return AshaarWord.misraRunsXml([{ text: mFinal, csName: mBase, sizePt: rep0Size, color: origRuns[0].color }], align, rep0Size, { indentTwips: indentTwips });
-          }
-
-          // MIXED / generic / naskh (or any cell with a whitespace-shaping run):
-          // run-aware. Kashida with no whitespace run → concentrated tatweels,
-          // each run measured in its OWN font (naskh runs elongate; Mehr/Jameel
-          // runs keep their font). Otherwise → no tatweels. Capped hair-spaces
-          // close the residual either way. Every run keeps its own cs font.
-          var outTexts, achieved;
-          if (doKashida && !anyWhitespace) {
-            var primRuns = origRuns.map(function (r) {
-              var fstr = r.size + "pt \"" + r.name + "\"";
-              return { text: r.text, fontSize: r.size, fontProfile: null,
+          // Elongate each segment by its OWN mechanism toward a proportional share
+          // of the target; generic segments then absorb the slack the discrete
+          // mechanisms (Jameel swap / Mehr tatweel) leave. Whitespace-shaping
+          // segments never get tatweels. Under a spacing profile nothing elongates
+          // and the capped hair-spaces do all the filling.
+          var extra = Math.max(0, cTarget - cNatural);
+          var segOut = new Array(segs.length);
+          var genericIdx = [];
+          var nonGenAchieved = Math.max(0, segs.length - 1) * interSpacePx; // inter-seg spaces
+          segs.forEach(function (seg, si) {
+            var bf = baseFaceOf(seg.name);
+            var segNat = measIn(seg.text, bf, seg.size);
+            var subTarget = cNatural > 0 ? segNat + extra * (segNat / cNatural) : segNat;
+            if (doKashida && seg.mech === "font-swap") {
+              var jw = seg.desc.kasheedaName || bf;
+              var fss = AshaarKashidaFontswap.splitSpans(seg.text);
+              var wb = [], ww = [];
+              fss.forEach(function (s) { wb.push(measIn(s, bf, seg.size)); ww.push(measIn(s, jw, seg.size)); });
+              var sel = AshaarKashidaFontswap.selectSwapRuns(fss, wb, ww, subTarget);
+              segOut[si] = sel.runs.map(function (rr) { return { text: rr.text, csName: rr.swap ? jw : bf, sizePt: seg.size, color: seg.color }; });
+              nonGenAchieved += fss.reduce(function (a, s, k) { return a + (sel.runs[k].swap ? ww[k] : wb[k]); }, 0);
+            } else if (doKashida && seg.mech === "tatweel") {
+              var mr = seg.desc.tatweelRules || {};
+              var iso = {}, fin = {};
+              (mr.isolatedInto || []).forEach(function (x) { iso[x] = true; });
+              (mr.finalInto || []).forEach(function (x) { fin[x] = true; });
+              var parts = seg.text.split(" "), toks = [];
+              parts.forEach(function (wd, k) { if (k) toks.push(" "); toks.push(wd); });
+              var elong = toks.map(function (t) { return t !== " " ? AshaarWord.mehrElongate(t, iso, fin) : t; });
+              var mwb = [], mww = [];
+              toks.forEach(function (t, k) { mwb.push(measIn(t, bf, seg.size)); mww.push(measIn(elong[k], bf, seg.size)); });
+              var msel = AshaarKashidaFontswap.selectSwapRuns(toks, mwb, mww, subTarget);
+              var mtext = msel.runs.map(function (rr, k) { return (rr.swap && mww[k] > mwb[k]) ? elong[k] : toks[k]; }).join("");
+              segOut[si] = [{ text: mtext, csName: bf, sizePt: seg.size, color: seg.color }];
+              nonGenAchieved += measIn(mtext, bf, seg.size);
+            } else if (!doKashida || seg.mech === "whitespace") {
+              segOut[si] = [{ text: seg.text, csName: bf, sizePt: seg.size, color: seg.color }];
+              nonGenAchieved += segNat;
+            } else {
+              genericIdx.push(si); // generic — elongated jointly below
+            }
+          });
+          if (genericIdx.length) {
+            var primRuns = genericIdx.map(function (si) {
+              var seg = segs[si], fstr = seg.size + "pt \"" + seg.name + "\"";
+              return { text: seg.text, fontSize: seg.size, fontProfile: null,
                 measure: function (s) { canvasCtx.font = fstr; return canvasCtx.measureText(s).width; } };
             });
-            var conc = AshaarJustify.justifyRunsConcentrated(primRuns, cTarget, { perPositionEm: 0.5, maxPositions: cMaxPos });
-            outTexts = conc.runs.map(function (r) { return r.text; });
-            achieved = conc.achievedPx;
-          } else {
-            outTexts = origRuns.map(function (r) { return r.text; });
-            achieved = cNatural;
+            var genNat = primRuns.reduce(function (a, r) { return a + r.measure(r.text); }, 0);
+            var genTarget = Math.max(genNat, cTarget - nonGenAchieved);
+            var conc = AshaarJustify.justifyRunsConcentrated(primRuns, genTarget, { perPositionEm: 0.5, maxPositions: cMaxPos });
+            genericIdx.forEach(function (si, k) {
+              segOut[si] = [{ text: conc.runs[k].text, csName: segs[si].name, sizePt: segs[si].size, color: segs[si].color }];
+            });
           }
-          var totGaps = outTexts.reduce(function (a, t) { return a + (t.split(" ").length - 1); }, 0);
+
+          // Flatten (with inter-segment spaces) and close the residual with capped
+          // hair-spaces across the word gaps.
+          var outRuns = flattenSegs(segOut);
+          var achievedTot = outRuns.reduce(function (a, rr) { return a + measIn(rr.text, rr.csName, rr.sizePt); }, 0);
+          var totGaps = outRuns.reduce(function (a, rr) { return a + (rr.text.split(" ").length - 1); }, 0);
           var spacePx = measIn(MICRO_SPACE, rep0Name, rep0Size) || 1;
-          var nSp = AshaarResidual.capMicroSpaces(cTarget - achieved, totGaps, spacePx, rep0Size * 96 / 72, cCapEm);
-          outTexts = AshaarWord.distributeMicroSpaces(outTexts, nSp, MICRO_SPACE);
-          return AshaarWord.misraRunsXml(outTexts.map(function (t, i) {
-            return { text: t, csName: origRuns[i].name, sizePt: origRuns[i].size, color: origRuns[i].color };
+          var nSp = AshaarResidual.capMicroSpaces(cTarget - achievedTot, totGaps, spacePx, rep0Size * 96 / 72, cCapEm);
+          var outTexts = AshaarWord.distributeMicroSpaces(outRuns.map(function (rr) { return rr.text; }), nSp, MICRO_SPACE);
+          return AshaarWord.misraRunsXml(outRuns.map(function (rr, i) {
+            return { text: outTexts[i], csName: rr.csName, sizePt: rr.sizePt, color: rr.color };
           }), align, rep0Size, { indentTwips: indentTwips });
         }
 
