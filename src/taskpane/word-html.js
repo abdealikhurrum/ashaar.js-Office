@@ -996,12 +996,12 @@
     (words || []).forEach(function (w) {
       var prev = runs[runs.length - 1];
       if (prev && prev.name === w.name && prev.size === w.size &&
-          prev.bold === w.bold && prev.italic === w.italic) {
+          prev.bold === w.bold && prev.italic === w.italic && prev.color === w.color) {
         prev.text += " " + w.text;
         prev.refs.push(w);
       } else {
         runs.push({
-          text: w.text, name: w.name, size: w.size, bold: w.bold, italic: w.italic,
+          text: w.text, name: w.name, size: w.size, bold: w.bold, italic: w.italic, color: w.color,
           refs: [w] // source word objects in order — caller maps these back (e.g. to Word ranges)
         });
       }
@@ -1297,6 +1297,38 @@
         '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
     }).join("");
     return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"distribute\"/></w:pPr>" + body + "</w:p>";
+  }
+
+  // Natural-fit residual for a font-swap / discrete-tatweel / mixed-font misra:
+  // emit the runs with their EXPLICIT per-run cs face (+size +color) and a REAL
+  // jc (right/center/left) — NOT `distribute` (which no-ops on a single line).
+  // The injected hair-spaces do the residual filling and the line keeps its
+  // visual side. Unlike runsToMisraXml, the face is per-run (r.csName) rather
+  // than derived from a pane fontMode — so the apply path can name each cell's
+  // OWN per-word font, which is what lets a mixed-font misra survive a rebuild.
+  //   runs: [{text, csName, sizePt?, color?}]   color = "#RRGGBB" or "RRGGBB"
+  //   opts: { indentTwips? }  paragraph w:ind w:left (stacked-layout ajuz offset)
+  function misraRunsXml(runs, align, sizePtFallback, opts) {
+    opts = opts || {};
+    var jc = align === "right" ? "right" : align === "left" ? "left" : "center";
+    var body = (runs || []).map(function (r) {
+      var sz = r.sizePt || sizePtFallback;
+      var szXml = sz ? '<w:sz w:val="' + Math.round(sz * 2) + '"/><w:szCs w:val="' + Math.round(sz * 2) + '"/>' : "";
+      // Set ascii+hAnsi as WELL as cs. cs alone renders correctly, but Office.js
+      // Font.name reads back the ASCII font, so on a re-apply the captured font
+      // would be the document default (not this run's) and the cell would flatten
+      // to one font — breaking idempotency. Naming all three makes the per-word
+      // font survive a capture → write → capture round-trip.
+      var cs = r.csName
+        ? '<w:rFonts w:ascii="' + r.csName + '" w:hAnsi="' + r.csName + '" w:cs="' + r.csName + '"/>'
+        : "";
+      var col = "";
+      if (r.color && /^#?[0-9a-fA-F]{6}$/.test(r.color)) col = '<w:color w:val="' + r.color.replace(/^#/, "") + '"/>';
+      return "<w:r><w:rPr><w:rtl/>" + col + cs + szXml + "</w:rPr>" +
+        '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
+    }).join("");
+    var ind = opts.indentTwips ? '<w:ind w:left="' + Math.round(opts.indentTwips) + '"/>' : "";
+    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + "</w:pPr>" + body + "</w:p>";
   }
 
   function baytRowsOoxml(bayt, si, opts) {
@@ -1698,6 +1730,7 @@
     poemCellGeometry: poemCellGeometry,
     runsToMisraXml: runsToMisraXml,
     misraDistributeXml: misraDistributeXml,
+    misraRunsXml: misraRunsXml,
     wrapOoxml: wrapOoxml,
     wrapOoxmlControl: wrapOoxmlControl,
     misraSpans: misraSpans,

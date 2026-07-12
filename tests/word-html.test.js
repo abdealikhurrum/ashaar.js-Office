@@ -704,6 +704,61 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   assert.match(xml, /<w:sz w:val="40"\/>/, "per-run 20pt -> 40 half-points");
 }
 
+// ── misraRunsXml: Natural-fit per-run cs faces with a REAL jc ─────────────────
+{
+  const xml = AshaarWord.misraRunsXml(
+    [{ text: "كہہ", csName: "Jameel Noori Nastaleeq Kasheeda" },
+     { text: " ", csName: "Jameel Noori Nastaleeq" },
+     { text: "تھے", csName: "Jameel Noori Nastaleeq" }],
+    "right", 16
+  );
+  // Unlike misraDistributeXml, the jc is the misra's real side — NOT distribute
+  // (which silently no-ops on a single line).
+  assert.match(xml, /<w:jc w:val="right"\/>/, "real jc (right), not distribute");
+  assert.ok(xml.indexOf("distribute") === -1, "never emits distribute");
+  assert.match(xml, /<w:bidi\/>/, "rtl paragraph");
+  assert.match(xml, /<w:rtl\/>/, "rtl runs");
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "wider face on swapped fasl");
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq"') !== -1, "base face on the rest");
+  // ascii+hAnsi named too, so Font.name round-trips on a re-apply (idempotency).
+  assert.ok(xml.indexOf('w:ascii="Jameel Noori Nastaleeq Kasheeda"') !== -1, "ascii set for round-trip read");
+  assert.ok(xml.indexOf('w:hAnsi="Jameel Noori Nastaleeq"') !== -1, "hAnsi set for round-trip read");
+  assert.match(xml, /<w:sz w:val="32"\/>/, "16pt -> 32 half-points from fallback");
+  assert.ok(xml.indexOf("كہہ") !== -1 && xml.indexOf("تھے") !== -1, "carries text");
+  // center/left variants
+  assert.match(AshaarWord.misraRunsXml([{ text: "x", csName: "A" }], "center", 12), /<w:jc w:val="center"\/>/, "center jc");
+  assert.match(AshaarWord.misraRunsXml([{ text: "x", csName: "A" }], "left", 12), /<w:jc w:val="left"\/>/, "left jc");
+  // per-run size override wins over the fallback
+  assert.match(AshaarWord.misraRunsXml([{ text: "x", csName: "A", sizePt: 20 }], "right", 16), /<w:sz w:val="40"\/>/, "per-run 20pt -> 40 half-points");
+  // per-run color (refrain) — emitted without the leading '#'
+  const colored = AshaarWord.misraRunsXml([{ text: "y", csName: "A", color: "#A7352A" }], "right", 16);
+  assert.match(colored, /<w:color w:val="A7352A"\/>/, "per-run color emitted, # stripped");
+  assert.ok(AshaarWord.misraRunsXml([{ text: "y", csName: "A", color: "Automatic" }], "right", 16).indexOf("w:color") === -1, "non-hex color (Automatic) not emitted");
+  // paragraph indent (stacked-layout ajuz offset)
+  assert.match(AshaarWord.misraRunsXml([{ text: "y", csName: "A" }], "right", 16, { indentTwips: 240 }), /<w:ind w:left="240"\/>/, "paragraph indent emitted");
+  assert.ok(AshaarWord.misraRunsXml([{ text: "y", csName: "A" }], "right", 16).indexOf("w:ind") === -1, "no indent when unset");
+  console.log("word-html misraRunsXml tests passed");
+}
+
+// ── coalesceRuns: split on color as well as font/size/style ──────────────────
+{
+  const runs = AshaarWord.coalesceRuns([
+    { text: "a", name: "Mehr", size: 16, bold: false, italic: false, color: undefined },
+    { text: "b", name: "Mehr", size: 16, bold: false, italic: false, color: undefined },
+    { text: "c", name: "Mehr", size: 16, bold: false, italic: false, color: "#A7352A" }
+  ]);
+  assert.equal(runs.length, 2, "same font+size but different color splits into two runs");
+  assert.equal(runs[0].text, "a b", "uncolored words coalesced");
+  assert.equal(runs[1].color, "#A7352A", "colored run carries its color");
+  // Legacy callers that never set color still coalesce as before (undefined === undefined).
+  const legacy = AshaarWord.coalesceRuns([
+    { text: "x", name: "Amiri", size: 14, bold: false, italic: false },
+    { text: "y", name: "Amiri", size: 14, bold: false, italic: false }
+  ]);
+  assert.equal(legacy.length, 1, "no-color words still coalesce");
+  console.log("word-html coalesceRuns color-split tests passed");
+}
+
 // ── cell patterns: mirror the OOXML generator's content/gap cell order ───────
 {
   const Ashaar2 = require("../src/vendor/ashaar");
