@@ -2574,6 +2574,11 @@
     // downgrade here — it forced "document" and every unrecognised font to
     // spacing, which is the regression this restores.
 
+    // Task 9 fix round 1: withWord unconditionally setMessages "Done." after
+    // its callback (see adoptTable's note), which would clobber the gate's
+    // cancel message. Hoisted flag; re-set the message after (last write wins).
+    var plainGateCancelled = false;
+
     await withWord(async function (context) {
       var selection = context.document.getSelection();
 
@@ -2607,7 +2612,7 @@
         // block/cell fonts to gather, so gate on this single face. "cancel"
         // aborts before insertText below — nothing in the document changes.
         var plainGate = await ensureFacesMeasurable(selection.font.name ? [selection.font.name] : []);
-        if (plainGate === "cancel") { setMessage("Add the font, then Apply again."); return; }
+        if (plainGate === "cancel") { plainGateCancelled = true; return; }
         // Resolve the mechanism from the selection's REAL font: true
         // whitespace-shaping fonts (Noto/Gulzar/Scheherazade) shatter under
         // injected tatweels, so downgrade kashida→spacing for them; generic /
@@ -3226,6 +3231,8 @@
       setMessage("Justified " + changed + " cell(s) across " + tables.items.length + " table(s).");
       if (debug) renderDebug(diags);
     });
+    // Re-assert the cancel message AFTER withWord's unconditional "Done.".
+    if (plainGateCancelled) setMessage("Add the font, then Apply again.");
   }
 
   // Adopt an existing Word table of poetry: read its cells, reconstruct the
