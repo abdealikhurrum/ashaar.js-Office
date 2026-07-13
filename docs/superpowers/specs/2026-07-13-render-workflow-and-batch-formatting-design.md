@@ -20,13 +20,18 @@ hampers authors while they are still writing.
 3. Batch formatting: apply cell/gap formatting to "this / this bandh / whole poem".
 4. Cell-level visual formatting (fill + text color), same UX as gap decor minus symbol.
 5. Capture natively-applied Word formatting into the pane → overrides → profile.
-6. Draft-while-writing: justification deferred until an explicit publish step.
+6. Every action's refresh cost is visible before it runs (poem rebuild vs re-justify).
 7. Font recognition is never corrupted by justification artifacts.
 
 ## Non-goals (explicitly deferred)
 
-- **Light-apply** (in-place decor writes with no re-justify) — revisit only if single-poem
-  re-justify still feels slow after this cycle.
+- **Light-apply** (in-place decor writes / per-cell re-justify with no whole-poem pass) —
+  revisit if the cost labels (§6) reveal poem-level refresh is the pain; it is the natural
+  next step after this cycle.
+- **Draft mode** (document-level justification deferral) — cut as YAGNI (review decision
+  2026-07-13). The existing `justifyMode:"none"` setting is the manual draft workflow:
+  write with justification off, switch it on to publish. Revisit only if cost transparency
+  plus Re-render still leave writing-flow pain.
 - **Auto-capture** of native formatting on cursor move — would fight the provenance model.
 - Hemistich markers / glyph styling (the rest of the deferred spacing-cell-styling spec).
 - Borders or any Word formatting outside the modeled schema (fill, text color, symbol).
@@ -53,8 +58,8 @@ Panel footer gains **Re-render** beside Apply, wired to the existing `reRender()
 reconstructs the source from the block's cells (picking up native text edits), preserves
 the representative font and size (picking up native font changes), carries the block's own
 tag payload (profile/local/profileCache — already fixed), embeds the fresh control via
-`wrapOoxmlControl`. Enabled only when the cursor is in a block. In Draft mode (§6) it
-renders unjustified; otherwise it justifies per resolved settings.
+`wrapOoxmlControl`. Enabled only when the cursor is in a block; justifies per resolved
+settings (with `justifyMode:"none"` it rebuilds unjustified — the manual draft workflow).
 
 ## 3. Apply-to-all toggle
 
@@ -87,27 +92,26 @@ poem" → Apply → Update profile.
 
 Capture reads only modeled properties. It never writes; it populates pending.
 
-## 6. Draft mode (write first, publish later)
+## 6. Refresh-cost transparency
 
-**Problem:** justification while writing hampers editing — kashidas/micro-spaces churn on
-every apply, and edited text no longer matches its justification.
+**Problem:** the user cannot tell whether an action will rebuild the poem's tables
+(slow, destructive-and-recreate), re-justify the poem in place (medium), or touch less.
+They can't make workflow choices — e.g. batching edits before one Apply — without that.
 
-**Design:** a document-level **Draft mode** toggle at the top of the panel (persisted in
-`Office.context.document.settings`, key `ashaar:draftMode`, default OFF for existing
-documents).
+**Design:** the footer states the blast radius before the click, computed from the
+pending buffer and scope:
 
-While ON:
-- Inserts and Apply render blocks **unjustified** (engine forces `justifyMode:"none"` at
-  render time; the block's *stored* settings are untouched — the tag keeps the real
-  justifyMode/strength for publish).
-- The panel header shows a persistent "Draft — justification deferred" note so the state
-  is never ambiguous.
-- Re-render (§2) also renders unjustified.
+- Poem scope with structural pending (`gap`, `widthMode`, `widthPct`, `layoutMode`,
+  `colWidthMode`) → "Apply — rebuilds poem tables".
+- Poem scope, non-structural → "Apply — re-justifies poem".
+- Bandh/cell/gap scope → "Apply — re-justifies poem" (v1 honesty: cell/gap applies still
+  re-justify the whole block; if this label makes the cost hurt visible, light-apply is
+  the deferred fix).
+- Re-render button → "Re-render — rebuilds poem tables".
 
-**Publish:** a **Finalize** action (button beside the Draft toggle) turns Draft off and
-re-justifies — scope choice presented as: this poem / all poems in the document. "All"
-iterates every Ashaar block, strip → re-justify per each block's own resolved settings
-(progress message per block; failures reported per block, continue on error).
+Rendered as a small caption under the footer (updates on every `refreshPanel`), plus the
+same text in each button's tooltip. With `justifyMode:"none"` resolved, labels say
+"…unjustified" so the manual draft workflow is self-explanatory.
 
 ## 7. Strip before font determination
 
@@ -135,7 +139,7 @@ with justification artifacts removed or ignored. Concretely:
 | Apply/Re-render descoped to block | `taskpane.js` routing (no schema change) |
 | `overrides[key].fill/color` | tag v3 payload (additive; parse guarantees unchanged) |
 | Apply-target toggle | pane state only (not persisted) |
-| Draft mode | document settings `ashaar:draftMode` |
+| Refresh-cost caption | pane state only (computed per refresh) |
 | Capture | read-only Office.js loads → pending buffer |
 | Strip-before-detect | render/justify pipelines + font-reader filter |
 
@@ -145,23 +149,24 @@ Canonical settings keys are unchanged; no new resolver layers. Tag writes stay b
 ## Error handling
 
 - Batch writes (§3) build the full new tag in memory and write once — no partial tag state.
-- Finalize-all reports per-block failures and continues; summary message at the end.
 - Capture failures (no cell at cursor, API error) message and leave pending untouched.
 - All tag writes on Apply paths stay on `withWordStrict` semantics (failures keep pending).
 
 ## Testing
 
 - Node: override fill/color round-trip through tag parse/setters; batch key enumeration
-  from cell maps; strip-before-detect on synthetic mixed runs; draft-mode render forcing
-  `justifyMode:"none"` while tag settings survive.
+  from cell maps; strip-before-detect on synthetic mixed runs; refresh-cost label
+  computation (pending × scope → label) as a pure function.
 - Browser (Playwright + mocked Office settings): toggle/capture/pending flows.
 - Word (manual checklist addendum): cascade descope (sibling poems untouched), Re-render
   after native text+font edits, batch apply to whole poem, capture→apply→update round
-  trip, Draft mode write→Finalize publish, nastaliq font change no longer produces Arial
+  trip, cost captions match what actually happens, nastaliq font change no longer produces Arial
   words.
 
 ## User expectations (copy, shown in the pane)
 
-- Draft ON: "Draft — justification deferred. Write freely; Finalize when ready to publish."
-- After Finalize: "Finalized N poems (M failed — click into a failed poem and Re-render)."
+- Footer caption examples: "Apply — rebuilds poem tables" / "Apply — re-justifies poem" /
+  "Apply — re-justifies poem (unjustified: Justification is None)".
 - Capture: "Read this cell's formatting into the pane — Apply to persist."
+- Writing workflow note (docs/checklist, not UI): set Justification to None while
+  drafting; switch it back and Apply (or Re-render) to publish.
