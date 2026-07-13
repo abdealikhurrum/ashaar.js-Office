@@ -824,30 +824,13 @@
     } finally { _ovApplyBusy = false; }
   }
 
-  // Save the current decor editor values as the qaseeda profile default for this
-  // slot-position (e.g. every bandh's A#1), then re-apply across all blocks.
-  async function saveSlotDecorToProfile() {
-    if (!_activeSlot || typeof Word === "undefined") return;
-    var qname = "";
-    try {
-      await Word.run(async function (context) {
-        var cc = context.document.getSelection().parentContentControlOrNullObject;
-        cc.load("title,tag");
-        await context.sync();
-        if (!cc.isNullObject && cc.title === "Ashaar Poem") {
-          qname = (AshaarWord.parseContentControlTag(cc.tag) || {}).qaseeda || "";
-        }
-      });
-    } catch (e) { /* ignore */ }
-    if (!qname || !loadProfileStore()[qname]) { setMessage("Assign this block to a saved qaseeda first to set a profile-wide default."); return; }
-    var profile = getProfile(qname);
-    profile.spacingDecor = profile.spacingDecor || {};
-    var d = readDecorEditor();
-    if (d.symbol || d.fill || d.color) profile.spacingDecor[_activeSlot] = d;
-    else delete profile.spacingDecor[_activeSlot];
-    await putProfile(profile);
-    await applyProfileToQaseeda(qname);
-  }
+  // saveSlotDecorToProfile (old id "slot-decor-save-profile") removed here —
+  // it was dead (that id doesn't exist in taskpane.html; the per-cell/per-gap
+  // editors it belonged to were retired in favor of the unified settings
+  // panel, per the comment at reflectActiveCell above). Its body moved to
+  // saveGapDefaultToProfile, wired to the new "sp-gap-default" button (Task 8,
+  // Step 2), reading the sp-gap-* inputs instead of the removed
+  // slot-decor-* editor fields.
 
   // Debounced entry point for the DocumentSelectionChanged event.
   function onSelectionChanged() {
@@ -3578,11 +3561,115 @@
   // Re-justify the block in place (non-structural scopes).
   async function reapplyBlock() { await justifySelection(); }
 
-  async function assignProfile() { setMessage("Apply lands in the next task."); }
-  async function saveAsProfile() { setMessage("Apply lands in the next task."); }
-  async function updateProfile() { setMessage("Apply lands in the next task."); }
-  async function restoreProfileFromPoem() { setMessage("Apply lands in the next task."); }
-  async function revertToProfile() { setMessage("Apply lands in the next task."); }
+  // Assign: link the block to the selected profile; local tweaks survive.
+  async function assignProfile() {
+    var name = document.getElementById("sp-profile").value;
+    await withWord(async function (context) {
+      var cc = await findBlockAt(context);
+      cc.tag = AshaarWord.setTagProfile(cc.tag, name);
+      await context.sync();
+    });
+    if (name) await applyProfileToQaseeda(name);
+    _lastBlockTag = null; await reflectActiveContext();
+    setMessage(name ? "Assigned to \"" + name + "\"." : "Profile link removed.");
+  }
+
+  // Save as…: panel's resolved+pending values → new profile; block assigned;
+  // local cleared (the tweaks just became the profile).
+  async function saveAsProfile() {
+    var name = (prompt("Save current settings as profile:") || "").trim();
+    if (!name) return;
+    var values = panelValues();
+    await putProfile(AshaarProfiles.profileFromSettings(name, values));
+    if (_panel.target && _panel.target.kind === "block") {
+      await withWord(async function (context) {
+        var cc = await findBlockAt(context);
+        var tag = AshaarWord.setTagProfile(cc.tag, name);
+        tag = AshaarWord.setTagLocal(tag, {});
+        tag = AshaarWord.setTagProfileCache(tag, AshaarProfiles.settingsFromProfile(AshaarProfiles.profileFromSettings(name, values)));
+        cc.tag = tag;
+        await context.sync();
+      });
+      await applyProfileToQaseeda(name);
+    }
+    _panel.pending = { set: {}, clear: [] };
+    _lastBlockTag = null; await reflectActiveContext();
+    setMessage("Profile \"" + name + "\" saved.");
+  }
+
+  // Update "name": push panel values into the stored profile; re-apply to all
+  // its blocks (each block's own local map survives via the resolver).
+  async function updateProfile() {
+    var name = _panel.resolved ? _panel.resolved.profileName : "";
+    if (!name) return;
+    await putProfile(AshaarProfiles.profileFromSettings(name, panelValues()));
+    _panel.pending = { set: {}, clear: [] };
+    await applyProfileToQaseeda(name);
+    _lastBlockTag = null; await reflectActiveContext();
+    setMessage("Profile \"" + name + "\" updated — all its poems refreshed.");
+  }
+
+  // Restore a missing profile from the tag's cached snapshot.
+  async function restoreProfileFromPoem() {
+    var t = _panel.target;
+    if (!t || t.kind !== "block" || !t.payload || !t.payload.profileCache) return;
+    var name = t.payload.profile;
+    await putProfile(AshaarProfiles.profileFromSettings(name, t.payload.profileCache));
+    _lastBlockTag = null; await reflectActiveContext();
+    setMessage("Profile \"" + name + "\" restored from this poem.");
+  }
+
+  // Revert to profile / Reset to defaults: clear the whole local map.
+  async function revertToProfile() {
+    _panel.pending = { set: {}, clear: [] };
+    if (_panel.target && _panel.target.kind === "block") {
+      await withWord(async function (context) {
+        var cc = await findBlockAt(context);
+        cc.tag = AshaarWord.setTagLocal(cc.tag, {});
+        await context.sync();
+      });
+      await reRender();     // structure may change (gap/width may fall back)
+      _lastBlockTag = null; await reflectActiveContext();
+    } else {
+      refreshPanel();
+    }
+    setMessage("Reverted.");
+  }
+
+  // Gap body's "Set as default for all bandhs": writes the current sp-gap-*
+  // decoration into the ASSIGNED profile's spacingDecor (explicit-mutation
+  // rule — this button edits the profile, not the block). Adaptation from the
+  // brief: profile.spacingDecor is keyed by the bare slot label (e.g. "A#1" —
+  // see profiles.js defaultProfile() comment and the render-time lookup
+  // `profile.spacingDecor[c.slot]` a few hundred lines up), NOT by
+  // `_panel.target.gapKey`, which is the table-index-prefixed override key
+  // (`AshaarOverrides.overrideKey(tIdx, slot)`, e.g. "0:A#1") used for the
+  // block-tag-level slotDecor override. Storing under gapKey would silently
+  // never resolve at render time (no cell's `c.slot` is ever prefixed). The
+  // bare slot is available as the module-level `_activeSlot`, set in lockstep
+  // with `_panel.target.gapKey` inside reflectActiveCell, so it's still fresh
+  // whenever gapKey is truthy. Kept the old slot-decor-save-profile handler's
+  // shape (profile lookup by assigned name, delete-if-empty else set, save,
+  // re-apply) — only the input source and key changed.
+  async function saveGapDefaultToProfile() {
+    var name = _panel.resolved ? _panel.resolved.profileName : "";
+    if (!name || !_panel.target || _panel.target.kind !== "block" || !_panel.target.gapKey) {
+      setMessage("Assign this poem to a profile first to set a profile-wide default.");
+      return;
+    }
+    var profile = getProfile(name);
+    profile.spacingDecor = profile.spacingDecor || {};
+    var d = {
+      symbol: document.getElementById("sp-gap-symbol").value,
+      fill: document.getElementById("sp-gap-fill-on").checked ? document.getElementById("sp-gap-fill").value : "",
+      color: document.getElementById("sp-gap-color").value,
+    };
+    if (d.symbol || d.fill || d.color) profile.spacingDecor[_activeSlot] = d;
+    else delete profile.spacingDecor[_activeSlot];
+    await putProfile(profile);
+    await applyProfileToQaseeda(name);
+    setMessage("Default gap decoration saved to \"" + name + "\".");
+  }
 
   var isBound = false;
 
@@ -3643,8 +3730,9 @@
     });
     var decorClear = document.getElementById("slot-decor-clear");
     if (decorClear) decorClear.addEventListener("click", function () { applySlotDecor(true); });
-    var decorSaveProfile = document.getElementById("slot-decor-save-profile");
-    if (decorSaveProfile) decorSaveProfile.addEventListener("click", saveSlotDecorToProfile);
+    // "slot-decor-save-profile" listener removed — that id no longer exists in
+    // taskpane.html (see the removal note above saveGapDefaultToProfile);
+    // wired to "sp-gap-default" below instead.
     elOrStub(document.getElementById("re-render")).addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
@@ -3708,6 +3796,8 @@
     document.getElementById("sp-profile-saveas").addEventListener("click", saveAsProfile);
     document.getElementById("sp-profile-update").addEventListener("click", updateProfile);
     document.getElementById("sp-profile-restore").addEventListener("click", restoreProfileFromPoem);
+    var gapDefaultBtn = document.getElementById("sp-gap-default");
+    if (gapDefaultBtn) gapDefaultBtn.addEventListener("click", saveGapDefaultToProfile);
     document.getElementById("adopt-replace-selection").addEventListener("click", function () { insertPoem(true); });
 
     // Custom fonts: register any stored fonts before measurement, wire the UI.
