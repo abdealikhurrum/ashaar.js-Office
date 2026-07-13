@@ -7,35 +7,18 @@
   var modeConvert = document.getElementById("mode-convert");
   var tablePanel = document.getElementById("table-mode-panel");
   var convertPanel = document.getElementById("convert-mode-panel");
-  // TRANSITIONAL (removed in cleanup task): old controls were replaced by the
-  // Settings panel; give dead references an inert element so bind() survives.
-  function elOrStub(el) {
-    return el || { value: "", checked: false, hidden: true, textContent: "",
-      addEventListener: function () {}, appendChild: function () {},
-      style: {}, options: [], innerHTML: "" };
-  }
-  var justifyMode = elOrStub(document.getElementById("justify-mode"));
-  var justifyFillMode = elOrStub(document.getElementById("justify-fill-mode"));
-  var layoutMode = elOrStub(document.getElementById("layout-mode"));
-  var widthMode = elOrStub(document.getElementById("width-mode"));
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
   var layoutPreset = document.getElementById("layout-preset");
   var layoutSpec = document.getElementById("layout-spec");
-  var fontMode = elOrStub(document.getElementById("font-mode"));
-  var tatweelCount = elOrStub(document.getElementById("tatweel-count"));
-  var tatweelValue = elOrStub(document.getElementById("tatweel-value"));
-  var gapWidth = elOrStub(document.getElementById("gap-width"));
-  var tableWidth = elOrStub(document.getElementById("table-width"));
-  var tableWidthValue = elOrStub(document.getElementById("table-width-value"));
-  var autoFitWidth = elOrStub(document.getElementById("auto-fit-width"));
 
-  // Table width as a fraction of the page text column (centred). 100% = full width.
-  function tableWidthPct() {
-    return Math.max(25, Math.min(100, Number((tableWidth && tableWidth.value) || 50)));
-  }
-  function scaledTextWidth(twips) {
-    return Math.max(1, Math.round(twips * tableWidthPct() / 100));
+  // Table width as a fraction of the page text column (centred). 100% = full
+  // width. pct comes from the caller's resolved opts.tableWidthPct (the
+  // Settings panel's widthMode/widthPct, via options()) — there is no
+  // standalone table-width DOM control anymore.
+  function scaledTextWidth(twips, pct) {
+    var clampedPct = Math.max(25, Math.min(100, Number(pct || 50)));
+    return Math.max(1, Math.round(twips * clampedPct / 100));
   }
 
   // Smallest table width (twips) that fits the widest misra in each column at the
@@ -79,22 +62,6 @@
   var layoutViewNumbersBtn = document.getElementById("layout-view-numbers");
   var debugMode = document.getElementById("debug-mode");
   var debugOutput = document.getElementById("debug-output");
-  var qaseedaName = elOrStub(document.getElementById("qaseeda-name"));
-  var qaseedaNames = elOrStub(document.getElementById("qaseeda-names"));
-  var qaseedaWidthMode = elOrStub(document.getElementById("qaseeda-width-mode"));
-  var qaseedaWidthPct = elOrStub(document.getElementById("qaseeda-width-pct"));
-  var qaseedaJustifyMode = elOrStub(document.getElementById("qaseeda-justify-mode"));
-  var qaseedaFillMode = elOrStub(document.getElementById("qaseeda-fill-mode"));
-  var qaseedaMisraWidth = elOrStub(document.getElementById("qaseeda-misra-width"));
-  var qaseedaStrength = elOrStub(document.getElementById("qaseeda-strength"));
-  var qaseedaStrengthValue = elOrStub(document.getElementById("qaseeda-strength-value"));
-  var qaseedaCorrFont = elOrStub(document.getElementById("qaseeda-corr-font"));
-  var qaseedaCorrFactor = elOrStub(document.getElementById("qaseeda-corr-factor"));
-  var qaseedaDebugTatweel = elOrStub(document.getElementById("qaseeda-debug-tatweel"));
-  var qaseedaDebugTatweelOn = elOrStub(document.getElementById("qaseeda-debug-tatweel-on"));
-  var qaseedaDebugSpace = elOrStub(document.getElementById("qaseeda-debug-space"));
-  var qaseedaDebugSpaceOn = elOrStub(document.getElementById("qaseeda-debug-space-on"));
-  var qaseedaFontStatus = elOrStub(document.getElementById("qaseeda-font-status"));
 
   // Format collected per-cell justification metrics into the Debug panel.
   function renderDebug(diags) {
@@ -249,8 +216,8 @@
   // Thin adapter over the Settings panel: every insert/justify/re-render path
   // still calls options() for its knobs, so this is the ONE place the panel's
   // resolved+pending values (panelValues()) reach the rest of the file. Table
-  // Input-only fields (bandhCount, layoutSpec, qaseeda) still read their own
-  // (non-panel) controls directly — the panel governs poem justify/layout/width.
+  // Input-only fields (bandhCount, layoutSpec) still read their own (non-panel)
+  // controls directly — the panel governs poem justify/layout/width.
   function options() {
     var v = panelValues();
     return {
@@ -270,7 +237,6 @@
       gapWidth: Number(v.gap != null ? v.gap : 4),
       tableWidthPct: v.widthMode === "fixed" ? Number(v.widthPct || 50) : 100,
       autoFitWidth: v.widthMode !== "fixed",
-      qaseeda: (qaseedaName && qaseedaName.value ? qaseedaName.value.trim() : ""),
       // v3 tag fields for fresh inserts. When the panel is focused on an
       // EXISTING block, its pending/profile belong to that block — a fresh
       // insert must not inherit them (cross-block leak).
@@ -283,18 +249,6 @@
     var mode = font === "nastaliq" ? "noto" : font;
     var css = AshaarFonts.cssFamilyOf(mode);
     return css || "\"Times New Roman\", serif";
-  }
-
-  function updateFontNote() {
-    var d = AshaarFonts.get(fontMode.value === "nastaliq" ? "noto" : fontMode.value);
-    var note = document.getElementById("font-install-note");
-    if (!note) return;
-    if (d && d.readerNote) {
-      note.hidden = false;
-      note.textContent = (d.id === "jameel")
-        ? "Readers need “Jameel Noori Nastaleeq” (Regular + Kasheeda) installed to see this correctly."
-        : "Readers need “" + d.wordName + "” installed to see this correctly.";
-    } else { note.hidden = true; }
   }
 
   function setMessage(text) {
@@ -336,8 +290,6 @@
 
   function renderPreview() {
     var opts = options();
-    tatweelValue.textContent = String(opts.tatweelCount);
-    if (tableWidthValue) tableWidthValue.textContent = String(opts.tableWidthPct);
     preview.className = "ashaar preview";
     // Mirror the chosen table width: a narrower, centred preview previews the insert.
     preview.style.maxWidth = opts.autoFitWidth ? "100%" : (opts.tableWidthPct + "%");
@@ -451,25 +403,7 @@
     return Object.keys(loadProfileStore());
   }
 
-  // Assign (or clear, with "") a qaseeda name onto the Ashaar Poem block at the cursor.
-  async function setQaseedaOnSelection(name) {
-    var done = false;
-    await withWord(async function (context) {
-      var cc = context.document.getSelection().parentContentControlOrNullObject;
-      cc.load("title,tag");
-      await context.sync();
-      if (cc.isNullObject || cc.title !== "Ashaar Poem") {
-        setMessage("Place the cursor inside an Ashaar Poem block first.");
-        return;
-      }
-      cc.tag = AshaarWord.setTagQaseeda(cc.tag, name);
-      await context.sync();
-      done = true;
-    });
-    return done;
-  }
-
-  // Read the qaseeda name on the Ashaar Poem block at the cursor ("" if none).
+  // Read the profile name assigned to the Ashaar Poem block at the cursor ("" if none).
   async function getQaseedaAtSelection() {
     var qaseeda = "";
     if (typeof Word === "undefined") return qaseeda;
@@ -480,7 +414,7 @@
         await context.sync();
         if (!cc.isNullObject && cc.title === "Ashaar Poem") {
           var payload = AshaarWord.parseContentControlTag(cc.tag);
-          qaseeda = (payload && payload.qaseeda) || "";
+          qaseeda = (payload && payload.profile) || "";
         }
       });
     } catch (e) { /* leave qaseeda empty */ }
@@ -694,144 +628,6 @@
     }
   }
 
-  function populateCellEditor(label, ov) {
-    ov = ov || {};
-    var lbl = elOrStub(document.getElementById("cell-override-label"));
-    if (lbl) lbl.textContent = label || "";
-    elOrStub(document.getElementById("cell-ov-strength")).value = (ov.strength != null) ? ov.strength : "";
-    elOrStub(document.getElementById("cell-ov-width")).value = (ov.widthPt != null) ? ov.widthPt : "";
-    elOrStub(document.getElementById("cell-ov-cap")).value = (ov.capEm != null) ? ov.capEm : "";
-  }
-
-  function readCellEditor() {
-    function num(id) { var v = elOrStub(document.getElementById(id)).value; return v === "" ? null : Number(v); }
-    var ov = {};
-    var s = num("cell-ov-strength"); if (s != null) ov.strength = Math.max(1, Math.min(10, s));
-    var w = num("cell-ov-width"); if (w != null) ov.widthPt = w;
-    var c = num("cell-ov-cap"); if (c != null) ov.capEm = c;
-    return ov;
-  }
-
-  // Write the editor state to the active cell's override on the block tag, then
-  // re-render. A qaseeda-managed block re-applies its PROFILE (that's the
-  // pipeline that consumes overrides and owns these tables — the in-place
-  // justify is a different engine and fights it); only an unmanaged block falls
-  // back to the in-place path. Guarded against re-entry: overlapping applies
-  // run concurrent Word.runs mutating the same cells (GeneralException / crash).
-  var _ovApplyBusy = false;
-  async function applyCellOverride(clear) {
-    if (!_activeOvKey || typeof Word === "undefined") return;
-    if (_ovApplyBusy) { setMessage("Still applying the previous change…"); return; }
-    _ovApplyBusy = true;
-    var ov = clear ? null : readCellEditor();
-    var qname = "";
-    _reflectBusy = true;
-    try {
-      await Word.run(async function (context) {
-        var cc = context.document.getSelection().parentContentControlOrNullObject;
-        cc.load("title,tag");
-        await context.sync();
-        if (cc.isNullObject || cc.title !== "Ashaar Poem") return;
-        cc.tag = AshaarWord.setTagOverride(cc.tag, _activeOvKey, ov);
-        await context.sync();
-        _lastBlockTag = cc.tag;
-        qname = (AshaarWord.parseContentControlTag(cc.tag) || {}).qaseeda || "";
-      });
-    } catch (e) { /* ignore */ } finally { _reflectBusy = false; }
-    if (clear) {
-      var lbl = elOrStub(document.getElementById("cell-override-label"));
-      populateCellEditor(lbl ? lbl.textContent : "", null);
-    }
-    try {
-      if (qname && loadProfileStore()[qname]) await applyProfileToQaseeda(qname);
-      else await justifySelection();
-    } finally { _ovApplyBusy = false; }
-  }
-
-  // Write the bandh-level misra width (pt) to the active block's tag, then
-  // re-apply through the qaseeda pipeline. Same guard + routing rationale as
-  // applyCellOverride.
-  async function applyBandhWidth(clear) {
-    if (typeof Word === "undefined") return;
-    if (_ovApplyBusy) { setMessage("Still applying the previous change…"); return; }
-    _ovApplyBusy = true;
-    var bw = elOrStub(document.getElementById("bandh-ov-width"));
-    var v = null;
-    if (!clear && bw && bw.value !== "") v = Math.max(1, Number(bw.value));
-    var qname = "";
-    _reflectBusy = true;
-    try {
-      await Word.run(async function (context) {
-        var cc = context.document.getSelection().parentContentControlOrNullObject;
-        cc.load("title,tag");
-        await context.sync();
-        if (cc.isNullObject || cc.title !== "Ashaar Poem") return;
-        cc.tag = AshaarWord.setTagBandhWidth(cc.tag, v);
-        await context.sync();
-        _lastBlockTag = cc.tag;
-        qname = (AshaarWord.parseContentControlTag(cc.tag) || {}).qaseeda || "";
-      });
-    } catch (e) { /* ignore */ } finally { _reflectBusy = false; }
-    if (clear && bw) bw.value = "";
-    try {
-      if (qname && loadProfileStore()[qname]) await applyProfileToQaseeda(qname);
-      else setMessage("Bandh width saved — apply a qaseeda to this block to render it.");
-    } finally { _ovApplyBusy = false; }
-  }
-
-  function hexToWord(v) { return (v || "").replace(/^#/, ""); }
-  function populateDecorEditor(slot, d) {
-    d = d || {};
-    var lbl = elOrStub(document.getElementById("slot-decor-label")); if (lbl) lbl.textContent = slot || "";
-    elOrStub(document.getElementById("slot-decor-symbol")).value = d.symbol || "";
-    elOrStub(document.getElementById("slot-decor-fill-on")).checked = !!d.fill;
-    if (d.fill) elOrStub(document.getElementById("slot-decor-fill")).value = "#" + d.fill;
-    if (d.color) elOrStub(document.getElementById("slot-decor-color")).value = "#" + d.color;
-  }
-  function readDecorEditor() {
-    var d = {};
-    var sym = elOrStub(document.getElementById("slot-decor-symbol")).value;
-    if (sym) d.symbol = sym;
-    if (elOrStub(document.getElementById("slot-decor-fill-on")).checked) d.fill = hexToWord(elOrStub(document.getElementById("slot-decor-fill")).value);
-    if (sym) d.color = hexToWord(elOrStub(document.getElementById("slot-decor-color")).value);
-    return d;
-  }
-  // Write the editor state to the active gap's per-slot decoration on the block
-  // tag, then re-decorate via the qaseeda apply pass (needs a saved qaseeda).
-  async function applySlotDecor(clear) {
-    if (!_activeDecorKey || typeof Word === "undefined") return;
-    if (_ovApplyBusy) { setMessage("Still applying the previous change…"); return; }
-    _ovApplyBusy = true;
-    var d = clear ? null : readDecorEditor();
-    _reflectBusy = true;
-    var qname = "";
-    try {
-      await Word.run(async function (context) {
-        var cc = context.document.getSelection().parentContentControlOrNullObject;
-        cc.load("title,tag");
-        await context.sync();
-        if (cc.isNullObject || cc.title !== "Ashaar Poem") return;
-        cc.tag = AshaarWord.setTagSlotDecor(cc.tag, _activeDecorKey, d);
-        await context.sync();
-        _lastBlockTag = cc.tag;
-        qname = (AshaarWord.parseContentControlTag(cc.tag) || {}).qaseeda || "";
-      });
-    } catch (e) { /* ignore */ } finally { _reflectBusy = false; }
-    if (clear) populateDecorEditor(elOrStub(document.getElementById("slot-decor-label")).textContent, null);
-    try {
-      if (qname && loadProfileStore()[qname]) await applyProfileToQaseeda(qname);
-      else setMessage("Gap decoration saved — apply a qaseeda to this block to render it.");
-    } finally { _ovApplyBusy = false; }
-  }
-
-  // saveSlotDecorToProfile (old id "slot-decor-save-profile") removed here —
-  // it was dead (that id doesn't exist in taskpane.html; the per-cell/per-gap
-  // editors it belonged to were retired in favor of the unified settings
-  // panel, per the comment at reflectActiveCell above). Its body moved to
-  // saveGapDefaultToProfile, wired to the new "sp-gap-default" button (Task 8,
-  // Step 2), reading the sp-gap-* inputs instead of the removed
-  // slot-decor-* editor fields.
-
   // Debounced entry point for the DocumentSelectionChanged event.
   function onSelectionChanged() {
     if (_reflectPending) return;
@@ -848,7 +644,7 @@
     return ccs.items.filter(function (cc) {
       if (cc.title !== "Ashaar Poem") return false;
       var p = AshaarWord.parseContentControlTag(cc.tag);
-      return !!(name && p && p.qaseeda === name);
+      return !!(name && p && p.profile === name);
     });
   }
 
@@ -1765,105 +1561,6 @@
     setMessage(summary);
   }
 
-  // ── Qaseeda panel ↔ profile (P4 UI) ───────────────────────────────────────
-  function panelToProfile() {
-    var p = AshaarProfiles.defaultProfile((qaseedaName.value || "").trim());
-    p.width.mode = qaseedaWidthMode.value;
-    p.width.pct = Number(qaseedaWidthPct.value || 50);
-    p.justify.mode = qaseedaJustifyMode.value;
-    p.justify.fillMode = (qaseedaFillMode && qaseedaFillMode.value) || "natural-fit";
-    p.justify.strength = Number(qaseedaStrength.value || 0);
-    var qmw = qaseedaMisraWidth ? qaseedaMisraWidth.value : "";
-    p.justify.widthPt = qmw === "" ? null : Math.max(1, Number(qmw));
-    var corrFont = (qaseedaCorrFont.value || "").trim();
-    p.fontCorrections = {};
-    if (corrFont) p.fontCorrections[corrFont] = Number(qaseedaCorrFactor.value || 1);
-    p.debugColors = {
-      tatweel: (qaseedaDebugTatweelOn && qaseedaDebugTatweelOn.checked) ? (qaseedaDebugTatweel.value || "") : "",
-      space: (qaseedaDebugSpaceOn && qaseedaDebugSpaceOn.checked) ? (qaseedaDebugSpace.value || "") : ""
-    };
-    return AshaarProfiles.normalizeProfile(p);
-  }
-
-  function profileToPanel(profile) {
-    var p = AshaarProfiles.normalizeProfile(profile || {});
-    qaseedaWidthMode.value = p.width.mode;
-    qaseedaWidthPct.value = p.width.pct;
-    qaseedaJustifyMode.value = p.justify.mode;
-    if (qaseedaFillMode) qaseedaFillMode.value = AshaarProfiles.normalizeFillMode(p.justify.fillMode);
-    if (qaseedaMisraWidth) qaseedaMisraWidth.value = (p.justify.widthPt != null) ? p.justify.widthPt : "";
-    var strength = AshaarProfiles.normalizeStrength(p.justify.strength);
-    qaseedaStrength.value = strength;
-    qaseedaStrengthValue.textContent = strength;
-    var fonts = Object.keys(p.fontCorrections || {});
-    qaseedaCorrFont.value = fonts[0] || "";
-    qaseedaCorrFactor.value = fonts[0] ? p.fontCorrections[fonts[0]] : 1;
-    var dc = p.debugColors || {};
-    if (qaseedaDebugTatweelOn) qaseedaDebugTatweelOn.checked = !!dc.tatweel;
-    if (dc.tatweel) qaseedaDebugTatweel.value = dc.tatweel;
-    if (qaseedaDebugSpaceOn) qaseedaDebugSpaceOn.checked = !!dc.space;
-    if (dc.space) qaseedaDebugSpace.value = dc.space;
-  }
-
-  function populateQaseedaNames() {
-    if (!qaseedaNames) return;
-    var names = listProfileNames();
-    qaseedaNames.innerHTML = names.map(function (n) {
-      return "<option value=\"" + String(n).replace(/"/g, "&quot;") + "\">";
-    }).join("");
-  }
-
-  function loadQaseedaIntoPanel() {
-    var name = (qaseedaName.value || "").trim();
-    if (!name) return;
-    var store = loadProfileStore();
-    if (store[name]) profileToPanel(store[name]);
-  }
-
-  async function saveAndApplyQaseeda() {
-    var p = panelToProfile();
-    if (!p.name) { setMessage("Name the qaseeda first."); return; }
-    await putProfile(p);
-    populateQaseedaNames();
-    await applyProfileToQaseeda(p.name);
-  }
-
-  async function assignBlockToQaseeda() {
-    var name = (qaseedaName.value || "").trim();
-    if (!name) { setMessage("Name the qaseeda first."); return; }
-    if (!loadProfileStore()[name]) await putProfile(panelToProfile());
-    await setQaseedaOnSelection(name);
-    populateQaseedaNames();
-  }
-
-  function setQaseedaFontStatus(text, kind) {
-    if (!qaseedaFontStatus) return;
-    qaseedaFontStatus.textContent = text;
-    qaseedaFontStatus.className = "qaseeda-font-status" + (kind === "ok" ? " is-ok" : kind === "warn" ? " is-warn" : "");
-  }
-
-  // Check whether the font of the block/selection at the cursor resolves in the
-  // WebView; if not, justify metrics for it are only approximate.
-  async function checkQaseedaFont() {
-    if (typeof Word === "undefined") { setQaseedaFontStatus("Open in Word to check.", "warn"); return; }
-    var fontName = "";
-    try {
-      await Word.run(async function (context) {
-        var sel = context.document.getSelection();
-        var cc = sel.parentContentControlOrNullObject;
-        cc.load("title");
-        await context.sync();
-        var range = (!cc.isNullObject && cc.title === "Ashaar Poem") ? cc.getRange() : sel;
-        range.font.load("name");
-        await context.sync();
-        fontName = range.font.name || "";
-      });
-    } catch (e) { /* ignore */ }
-    if (!fontName) { setQaseedaFontStatus("No font found at the cursor.", "warn"); return; }
-    if (document.fonts && document.fonts.load) { try { await document.fonts.load("16pt \"" + fontName + "\""); } catch (e) {} }
-    if (fontAvailable(fontName)) setQaseedaFontStatus("“" + fontName + "” resolves — metrics are accurate.", "ok");
-    else setQaseedaFontStatus("“" + fontName + "” is NOT resolvable here — metrics are approximate. Add its font file under Custom fonts.", "warn");
-  }
 
   // ── Custom fonts (AshaarFontStore) ─────────────────────────────────────────
   // Let the user load a font from their machine so the justify canvas measures
@@ -2071,7 +1768,7 @@
       if (opts.autoFitWidth) {
         textWidthTwips = Math.min(pageTwips, neededTwips);
       } else {
-        textWidthTwips = scaledTextWidth(pageTwips);
+        textWidthTwips = scaledTextWidth(pageTwips, opts.tableWidthPct);
         // Never render narrower than needed to avoid misra word-wrap — floor at
         // the needed width (still capped at the page width), even when the user
         // hasn't enabled Auto-fit. A wider user preference is still honored.
@@ -2181,7 +1878,7 @@
         if (!tmplG.rows.length) { setMessage("Draw at least one row of bubbles in the grid."); return; }
         var countG = Math.max(1, Math.min(20, Number(opts.bandhCount || 1)));
         var bodyG = [];
-        var twGs = scaledTextWidth(twG);
+        var twGs = scaledTextWidth(twG, opts.tableWidthPct);
         for (var bi = 0; bi < countG; bi++) bodyG.push(AshaarWord.templateToOoxml(tmplG, twGs, opts));
         var selG = context.document.getSelection();
         var insG = selG.insertOoxml(AshaarWord.wrapOoxml(bodyG.join("<w:p/>")), Word.InsertLocation.end);
@@ -2208,7 +1905,7 @@
         var textWidthTwips = pl && pl.width
           ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
           : 9360;
-        var scaled = scaledTextWidth(textWidthTwips);
+        var scaled = scaledTextWidth(textWidthTwips, opts.tableWidthPct);
         var ooxmlBody = tables.map(function (t) {
           return t.spanBased
             ? AshaarWord.templateToOoxml(t, scaled, opts)
@@ -3354,6 +3051,7 @@
 
   async function insertBareGrid() {
     await withWord(async function (context) {
+      var opts = options();
       var section = context.document.sections.getFirst();
       section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
       await context.sync();
@@ -3361,12 +3059,12 @@
       var textWidthTwips = pl && pl.width
         ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
         : 9360;
-      var ooxml = AshaarWord.wrapOoxml(AshaarWord.generateBareGrid12Ooxml(scaledTextWidth(textWidthTwips)));
+      var ooxml = AshaarWord.wrapOoxml(AshaarWord.generateBareGrid12Ooxml(scaledTextWidth(textWidthTwips, opts.tableWidthPct)));
       var selection = context.document.getSelection();
       var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
       var control = inserted.insertContentControl();
       control.title = "Ashaar Poem";
-      control.tag = AshaarWord.contentControlTag("grid12", options());
+      control.tag = AshaarWord.contentControlTag("grid12", opts);
       control.appearance = "BoundingBox";
       await context.sync();
       setMessage("12-column grid inserted. Merge cells in Word, then Capture as a template.");
@@ -3407,15 +3105,15 @@
       });
 
       var id = String(Date.now());
+      var v = panelValues();
       var template = {
         id: id,
         name: name,
         columnCount: GRID,
         rows: rows,
-        fontMode: fontMode.value,
-        justifyMode: justifyMode.value,
-        tatweelCount: Number(tatweelCount.value || 0),
-        gapWidth: Number(gapWidth.value || 4)
+        justifyMode: v.justifyMode,
+        tatweelCount: Number(v.strength || 6),
+        gapWidth: Number(v.gap != null ? v.gap : 4)
       };
 
       var templates = loadTemplates();
@@ -3453,7 +3151,7 @@
         : 9360;
 
       var opts = options();
-      var ooxml = AshaarWord.wrapOoxml(AshaarWord.templateToOoxml(tmpl, scaledTextWidth(textWidthTwips), opts));
+      var ooxml = AshaarWord.wrapOoxml(AshaarWord.templateToOoxml(tmpl, scaledTextWidth(textWidthTwips, opts.tableWidthPct), opts));
       var selection = context.document.getSelection();
       var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
       var control = inserted.insertContentControl();
@@ -3526,9 +3224,7 @@
     reader.readAsText(file);
   }
 
-  // Settings-panel action handlers — stubbed here so bind() can wire the
-  // buttons now; Tasks 7-8 replace these bodies with the real Apply/Profile
-  // pipelines.
+  // Settings-panel action handlers (Apply/Profile pipelines, Tasks 7-8).
   // One Apply: route by target and scope. Writes deltas to the owning tag
   // slot, then re-renders/justifies. Pending clears only on success.
   async function applyPanel() {
@@ -3813,27 +3509,10 @@
   function bind() {
     if (isBound) return;
     isBound = true;
-    (function populateFontModes() {
-      var order = ["document", "arabic-serif", "noto", "mehr", "jameel", "gulzar"];
-      fontMode.innerHTML = "";
-      order.forEach(function (id) {
-        var d = AshaarFonts.get(id);
-        if (!d) return;
-        var o = document.createElement("option");
-        o.value = id; o.textContent = d.label;
-        if (id === "document") o.selected = true;
-        fontMode.appendChild(o);
-      });
-    })();
-    autoFitWidth.addEventListener("change", function () {
-      tableWidth.disabled = autoFitWidth.checked;
-      renderPreview();
-    });
-    [input, justifyMode, layoutMode, widthMode, bandhCount, misraCount, layoutPreset, layoutSpec, fontMode, tatweelCount, gapWidth, tableWidth, autoFitWidth].forEach(function (el) {
+    [input, bandhCount, misraCount, layoutPreset, layoutSpec].forEach(function (el) {
       el.addEventListener("input", renderPreview);
       el.addEventListener("change", renderPreview);
     });
-    fontMode.addEventListener("change", updateFontNote);
     layoutPreset.addEventListener("change", applyLayoutPreset);
     misraCount.addEventListener("change", applyLayoutPreset);
     modeTable.addEventListener("click", function () { setMode("table"); });
@@ -3842,35 +3521,17 @@
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
     document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
-    elOrStub(document.getElementById("justify-selection")).addEventListener("click", justifySelection);
+    // "justify-selection" / "re-render" / cell-ov / bandh-ov / slot-decor /
+    // qaseeda-panel button bindings removed here — those controls no longer
+    // exist in taskpane.html (retired for the unified Settings panel). The
+    // functions they called (justifySelection, reRender) are still very much
+    // alive: the panel's "Apply" button (sp-apply, below) calls them.
     var showMapBtn = document.getElementById("show-cell-map");
     if (showMapBtn) showMapBtn.addEventListener("click", showCellMap);
     if (typeof Office !== "undefined" && Office.context && Office.context.document &&
         Office.context.document.addHandlerAsync && typeof Word !== "undefined") {
       Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChanged);
     }
-    // Cell overrides apply on an EXPLICIT button, never on input change: each
-    // apply is a full document pass, and change events fire per field — two
-    // quick edits ran overlapping Word.runs doing clear()+insertOoxml on the
-    // same cells (GeneralException, and once took Word down with it).
-    var ovApply = document.getElementById("cell-ov-apply");
-    if (ovApply) ovApply.addEventListener("click", function () { applyCellOverride(false); });
-    var ovClear = document.getElementById("cell-ov-clear");
-    if (ovClear) ovClear.addEventListener("click", function () { applyCellOverride(true); });
-    var bandhApply = document.getElementById("bandh-ov-apply");
-    if (bandhApply) bandhApply.addEventListener("click", function () { applyBandhWidth(false); });
-    var bandhClear = document.getElementById("bandh-ov-clear");
-    if (bandhClear) bandhClear.addEventListener("click", function () { applyBandhWidth(true); });
-    ["slot-decor-symbol", "slot-decor-fill", "slot-decor-color", "slot-decor-fill-on"].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.addEventListener("change", function () { applySlotDecor(false); });
-    });
-    var decorClear = document.getElementById("slot-decor-clear");
-    if (decorClear) decorClear.addEventListener("click", function () { applySlotDecor(true); });
-    // "slot-decor-save-profile" listener removed — that id no longer exists in
-    // taskpane.html (see the removal note above saveGapDefaultToProfile);
-    // wired to "sp-gap-default" below instead.
-    elOrStub(document.getElementById("re-render")).addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
     // Import-options (separator flexibility): auto-normalize on paste; manual overrides.
@@ -3893,12 +3554,6 @@
     document.getElementById("export-templates").addEventListener("click", exportTemplates);
     document.getElementById("import-templates").addEventListener("click", importTemplates);
     importFileInput.addEventListener("change", onImportFile);
-    // Qaseeda profile panel
-    qaseedaStrength.addEventListener("input", function () { qaseedaStrengthValue.textContent = qaseedaStrength.value; });
-    qaseedaName.addEventListener("change", loadQaseedaIntoPanel);
-    elOrStub(document.getElementById("qaseeda-assign")).addEventListener("click", assignBlockToQaseeda);
-    elOrStub(document.getElementById("qaseeda-apply")).addEventListener("click", saveAndApplyQaseeda);
-    elOrStub(document.getElementById("qaseeda-font-check")).addEventListener("click", checkQaseedaFont);
 
     // Settings panel: every data-key control feeds the pending buffer.
     // (:not(.sp-src) — the provenance dots share data-key with their controls
@@ -3949,10 +3604,8 @@
 
     applyLayoutPreset();
     renderPreview();
-    updateFontNote();
     setMode("table");
     renderTemplateList();
-    populateQaseedaNames();
     refreshPanel(); // initial render: no active block yet → "Selection", defaults
   }
 

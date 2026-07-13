@@ -914,8 +914,7 @@
   // Returns null for empty/non-ashaar/malformed tags. Guarantees a v3 shape
   // (profile string, local object, profileCache object|null) for BOTH v2 and
   // v3 tags, migrating v2 tags at read time (the document is not touched
-  // until the next write re-encodes as v3). `qaseeda` is kept as a
-  // deprecated alias of `profile` so untouched call sites keep working.
+  // until the next write re-encodes as v3).
   function parseContentControlTag(tag) {
     if (typeof tag !== "string" || tag.indexOf("ashaar:") !== 0) return null;
     try {
@@ -927,8 +926,9 @@
       payload.runFonts = (payload.runFonts && typeof payload.runFonts === "object") ? payload.runFonts : null;
       payload.widthPt = (typeof payload.widthPt === "number" && payload.widthPt > 0) ? payload.widthPt : null;
       // v2 → v3 read-time migration: stored preferences become local deltas
-      // (canonical keys), qaseeda becomes profile, fontMode is dropped. The
-      // document is not touched until the next write re-encodes as v3.
+      // (canonical keys), the v2 `qaseeda` field becomes `profile`, fontMode
+      // is dropped. The document is not touched until the next write
+      // re-encodes as v3.
       if (payload.v !== 3) {
         var local = {};
         if (payload.justifyMode != null) local.justifyMode = payload.justifyMode;
@@ -943,12 +943,11 @@
         payload.v = 3;
         delete payload.justifyMode; delete payload.tatweelCount; delete payload.gapWidth;
         delete payload.tableWidthPct; delete payload.layoutMode; delete payload.widthMode;
-        delete payload.fillMode; delete payload.fontMode;
+        delete payload.fillMode; delete payload.fontMode; delete payload.qaseeda;
       }
       if (typeof payload.profile !== "string") payload.profile = "";
       payload.local = (payload.local && typeof payload.local === "object") ? payload.local : {};
       payload.profileCache = (payload.profileCache && typeof payload.profileCache === "object") ? payload.profileCache : null;
-      payload.qaseeda = payload.profile; // deprecated alias, removed in cleanup task
       return payload;
     } catch (e) {
       return null;
@@ -961,12 +960,8 @@
     var payload = parseContentControlTag(tag);
     if (!payload) return tag;
     payload.profile = name || "";
-    payload.qaseeda = payload.profile;
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
-
-  // Deprecated alias (v2 name) — remove with the cleanup task.
-  function setTagQaseeda(tag, name) { return setTagProfile(tag, name); }
 
   // Return a copy of an "ashaar:" tag with the local delta map REPLACED.
   // Callers compute the full new map (delete-by-omission).
@@ -1878,7 +1873,6 @@
     tableColumns: tableColumns,
     contentControlTag: contentControlTag,
     parseContentControlTag: parseContentControlTag,
-    setTagQaseeda: setTagQaseeda,
     setTagProfile: setTagProfile,
     setTagLocal: setTagLocal,
     setTagProfileCache: setTagProfileCache,

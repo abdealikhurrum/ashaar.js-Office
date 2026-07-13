@@ -89,16 +89,30 @@ Paste poetry text → renderPreview() (live Ashaar.js render in taskpane)
   → "Replace Selection"    → insertPoem(true) replaces selected Word text
 ```
 
-**Justify Selected Text:**
+**Settings Panel → Apply:**
 ```
-Click inside an Ashaar Poem content control → "Justify Selected Text"
-  → justifySelection()
-  → AshaarTune.probeFont() → FontProfile (quality scores per character pair)
-  → Finds enclosing "Ashaar Poem" content control; gathers ALL cell texts as one corpus
-  → AshaarTune.calibrate({texts, containerWidth: avgColPx, mode: "poetry"})
-    → hill-climb optimises {targetFill, fontQualityBoost} for this poem's text + font
-  → AshaarJustify.justifyLine(text, colPx, ctx, calibParams, fontProfile) per cell
-  → cell.body.insertText() — replaces only cell content, never the table structure
+Click inside an Ashaar Poem block (or on plain text) → onSelectionChanged()
+  → reflectActiveContext() → AshaarProfiles.resolveSettings({payload, profileStore, scope})
+    → resolved values (profile → local overrides → cell/bandh/gap scope)
+  → settings-panel.js (AshaarPanel) — the pure panel-state module: panelStateFor()
+    builds the render state (chips, provenance dots, footer) from resolved + pending;
+    mergePending()/pendingToLocal() manage the in-pane pending-edit buffer (nothing
+    written to the document until Apply)
+  → user edits a field → pending buffer updated → refreshPanel() re-renders
+  → "Apply" → applyPanel() routes by target + scope:
+      plain selection            → justifySelection() (one-shot; nothing persisted)
+      poem/bandh/cell/gap scope  → font-measurability gate (ensureFacesMeasurable,
+                                    ok/continue/cancel — cancel keeps pending for retry)
+                                 → tag write (setTagBandhWidth / setTagOverride /
+                                    setTagSlotDecor, or the poem-scope rebuild path)
+                                 → reRender() or justifySelection() re-renders in place
+  → tag payload is v3: {profile, local, profileCache, cells, overrides, slotDecor, ...}
+    profile = assigned profile name; local = this scope's override deltas;
+    profileCache = last-applied profile snapshot (used to detect drift/local edits).
+    v2 tags (pre-panel documents) migrate to v3 read-time in parseContentControlTag().
+  → justifySelection() itself still drives AshaarTune.probeFont()/calibrate() and
+    AshaarJustify.justifyLine() per cell, as before — the panel only changed how its
+    inputs (justifyMode/strength/gap/width/etc.) are gathered and applied.
 ```
 
 ### Poetry Input Format

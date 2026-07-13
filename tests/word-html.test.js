@@ -413,15 +413,6 @@ assert.equal(
   AshaarWord.parseContentControlTag(tagQ).profile, "Karbala",
   "tag carries and parses the profile name"
 );
-assert.equal(
-  AshaarWord.parseContentControlTag(tagQ).qaseeda, "Karbala",
-  "qaseeda alias mirrors the profile name"
-);
-const tagNoQ = "ashaar:" + encodeURIComponent(JSON.stringify({ k: "ashaar-poem", v: 1 }));
-assert.equal(
-  AshaarWord.parseContentControlTag(tagNoQ).qaseeda, "",
-  "qaseeda defaults to empty when absent from the payload"
-);
 // parseContentControlTag tolerates non-ashaar / malformed tags
 assert.equal(AshaarWord.parseContentControlTag(""), null, "empty tag => null");
 assert.equal(AshaarWord.parseContentControlTag("not-ashaar"), null, "non-ashaar tag => null");
@@ -440,10 +431,6 @@ assert.equal(parsedSet.profile, "New", "setTagProfile updates the profile name")
 assert.equal(parsedSet.local.widthPct, 60, "setTagProfile preserves other payload fields");
 assert.equal(AshaarWord.setTagProfile("not-ashaar", "X"), "not-ashaar", "non-ashaar tag returned unchanged");
 assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagProfile(tagBase, "")).profile, "", "clearing the name yields empty string");
-
-// setTagQaseeda alias still works and writes `profile`
-const tagSetAlias = AshaarWord.setTagQaseeda(tagBase, "New");
-assert.equal(AshaarWord.parseContentControlTag(tagSetAlias).profile, "New", "setTagQaseeda alias updates profile");
 
 // ── coalesceRuns ────────────────────────────────────────────────────────────
 {
@@ -867,12 +854,13 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   assert.strictEqual(lrec[0].name, J, "legacy pack heals mixed name");
   assert.strictEqual(lrec[0].bold, false, "legacy pack: ambiguous bold defaults off");
 
-  // Tag round-trip.
+  // Tag round-trip. The raw payload uses the v2 `qaseeda` field name (no `v`,
+  // so it migrates); the migrated shape exposes it as `profile`.
   const tag0 = "ashaar:" + encodeURIComponent(JSON.stringify({ qaseeda: "q1" }));
   const tag1 = AshaarWord.setTagRunFonts(tag0, { "0:0": [[2, J, 16]] });
   const payload = AshaarWord.parseContentControlTag(tag1);
   assert.deepStrictEqual(payload.runFonts, { "0:0": [[2, J, 16]] }, "runFonts survive the tag round-trip");
-  assert.strictEqual(payload.qaseeda, "q1", "other payload fields preserved");
+  assert.strictEqual(payload.profile, "q1", "other payload fields preserved (migrated qaseeda -> profile)");
   assert.strictEqual(AshaarWord.parseContentControlTag(tag0).runFonts, null, "absent runFonts normalize to null");
   assert.strictEqual(AshaarWord.setTagRunFonts("not-ashaar", {}), "not-ashaar", "non-ashaar tag unchanged");
   console.log("word-html runFonts tag persistence tests passed");
@@ -883,7 +871,7 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   const tag0 = "ashaar:" + encodeURIComponent(JSON.stringify({ qaseeda: "q1" }));
   const tag1 = AshaarWord.setTagBandhWidth(tag0, 120);
   assert.strictEqual(AshaarWord.parseContentControlTag(tag1).widthPt, 120, "bandh width stored");
-  assert.strictEqual(AshaarWord.parseContentControlTag(tag1).qaseeda, "q1", "other fields preserved");
+  assert.strictEqual(AshaarWord.parseContentControlTag(tag1).profile, "q1", "other fields preserved (migrated qaseeda -> profile)");
   const tag2 = AshaarWord.setTagBandhWidth(tag1, null);
   assert.strictEqual(AshaarWord.parseContentControlTag(tag2).widthPt, null, "null clears the width");
   assert.strictEqual(AshaarWord.parseContentControlTag(tag0).widthPt, null, "absent widthPt normalizes to null");
@@ -1023,7 +1011,7 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
 // ── wrapOoxmlControl: block-level SDT wraps the whole body ───────────────────
 {
   const body = AshaarWord.renderForWordOoxml("الف \\ ب", { layoutMode: "balanced" }, require("../src/vendor/ashaar"), 9360);
-  const tag = AshaarWord.contentControlTag("الف \\ ب", { qaseeda: "Karbala" }, null);
+  const tag = AshaarWord.contentControlTag("الف \\ ب", { profile: "Karbala" }, null);
   const pkg = AshaarWord.wrapOoxmlControl(body, "Ashaar Poem", tag);
   assert.match(pkg, /<w:sdt>/, "emits an SDT");
   assert.match(pkg, /<w:alias w:val="Ashaar Poem"\/>/, "alias = title");
@@ -1059,7 +1047,6 @@ console.log("word-html tests passed");
   assert.deepEqual(p.profileCache, { gap: 6 });
   assert.equal(p.misraPattern, "paired");
   assert.equal(p.misraCount, 4);
-  assert.equal(p.qaseeda, "Karbala", "deprecated alias mirrors profile");
 }
 
 // Writer defaults: no profile/local → empty string / empty object.
@@ -1127,10 +1114,6 @@ console.log("word-html tests passed");
   assert.deepEqual(AshaarWord.parseContentControlTag(t3).profileCache, { gap: 6, strength: 3 });
   const t4 = AshaarWord.setTagProfileCache(t3, null);
   assert.equal(AshaarWord.parseContentControlTag(t4).profileCache, null);
-
-  // setTagQaseeda alias still works and writes `profile`.
-  const t5 = AshaarWord.setTagQaseeda(t4, "Alias");
-  assert.equal(AshaarWord.parseContentControlTag(t5).profile, "Alias");
 }
 
 // Existing setters (override/slot-decor/bandh-width/run-fonts) still work on
