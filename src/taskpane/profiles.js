@@ -29,6 +29,8 @@
       gap: 4,
       misraSymbol: "",
       symbolColor: "",
+      lineHeightPt: null,                          // min line box (atLeast) in pt; null = Word auto
+      separatorPt: 1,                              // inter-table separator paragraph height (pt)
       debugColors: { tatweel: "", space: "" },
       spacingDecor: {},                            // { "<slot>": { symbol, fill, color } }
       fontCorrections: {},                         // { <fontName>: factor }
@@ -45,7 +47,7 @@
     var out = {};
     var b = base || {};
     var p = partial || {};
-    var keys = ["name", "gap", "misraSymbol", "symbolColor"];
+    var keys = ["name", "gap", "misraSymbol", "symbolColor", "lineHeightPt", "separatorPt"];
     keys.forEach(function (k) { out[k] = (k in p) ? p[k] : b[k]; });
     var nested = ["width", "justify", "debugColors", "fontCorrections", "derived", "spacingDecor"];
     nested.forEach(function (k) {
@@ -134,6 +136,8 @@
       layoutMode: "balanced",     // "balanced"|"equal"|"compact"|"stacked"|"auto"
       colWidthMode: "optimized",  // "optimized" | "fixed" (column-width strategy)
       capEm: 0.28,                // residual spacing cap (cell scope)
+      lineHeightPt: null,         // min line box (atLeast) in pt; null = Word auto
+      separatorPt: 1,             // inter-table separator paragraph height (pt)
       fontCorrections: {},
       debugColors: { tatweel: "", space: "" },
     };
@@ -154,6 +158,8 @@
     if (p.justify.widthPt != null) out.misraWidthPt = p.justify.widthPt;
     if (p.fontCorrections && Object.keys(p.fontCorrections).length) out.fontCorrections = p.fontCorrections;
     if (p.debugColors && (p.debugColors.tatweel || p.debugColors.space)) out.debugColors = p.debugColors;
+    if (p.lineHeightPt !== undefined) out.lineHeightPt = p.lineHeightPt;
+    if (p.separatorPt != null) out.separatorPt = Number(p.separatorPt);
     return out;
   }
 
@@ -170,6 +176,8 @@
     if (v.widthPct != null) p.width.pct = Number(v.widthPct);
     if (v.fontCorrections) p.fontCorrections = v.fontCorrections;
     if (v.debugColors) p.debugColors = v.debugColors;
+    if (v.lineHeightPt !== undefined) p.lineHeightPt = v.lineHeightPt;
+    if (v.separatorPt != null) p.separatorPt = Number(v.separatorPt);
     return p;
   }
 

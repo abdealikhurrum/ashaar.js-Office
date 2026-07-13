@@ -182,4 +182,26 @@ const {
   assert.equal(r.inherited.gap, 6, "what gap falls back to on clear");
 }
 
+// ── §9 vertical rhythm keys ──────────────────────────────────────────────────
+{
+  const d = defaultSettings();
+  assert.strictEqual(d.lineHeightPt, null, "line height defaults to Word auto");
+  assert.strictEqual(d.separatorPt, 1, "separator defaults to 1pt");
+
+  const values = Object.assign(defaultSettings(), { lineHeightPt: 24, separatorPt: 6 });
+  const p = profileFromSettings("V", values);
+  assert.strictEqual(p.lineHeightPt, 24);
+  assert.strictEqual(p.separatorPt, 6);
+  const back = settingsFromProfile(p);
+  assert.strictEqual(back.lineHeightPt, 24);
+  assert.strictEqual(back.separatorPt, 6);
+
+  // Layer through the resolver like any canonical key.
+  const store = { V: p };
+  const r = resolveSettings({ payload: { profile: "V", local: { separatorPt: 2 } }, profileStore: store, scope: { level: "poem" } });
+  assert.strictEqual(r.values.lineHeightPt, 24, "profile layer");
+  assert.strictEqual(r.values.separatorPt, 2, "local wins");
+  assert.strictEqual(r.inherited.separatorPt, 6, "inherited = profile layer");
+}
+
 console.log("profiles-resolve tests passed");
