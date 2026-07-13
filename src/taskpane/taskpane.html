@@ -134,6 +134,8 @@
             <input id="sp-cell-width" data-key="misraWidthPt" type="number" min="1" placeholder="inherit"></div>
           <div class="field"><label for="sp-cell-cap">Cap lift (em) <span class="sp-src" data-key="capEm"></span></label>
             <input id="sp-cell-cap" data-key="capEm" type="number" min="0" step="0.01" placeholder="0.28"></div>
+          <div class="field"><label>Apply to</label>
+            <select id="sp-cell-target"><option value="this" selected>This cell</option><option value="bandh">This bandh</option><option value="poem">Whole poem</option></select></div>
         </div>
 
         <div id="sp-body-gap" class="sp-body" hidden>
@@ -144,6 +146,8 @@
             <label class="adopt-check"><input type="checkbox" id="sp-gap-fill-on"> on</label></div>
           <div class="field"><label for="sp-gap-color">Symbol color</label>
             <input id="sp-gap-color" type="color" value="#a7352a"></div>
+          <div class="field"><label>Apply to</label>
+            <select id="sp-gap-target"><option value="this" selected>This gap</option><option value="bandh">This bandh</option><option value="poem">Whole poem</option></select></div>
           <button id="sp-gap-default" type="button" class="button--secondary">Set as default for all bandhs</button>
         </div>
 
@@ -341,8 +345,8 @@
           "../vendor/ashaar-autotune.js",
           "./profiles.js",
           "./natural-width-matrix.js",
-          "./bandh-cell-map.js",
           "./cell-overrides.js",
+          "./bandh-cell-map.js",
           "./fonts.js",
           "./kashida-fontswap.js",
           "./kashida-residual.js",

@@ -3461,9 +3461,17 @@
       } else if (_panel.scopeLevel === "cell") {
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
-          cc.tag = AshaarWord.setTagOverride(cc.tag, target.cellLabel, {
+          var override = {
             strength: dirtyOrNull("strength"), widthPt: dirtyOrNull("misraWidthPt"), capEm: dirtyOrNull("capEm"),
-          });
+          };
+          var keys = cellTargetKeys(cc.tag, "content", target.cellLabel, "sp-cell-target");
+          // Setters compose: feed each returned tag into the next call. ⟲-cleared
+          // fields are already null via dirtyOrNull — an all-null override deletes
+          // that key's entry (setTagOverride), so nulls must fan out to every
+          // targeted key too, not just the current one.
+          var newTag = cc.tag;
+          keys.forEach(function (k) { newTag = AshaarWord.setTagOverride(newTag, k, override); });
+          cc.tag = newTag;
           await context.sync();
         });
         if (run) run.phase("tag write");
@@ -3473,11 +3481,15 @@
       } else if (_panel.scopeLevel === "gap") {
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
-          cc.tag = AshaarWord.setTagSlotDecor(cc.tag, target.gapKey, {
+          var decor = {
             symbol: document.getElementById("sp-gap-symbol").value,
             fill: document.getElementById("sp-gap-fill-on").checked ? document.getElementById("sp-gap-fill").value : "",
             color: document.getElementById("sp-gap-color").value,
-          });
+          };
+          var keys = cellTargetKeys(cc.tag, "spacing", target.gapKey, "sp-gap-target");
+          var newTag = cc.tag;
+          keys.forEach(function (k) { newTag = AshaarWord.setTagSlotDecor(newTag, k, decor); });
+          cc.tag = newTag;
           await context.sync();
         });
         if (run) run.phase("tag write");
@@ -3530,6 +3542,22 @@
     if (_panel.pending.clear.indexOf(key) !== -1) return null;
     return (key in _panel.pending.set) ? _panel.pending.set[key]
       : (_panel.resolved && _panel.resolved.source[key] === "cell" ? _panel.resolved.values[key] : null);
+  }
+
+  // Task 10: fan the current override/decor key out to "this"/"bandh"/"poem"
+  // per the panel's Apply-to selector, via AshaarCellMap.keysForTarget — the
+  // SAME key scheme reflectActiveCell used to derive currentKey in the first
+  // place (AshaarOverrides.overrideKey(tableIndex, label|slot)). Reads
+  // payload.cells fresh off the live tag (not the closed-over target.payload)
+  // so it can't drift from what's about to be written.
+  function cellTargetKeys(liveTag, kind, currentKey, selectId) {
+    var payload = AshaarWord.parseContentControlTag(liveTag) || {};
+    var tables = payload.cells || [];
+    var tableIndex = parseInt(String(currentKey).split(":")[0], 10) || 0;
+    var map = AshaarCellMap.buildBandhCellMap(tables[tableIndex]);
+    var sel = document.getElementById(selectId);
+    var mode = (sel && sel.value) || "this";
+    return AshaarCellMap.keysForTarget(map, kind, mode, currentKey, tables);
   }
 
   // Locate the enclosing Ashaar Poem control at the cursor (throws if none).

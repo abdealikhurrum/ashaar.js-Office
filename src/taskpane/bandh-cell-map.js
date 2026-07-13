@@ -13,9 +13,12 @@
  * See docs/superpowers/specs/2026-07-11-bandh-cell-map-design.md.
  */
 (function (root, factory) {
-  if (typeof module !== "undefined" && module.exports) module.exports = factory();
-  else root.AshaarCellMap = factory();
-}(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = factory(require("./cell-overrides"));
+  } else {
+    root.AshaarCellMap = factory(root.AshaarOverrides);
+  }
+}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarOverrides) {
   "use strict";
 
   var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -53,8 +56,53 @@
     return true;
   }
 
+  // A cell-map entry's override/decor key, in the SAME scheme reflectActiveCell
+  // uses at the cursor: content → overrideKey(tableIndex, label); spacing →
+  // overrideKey(tableIndex, slot).
+  function keyForEntry(tableIndex, entry) {
+    return AshaarOverrides.overrideKey(tableIndex, entry.kind === "content" ? entry.label : entry.slot);
+  }
+
+  // Fan one Apply out to the keys it targets. `map` is the current table's cell
+  // map (buildBandhCellMap output for the table containing currentKey) — used
+  // for "this"/"bandh". `tables` is the block's full per-table pattern list
+  // (payload.cells) — needed for "poem" to enumerate every table. currentKey is
+  // an override/decor key already in the "tableIndex:label" scheme (see
+  // AshaarOverrides.overrideKey), so the table index is recovered from it —
+  // the map itself carries no table index.
+  //
+  //   kind      ∈ "content" | "spacing"
+  //   mode      ∈ "this" | "bandh" | "poem"
+  //   currentKey  the key of the cell/gap under the cursor
+  //   tables    payload.cells (array of patterns, one per table) — required
+  //             for mode "poem"; ignored otherwise.
+  //
+  // Containment holds by construction: "this" ⊆ "bandh" (same table) ⊆ "poem"
+  // (all tables); content and spacing never mix because both the map filter
+  // and the "poem" per-table rebuild filter strictly on `kind`.
+  function keysForTarget(map, kind, mode, currentKey, tables) {
+    if (mode === "this") return [currentKey];
+    var tableIndex = parseInt(String(currentKey).split(":")[0], 10) || 0;
+    if (mode === "bandh") {
+      return (map || [])
+        .filter(function (e) { return e.kind === kind; })
+        .map(function (e) { return keyForEntry(tableIndex, e); });
+    }
+    if (mode === "poem") {
+      var out = [];
+      (tables || []).forEach(function (pattern, ti) {
+        buildBandhCellMap(pattern)
+          .filter(function (e) { return e.kind === kind; })
+          .forEach(function (e) { out.push(keyForEntry(ti, e)); });
+      });
+      return out;
+    }
+    return [];
+  }
+
   return {
     buildBandhCellMap: buildBandhCellMap,
     alignPatternToTable: alignPatternToTable,
+    keysForTarget: keysForTarget,
   };
 }));

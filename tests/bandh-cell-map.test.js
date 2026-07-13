@@ -52,4 +52,67 @@ assert.strictEqual(AshaarCellMap.alignPatternToTable([2], [["c", "g", "c"]]), fa
 assert.strictEqual(AshaarCellMap.alignPatternToTable([3], null), false);
 assert.strictEqual(AshaarCellMap.alignPatternToTable(null, [["c"]]), false);
 
+// ── keysForTarget: this ⊂ bandh ⊂ poem, content/spacing never mix ───────────
+// Two bandhs (tables). Table 0: solo row [c,g,c] → A1, (gap A#1), A2.
+// Table 1: couplet row [c,g,c] then solo-flanked row [g,c,g] →
+//   content A1,A2,B1 ; spacing A#1,B#1,B#2 (emission order).
+{
+  const tables = [
+    [["c", "g", "c"]],
+    [["c", "g", "c"], ["g", "c", "g"]],
+  ];
+  const table1Map = AshaarCellMap.buildBandhCellMap(tables[1]);
+  const AshaarOverrides = require("../src/taskpane/cell-overrides");
+
+  // Current cell = table 1's content "A1".
+  const curContentKey = AshaarOverrides.overrideKey(1, "A1");
+  assert.deepStrictEqual(
+    AshaarCellMap.keysForTarget(table1Map, "content", "this", curContentKey, tables),
+    [curContentKey],
+    "this → exactly the current key"
+  );
+  const bandhContent = AshaarCellMap.keysForTarget(table1Map, "content", "bandh", curContentKey, tables);
+  assert.deepStrictEqual(
+    bandhContent,
+    ["1:A1", "1:A2", "1:B1"],
+    "bandh → all content keys in table 1 only"
+  );
+  const poemContent = AshaarCellMap.keysForTarget(table1Map, "content", "poem", curContentKey, tables);
+  assert.deepStrictEqual(
+    poemContent,
+    ["0:A1", "0:A2", "1:A1", "1:A2", "1:B1"],
+    "poem → all tables' content keys"
+  );
+
+  // Current cell = table 1's spacing "A#1".
+  const curSpacingKey = AshaarOverrides.overrideKey(1, "A#1");
+  assert.deepStrictEqual(
+    AshaarCellMap.keysForTarget(table1Map, "spacing", "this", curSpacingKey, tables),
+    [curSpacingKey],
+    "this → exactly the current key (spacing)"
+  );
+  const bandhSpacing = AshaarCellMap.keysForTarget(table1Map, "spacing", "bandh", curSpacingKey, tables);
+  assert.deepStrictEqual(
+    bandhSpacing,
+    ["1:A#1", "1:B#1", "1:B#2"],
+    "bandh → all spacing keys in table 1 only"
+  );
+  const poemSpacing = AshaarCellMap.keysForTarget(table1Map, "spacing", "poem", curSpacingKey, tables);
+  assert.deepStrictEqual(
+    poemSpacing,
+    ["0:A#1", "1:A#1", "1:B#1", "1:B#2"],
+    "poem → all tables' spacing keys"
+  );
+
+  // Containment: this ⊂ bandh ⊂ poem, for both kinds.
+  assert.ok(bandhContent.every((k) => poemContent.indexOf(k) !== -1), "bandh content ⊂ poem content");
+  assert.ok(bandhSpacing.every((k) => poemSpacing.indexOf(k) !== -1), "bandh spacing ⊂ poem spacing");
+  assert.ok([curContentKey].every((k) => bandhContent.indexOf(k) !== -1), "this ⊂ bandh (content)");
+  assert.ok([curSpacingKey].every((k) => bandhSpacing.indexOf(k) !== -1), "this ⊂ bandh (spacing)");
+
+  // Content and spacing enumerations never mix.
+  bandhContent.concat(poemContent).forEach((k) => assert.ok(k.indexOf("#") === -1, "content key has no '#': " + k));
+  bandhSpacing.concat(poemSpacing).forEach((k) => assert.ok(k.indexOf("#") !== -1, "spacing key has '#': " + k));
+}
+
 console.log("bandh-cell-map.test.js OK");
