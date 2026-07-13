@@ -500,6 +500,18 @@
   var _activeDecorKey = null;        // slot-decor key of the spacing cell at the cursor (or null)
   var _activeSlot = null;            // slot-position (e.g. "A#1") of the spacing cell at the cursor
 
+  // §4 transition-clear: override keys whose text COLOR was just removed by
+  // the current cell-scope Apply. Word's font.color has no "no color" write
+  // (unlike shadingColor, where "#FFFFFF" is the documented clear value), and
+  // the render sites are otherwise set-only for color — worse, the qaseeda
+  // capture reads live run colors as "original", so an applied color would be
+  // baked into the captured runs and survive override deletion forever.
+  // applyPanel's cell branch records the affected keys here right after the
+  // tag write; the render pass it triggers resets those cells to "black" and
+  // the success tail empties the map (one-shot). Kept on a failed render so a
+  // retry still clears — the tag is already colorless at that point.
+  var _pendingColorClears = {};
+
   // ── Unified settings panel state ──────────────────────────────────────────
   var _panel = {
     pending: { set: {}, clear: [] },
@@ -607,6 +619,7 @@
         var isBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
         var payload = isBlock ? AshaarWord.parseContentControlTag(cc.tag) : null;
         await reflectActiveCell(context, sel, cc, isBlock, payload);
+        if (_activeOvKey) seedCellDecorInputs(payload);
         _panel.target = isBlock
           ? { kind: "block", cc: cc, payload: payload, tag: cc.tag,
               cellEnabled: !!_activeOvKey, gapEnabled: !!_activeDecorKey,
@@ -625,6 +638,26 @@
         refreshPanel();
       });
     } catch (e) { /* selection transient — ignore */ }
+  }
+
+  // §4 (fix): the cell fill/color controls live OUTSIDE the pending/data-key
+  // system (same as the gap-decor inputs), so they are raw shared DOM state —
+  // never re-rendered by renderPanel. Seed all four from the ACTIVE cell's
+  // persisted override on every cell reflection; otherwise a checked box left
+  // over from cell A would leak A's colors into an Apply on cell B, and an
+  // unchecked box would silently DELETE B's persisted fill/color
+  // (setTagOverride replaces the whole per-key override object). Called only
+  // from reflectActiveContext (selection-driven), NOT refreshPanel — refresh
+  // runs on every in-pane edit and re-seeding there would wipe the user's
+  // not-yet-applied checkbox/color changes mid-edit.
+  function seedCellDecorInputs(payload) {
+    var ov = (payload && payload.overrides && payload.overrides[_activeOvKey]) || {};
+    var hasFill = ov.fill != null && ov.fill !== "";
+    var hasColor = ov.color != null && ov.color !== "";
+    document.getElementById("sp-cell-fill-on").checked = hasFill;
+    document.getElementById("sp-cell-fill").value = hasFill ? ov.fill : "#f5f0e0";
+    document.getElementById("sp-cell-color-on").checked = hasColor;
+    document.getElementById("sp-cell-color").value = hasColor ? ov.color : "#a7352a";
   }
 
   // Detect the content/spacing cell at the cursor. Resolves (tableIndex, label)
@@ -1556,7 +1589,7 @@
               // which only carries strength/widthPt/capEm) — read straight off the
               // tag so the write loop below can (re)assert or clear it.
               var cellOv = c.ovKey ? (info.overrides[c.ovKey] || {}) : {};
-              if (p.xml) cellPlans.push({ cell: c.cell, ooxml: p.xml, ov: cellOv }); // no-fill emit
+              if (p.xml) cellPlans.push({ cell: c.cell, ooxml: p.xml, ov: cellOv, ovKey: c.ovKey }); // no-fill emit
               else preps.push(p);
             });
           });
@@ -1587,7 +1620,7 @@
 
         preps.forEach(function (p) {
           var x = emitContentCell(p, adaptT);
-          if (x) cellPlans.push({ cell: p.c.cell, ooxml: x, ov: p.cOv || {} });
+          if (x) cellPlans.push({ cell: p.c.cell, ooxml: x, ov: p.cOv || {}, ovKey: p.c.ovKey });
         });
         await context.sync(); // commit the spacing-cell decorations
 
@@ -1604,10 +1637,17 @@
             // wipes any formatting set on the (now-empty) body, so setting
             // body.font.color earlier would have no effect once the new runs
             // land. shadingColor rejects "" / "No color"; "#FFFFFF" clears it
-            // (same quirk as the spacing-cell decor branch above).
+            // (same quirk as the spacing-cell decor branch above). Color has
+            // no clear value, so a JUST-REMOVED color override (recorded in
+            // _pendingColorClears by the Apply that deleted it) resets to
+            // "black" — necessary because the capture reads live run colors
+            // as "original", so the old override color is baked into this
+            // cell's re-emitted runs. Accepted limitation: "black", not any
+            // pre-override manual text color (no source data to recover it).
             var ov = cp.ov || {};
             cp.cell.shadingColor = ov.fill || "#FFFFFF";
             if (ov.color) cp.cell.body.font.color = ov.color;
+            else if (cp.ovKey && _pendingColorClears[cp.ovKey]) cp.cell.body.font.color = "black";
             await context.sync();
             changed++;
           } catch (e) { writeFails++; /* leave the cell as its bare rebuild */ }
@@ -2954,9 +2994,10 @@
           var mn = AshaarResidual.capMicroSpaces(mTarget - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72, cellCapEm);
           var mfinal = AshaarWord.distributeMicroSpaces([mout], mn, MICRO_SPACE)[0];
           if (mfinal !== current) plans.push({ cell: cell, flat: mfinal, align: cellAlignOf(cell), ov: cellOv });
-          // §4: text unchanged but a fill/color override still needs (re)asserting
-          // on this cell (e.g. strength/width untouched, only decor edited).
-          else if (cellOv) plans.push({ cell: cell, ov: cellOv });
+          // §4: text unchanged, but EVERY managed cell still gets its decor
+          // (re)asserted or cleared — fill is always-assert ("#FFFFFF" clears
+          // a deleted override), and a null cellOv is exactly the deleted case.
+          else if (cell.__ovKey) plans.push({ cell: cell, ov: cellOv });
           return;
         }
 
@@ -2983,7 +3024,7 @@
         if (!canvasCtx || colPx <= 0) {
           var flat = AshaarWord.justifyPlainTextBlock(stripJustification(current), opts, colPx);
           if (flat !== current) plans.push({ cell: cell, flat: flat, ov: cellOv });
-          else if (cellOv) plans.push({ cell: cell, ov: cellOv });
+          else if (cell.__ovKey) plans.push({ cell: cell, ov: cellOv }); // §4 decor always-asserts
           return;
         }
 
@@ -3098,12 +3139,21 @@
       // selections, adopted tables with no cell pattern) so this never touches
       // shading on tables our override system doesn't own. shadingColor
       // rejects "" / "No color"; "#FFFFFF" clears it (same quirk documented at
-      // applyProfileToQaseeda's spacing-cell decor branch).
+      // applyProfileToQaseeda's spacing-cell decor branch) — so fill is
+      // ALWAYS-assert: a deleted fill override clears on the next pass.
+      // Color has no such clear value, so it clears by TRANSITION: the Apply
+      // that removed the override recorded the key in _pendingColorClears and
+      // we reset those cells to "black". Accepted limitation (same class as
+      // the width-drift trade-off): the reset restores "black", not any
+      // pre-override manual text color — the tag never captured one, and the
+      // qaseeda capture reads live run colors as "original", so there is no
+      // source data to recover it from.
       function applyCellDecor(cell, ov) {
         if (!cell.__ovKey) return;
         ov = ov || {};
         cell.shadingColor = ov.fill || "#FFFFFF";
         if (ov.color) cell.body.font.color = ov.color;
+        else if (_pendingColorClears[cell.__ovKey]) cell.body.font.color = "black";
       }
 
       var changed = 0;
@@ -3132,9 +3182,10 @@
         }
         if (!p.runs) {
           // §4 decor-only: justified text is unchanged this pass, but the
-          // cell's fill/color override still needs (re)asserting or clearing.
+          // cell's fill/color still needs (re)asserting or clearing. No sync
+          // of its own — property writes queue and commit at Word.run's final
+          // implicit sync (no added round-trips for decor-only cells).
           applyCellDecor(p.cell, p.ov);
-          await context.sync();
           changed++;
           continue;
         }
@@ -3151,10 +3202,11 @@
             });
           });
           if (p.align) { p.cell.body.paragraphs.getFirst().alignment = officeAlign(p.align); cellChanged = true; }
-          // Only force a sync for the decor write when there's an active
-          // override to apply — an unconditional reset here would sync every
-          // managed cell on every re-justify, even ones with no override.
-          if (p.ov && (p.ov.fill || p.ov.color)) { applyCellDecor(p.cell, p.ov); cellChanged = true; }
+          // Decor always-asserts for managed cells (fill clears via "#FFFFFF"
+          // when the override is gone). The writes queue into this plan's
+          // existing sync below (or Word.run's final implicit sync when the
+          // text turned out unchanged) — no added round-trips.
+          if (p.cell.__ovKey) applyCellDecor(p.cell, p.ov);
           if (cellChanged) { await context.sync(); changed++; }
         } catch (e) {
           // Queued range write failed at sync (or count mismatch) — flatten.
@@ -3512,6 +3564,11 @@
             color: document.getElementById("sp-cell-color-on").checked ? document.getElementById("sp-cell-color").value : null,
           };
           var keys = cellTargetKeys(cc.tag, "content", target.cellLabel, "sp-cell-target");
+          // §4 transition-clear: diff old-vs-new color for EVERY fan-out key
+          // BEFORE the tag write replaces the overrides — keys losing their
+          // color are recorded for the render pass below to reset to black.
+          var oldPayload = AshaarWord.parseContentControlTag(cc.tag) || {};
+          var clearKeys = AshaarOverrides.colorClearKeys(oldPayload.overrides, keys, override);
           // Setters compose: feed each returned tag into the next call. ⟲-cleared
           // fields are already null via dirtyOrNull — an all-null override deletes
           // that key's entry (setTagOverride), so nulls must fan out to every
@@ -3520,6 +3577,9 @@
           keys.forEach(function (k) { newTag = AshaarWord.setTagOverride(newTag, k, override); });
           cc.tag = newTag;
           await context.sync();
+          // Record only after the write committed — a strict-throw above must
+          // not leave clears queued for a tag that still carries the color.
+          clearKeys.forEach(function (k) { _pendingColorClears[k] = true; });
         });
         if (run) run.phase("tag write");
         tagWritten();
@@ -3550,6 +3610,7 @@
       // strict tag-write throw above skips this tail (pending survives for
       // retry).
       _panel.pending = { set: {}, clear: [] };
+      _pendingColorClears = {};  // one-shot: the pipeline above consumed them
       _lastBlockTag = null;   // force reflection to re-read the updated tag
       await reflectActiveContext();
       if (run) run.phase("reflect");

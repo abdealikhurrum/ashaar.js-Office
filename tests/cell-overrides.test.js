@@ -93,4 +93,34 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
     "unset everywhere → null (computed target)");
 }
 
+// ── colorClearKeys: keys transitioning color→none under the fan-out Apply ───
+{
+  const old = {
+    "0:A1": { strength: 9, color: "#A7352A" },
+    "0:A2": { fill: "#F5F0E0" },              // fill only — no color to clear
+    "0:B1": { color: "#112233" },
+    "1:A1": { color: "#445566" },             // not targeted — must not appear
+  };
+  const keys = ["0:A1", "0:A2", "0:B1", "0:B2"]; // B2 has no old override at all
+  // Incoming override drops color → every targeted key that HAD one clears.
+  assert.deepStrictEqual(
+    AshaarOverrides.colorClearKeys(old, keys, { strength: 5, color: null }),
+    ["0:A1", "0:B1"]
+  );
+  // Empty string counts as no color on both sides.
+  assert.deepStrictEqual(
+    AshaarOverrides.colorClearKeys({ "0:A1": { color: "" } }, ["0:A1"], { color: null }),
+    [], "old empty-string color is not a real color");
+  assert.deepStrictEqual(
+    AshaarOverrides.colorClearKeys(old, keys, { color: "" }),
+    ["0:A1", "0:B1"], "incoming empty string = no color");
+  // Incoming override still carries a color → nothing clears.
+  assert.deepStrictEqual(
+    AshaarOverrides.colorClearKeys(old, keys, { color: "#000000" }),
+    []);
+  // Degenerate inputs.
+  assert.deepStrictEqual(AshaarOverrides.colorClearKeys(null, keys, null), []);
+  assert.deepStrictEqual(AshaarOverrides.colorClearKeys(old, null, null), []);
+}
+
 console.log("cell-overrides.test.js OK");

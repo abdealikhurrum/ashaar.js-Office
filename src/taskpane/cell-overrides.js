@@ -45,9 +45,26 @@
     return { symbol: pick("symbol"), fill: pick("fill"), color: pick("color") };
   }
 
+  // §4 transition-clear: the targeted keys whose persisted override HAD a text
+  // color that the incoming override no longer carries. Word's font.color has
+  // no "no color" clear value (unlike shadingColor's "#FFFFFF" quirk) and the
+  // renderer is otherwise set-only for color — so the Apply that deletes a
+  // color override must know exactly which cells are transitioning color→none
+  // to reset them explicitly. Empty string counts as "no color" on both sides
+  // (same convention as setTagOverride's codec).
+  function colorClearKeys(oldOverrides, keys, newOverride) {
+    oldOverrides = oldOverrides || {};
+    if (newOverride && newOverride.color != null && newOverride.color !== "") return [];
+    return (keys || []).filter(function (k) {
+      var o = oldOverrides[k];
+      return !!(o && o.color != null && o.color !== "");
+    });
+  }
+
   return {
     overrideKey: overrideKey,
     resolveCellOverride: resolveCellOverride,
-    resolveSlotDecor: resolveSlotDecor
+    resolveSlotDecor: resolveSlotDecor,
+    colorClearKeys: colorClearKeys
   };
 }));
