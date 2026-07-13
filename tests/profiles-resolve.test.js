@@ -174,4 +174,12 @@ const {
   assert.equal(r.source.justifyMode, "default", "profile-owned justifyMode at default value stays default");
 }
 
+// ── inherited: the layer below local, for per-setting reset display ──────────
+{
+  const store = { K: profileFromSettings("K", Object.assign(defaultSettings(), { gap: 6 })) };
+  const r = resolveSettings({ payload: { profile: "K", local: { gap: 8 } }, profileStore: store, scope: { level: "poem" } });
+  assert.equal(r.values.gap, 8);
+  assert.equal(r.inherited.gap, 6, "what gap falls back to on clear");
+}
+
 console.log("profiles-resolve tests passed");

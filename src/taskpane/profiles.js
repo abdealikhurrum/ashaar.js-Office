@@ -205,6 +205,11 @@
       });
     }
 
+    // Snapshot of `values` after the profile layer but before local — what a
+    // key falls back to if its local delta is cleared (see settings-panel.js).
+    var inherited = {};
+    Object.keys(values).forEach(function (k) { inherited[k] = values[k]; });
+
     var local = (payload && isObj(payload.local)) ? payload.local : {};
     Object.keys(local).forEach(function (k) {
       if (k in values) { values[k] = local[k]; source[k] = "local"; }
@@ -222,7 +227,7 @@
       if (ov.capEm != null) { values.capEm = ov.capEm; source.capEm = "cell"; }
     }
 
-    return { values: values, source: source, profileName: profileName, profileMissing: profileMissing, usedCache: usedCache };
+    return { values: values, source: source, inherited: inherited, profileName: profileName, profileMissing: profileMissing, usedCache: usedCache };
   }
 
   return {
