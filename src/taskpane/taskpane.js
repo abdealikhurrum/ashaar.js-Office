@@ -633,6 +633,18 @@
     document.getElementById("sp-cost").textContent = st.footer.costLabel;
     document.getElementById("sp-apply").title = st.footer.costLabel;
     document.getElementById("sp-rerender").disabled = !( _panel.target && _panel.target.kind === "block");
+    // §5 Capture gating: _panel.scopeLevel is sticky (it survives the cursor
+    // moving from a content cell to a sibling gap cell and vice versa), so the
+    // visible body — and its Capture button — can outlive its target. Mirror
+    // the chip-enablement conditions (settings-panel.js panelStateFor: chips
+    // exist only for kind==="block", and cell/gap chips gate on
+    // !!target.cellEnabled / !!target.gapEnabled) so Capture is clickable
+    // exactly when its scope's chip is.
+    var capTgt = _panel.target;
+    document.getElementById("sp-cell-capture").disabled =
+      !(capTgt && capTgt.kind === "block" && capTgt.cellEnabled);
+    document.getElementById("sp-gap-capture").disabled =
+      !(capTgt && capTgt.kind === "block" && capTgt.gapEnabled);
   }
 
   // Reflect the Ashaar block (and the cell, Task 4) at the cursor in the pane.
@@ -702,12 +714,25 @@
   // §5: read the cursor cell's native formatting into the pane as pending
   // values. Never writes. Normalizes Word's no-color/automatic quirks:
   // shadingColor of "#FFFFFF"/""/null ⇒ no fill; font.color of "" /
-  // "Automatic" / "#000000"-as-auto ⇒ inherit (empty). Uses the same
+  // "Automatic"/"auto" ⇒ inherit (empty). Uses the same
   // sel.parentTableCellOrNullObject lookup as reflectActiveCell (line 710)
   // — the proven pattern for "which table cell is the cursor in" in this
   // codebase.
   async function captureCellFormatting() {
     if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to capture."); return; }
+    // Belt-and-braces re-check of the renderPanel button gating (covers any
+    // render race): the sticky scopeLevel must still have a LIVE matching
+    // target, or the fresh cell lookup below would stuff the real cell's
+    // formatting into the wrong scope's inputs.
+    var capTgt = _panel.target;
+    var capOk = capTgt && capTgt.kind === "block" &&
+      (_panel.scopeLevel === "gap" ? capTgt.gapEnabled : capTgt.cellEnabled);
+    if (!capOk) {
+      setMessage(_panel.scopeLevel === "gap"
+        ? "Click inside a spacing (gap) cell first."
+        : "Click inside a poem content cell first.");
+      return;
+    }
     try {
       await Word.run(async function (context) {
         var sel = context.document.getSelection();
