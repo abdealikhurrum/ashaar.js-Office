@@ -3562,16 +3562,24 @@
   async function reapplyBlock() { await justifySelection(); }
 
   // Assign: link the block to the selected profile; local tweaks survive.
+  // Fix round 1 (reviewer): strict tag write — a failed write must not run the
+  // success tail; and the message goes BEFORE applyProfileToQaseeda so the
+  // pipeline's own success/failure summary stays last (same rule as applyPanel).
   async function assignProfile() {
     var name = document.getElementById("sp-profile").value;
-    await withWord(async function (context) {
-      var cc = await findBlockAt(context);
-      cc.tag = AshaarWord.setTagProfile(cc.tag, name);
-      await context.sync();
-    });
+    try {
+      await withWordStrict(async function (context) {
+        var cc = await findBlockAt(context);
+        cc.tag = AshaarWord.setTagProfile(cc.tag, name);
+        await context.sync();
+      });
+    } catch (e) {
+      setMessage("Assign failed: " + (e && e.message ? e.message : e));
+      return;
+    }
+    setMessage(name ? "Assigned to \"" + name + "\" — refreshing…" : "Profile link removed.");
     if (name) await applyProfileToQaseeda(name);
     _lastBlockTag = null; await reflectActiveContext();
-    setMessage(name ? "Assigned to \"" + name + "\"." : "Profile link removed.");
   }
 
   // Save as…: panel's resolved+pending values → new profile; block assigned;
@@ -3580,18 +3588,43 @@
     var name = (prompt("Save current settings as profile:") || "").trim();
     if (!name) return;
     var values = panelValues();
+    // The store write stays first and unconditional — the profile exists even
+    // if linking the block fails below.
     await putProfile(AshaarProfiles.profileFromSettings(name, values));
     if (_panel.target && _panel.target.kind === "block") {
-      await withWord(async function (context) {
-        var cc = await findBlockAt(context);
-        var tag = AshaarWord.setTagProfile(cc.tag, name);
-        tag = AshaarWord.setTagLocal(tag, {});
-        tag = AshaarWord.setTagProfileCache(tag, AshaarProfiles.settingsFromProfile(AshaarProfiles.profileFromSettings(name, values)));
-        cc.tag = tag;
-        await context.sync();
-      });
-      await applyProfileToQaseeda(name);
+      // Fix round 1 (reviewer): strict block-linking write. On failure the
+      // pending edits SURVIVE (no clear), the user gets a retry path, and we
+      // return before the apply pipeline. NOTE (adaptation from the reviewer's
+      // literal instruction, which said to keep `_lastBlockTag = null` here):
+      // nulling _lastBlockTag on the FAILURE path makes the subsequent
+      // reflection see tag !== _lastBlockTag and wipe _panel.pending (the
+      // reflection's stale-pending drop, ~line 648) — exactly the state loss
+      // this fix round exists to prevent. The write failed, so the tag is
+      // unchanged and there is nothing new to re-read: keep _lastBlockTag as
+      // is so reflection preserves pending.
+      try {
+        await withWordStrict(async function (context) {
+          var cc = await findBlockAt(context);
+          var tag = AshaarWord.setTagProfile(cc.tag, name);
+          tag = AshaarWord.setTagLocal(tag, {});
+          tag = AshaarWord.setTagProfileCache(tag, AshaarProfiles.settingsFromProfile(AshaarProfiles.profileFromSettings(name, values)));
+          cc.tag = tag;
+          await context.sync();
+        });
+      } catch (e) {
+        setMessage("Profile \"" + name + "\" saved, but linking this poem failed: " +
+          (e && e.message ? e.message : e) + " — select the profile and click Assign to retry.");
+        await reflectActiveContext();
+        return;
+      }
+      _panel.pending = { set: {}, clear: [] };  // success only — the tweaks became the profile
+      setMessage("Profile \"" + name + "\" saved.");
+      await applyProfileToQaseeda(name);        // its own message stays last
+      _lastBlockTag = null; await reflectActiveContext();
+      return;
     }
+    // Selection target: nothing to link, no apply pipeline runs — the saved
+    // message cannot overwrite a pipeline failure here.
     _panel.pending = { set: {}, clear: [] };
     _lastBlockTag = null; await reflectActiveContext();
     setMessage("Profile \"" + name + "\" saved.");
@@ -3602,11 +3635,14 @@
   async function updateProfile() {
     var name = _panel.resolved ? _panel.resolved.profileName : "";
     if (!name) return;
+    // Store write is safe (no Word round-trip) — putProfile + pending-clear
+    // stay as-is. Fix round 1 (reviewer): message BEFORE applyProfileToQaseeda
+    // so the pipeline's own success/failure summary stays last.
     await putProfile(AshaarProfiles.profileFromSettings(name, panelValues()));
     _panel.pending = { set: {}, clear: [] };
+    setMessage("Profile \"" + name + "\" updated — refreshing its poems…");
     await applyProfileToQaseeda(name);
     _lastBlockTag = null; await reflectActiveContext();
-    setMessage("Profile \"" + name + "\" updated — all its poems refreshed.");
   }
 
   // Restore a missing profile from the tag's cached snapshot.
@@ -3620,20 +3656,30 @@
   }
 
   // Revert to profile / Reset to defaults: clear the whole local map.
+  // Pending clears up-front by design: revert = the user chose to discard edits.
+  // Fix round 1 (reviewer): strict tag write — on failure skip reRender; on
+  // success the message goes BEFORE reRender so the pipeline's own message
+  // (or its error) stays last.
   async function revertToProfile() {
     _panel.pending = { set: {}, clear: [] };
     if (_panel.target && _panel.target.kind === "block") {
-      await withWord(async function (context) {
-        var cc = await findBlockAt(context);
-        cc.tag = AshaarWord.setTagLocal(cc.tag, {});
-        await context.sync();
-      });
+      try {
+        await withWordStrict(async function (context) {
+          var cc = await findBlockAt(context);
+          cc.tag = AshaarWord.setTagLocal(cc.tag, {});
+          await context.sync();
+        });
+      } catch (e) {
+        setMessage("Revert failed: " + (e && e.message ? e.message : e));
+        return;
+      }
+      setMessage("Reverted — re-rendering…");
       await reRender();     // structure may change (gap/width may fall back)
       _lastBlockTag = null; await reflectActiveContext();
     } else {
       refreshPanel();
+      setMessage("Reverted.");
     }
-    setMessage("Reverted.");
   }
 
   // Gap body's "Set as default for all bandhs": writes the current sp-gap-*
