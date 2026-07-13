@@ -624,7 +624,12 @@
           : { kind: "selection", scope: { level: "poem" } };
         if (!isBlock) _panel.scopeLevel = "poem";
         // A new block target drops stale pending edits; same block keeps them.
-        if (cc.tag !== _lastBlockTag) { _panel.pending = { set: {}, clear: [] }; _lastBlockTag = isBlock ? cc.tag : null; }
+        // Never read cc.tag unless isBlock — with the cursor in plain text cc
+        // is a null-object proxy and property access throws inside Word.run.
+        if (isBlock ? cc.tag !== _lastBlockTag : _lastBlockTag !== null) {
+          _panel.pending = { set: {}, clear: [] };
+          _lastBlockTag = isBlock ? cc.tag : null;
+        }
         refreshPanel();
       });
     } catch (e) { /* selection transient — ignore */ }
@@ -3518,7 +3523,9 @@
     elOrStub(document.getElementById("qaseeda-font-check")).addEventListener("click", checkQaseedaFont);
 
     // Settings panel: every data-key control feeds the pending buffer.
-    document.querySelectorAll("#settings-panel [data-key]").forEach(function (input) {
+    // (:not(.sp-src) — the provenance dots share data-key with their controls
+    // and must not get dead change listeners.)
+    document.querySelectorAll("#settings-panel [data-key]:not(.sp-src)").forEach(function (input) {
       input.addEventListener("change", function () {
         var key = input.getAttribute("data-key");
         var raw = input.value;
