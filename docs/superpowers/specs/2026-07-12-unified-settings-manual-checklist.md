@@ -50,6 +50,27 @@ there is a single checklist to work through, rather than four scattered ones.
 - [ ] Scoped apply on one poem of a shared profile: siblings untouched (width may differ until Update — expected).
 - [ ] Second consecutive scoped apply (Justify on a profiled poem, no edits between) shows rebuild=no in the debug dump.
 
+## Render workflow & batch formatting (Tasks 1-12, 2026-07-13)
+
+- [ ] Sibling poems untouched by cell/gap/poem Apply on a shared profile — edit poem A's cell strength, Apply to cell only: poem B unchanged, no re-render.
+- [ ] Re-render button (block scope) picks up native text edits and font-family changes in the document.
+- [ ] Apply-to-all: cell strength to whole bandh, gap symbol to whole poem — each propagates to the full scope.
+- [ ] Cell fill/color render — check "on" and select a color; Apply: the cell visibly fills and text darkens (or custom color applies).
+- [ ] Cell fill/color clearing — uncheck "on" and Apply: cell returns white, text color returns black (known limitation: pre-override manual colors are not restored).
+- [ ] Cell fill/color cross-poem seeding check — set fill on poem A's first cell, click poem B's first cell at the same position: pane fill/color controls show B's state (empty/defaults), not A's.
+- [ ] Cell color clear retry — apply a color override, clear it, then force a render failure (e.g. font gate cancel); re-click Apply: cell text returns black on retry (tag is colorless; pending clear retained).
+- [ ] Capture buttons disabled by cursor context — cursor in a gap cell: cell-scope Capture disabled; cursor in a content cell: gap-scope Capture disabled.
+- [ ] Capture reads cell formatting (fill, text color) into the pane as read-only; uncheck "on" or edit a field to activate pending changes.
+- [ ] Capture from theme-picker-shaded cell — verify the pane color swatch updates to show the selected color (Word may return a color NAME instead of #RRGGBB; if swatch stays stale while "on" is checked, this is a known deferred normalization issue — report it).
+- [ ] Capture → Apply → Update Profile round trip — capture a layout, apply it to define a profile, Update an existing profile to persist the captured shape.
+- [ ] Apply-to fan-out with ⟲-cleared fields — clear a field with ⟲, select "Whole poem" as apply target, Apply: the clear (null) propagates to every cell and all-null overrides are deleted from the tag.
+- [ ] "Apply to" select does not reset after Apply — verify a leftover "Whole poem" selection from a prior Apply doesn't affect the next cell edit (known Minor).
+- [ ] Line height (lineHeightPt) stops nastaliq clipping — set to ~1.8× font size on a clipping poem, Apply: lines no longer collide vertically.
+- [ ] Separator (separatorPt) sizing — set to 1pt, Apply: tables nearly touch, never merge; increase the setting: inter-poem gaps visibly widen.
+- [ ] Cost caption accuracy — refresh-cost caption correctly distinguishes rebuild (full re-calibration) from re-justify (same params, new text) based on the apply scope and context.
+- [ ] Debug metrics table — Debug toggle on; Apply: metrics table appears with phase timings (Probe, Calibrate, Justify); hit/miss recorded for calibration memos.
+- [ ] Second Apply idempotency speed — Apply once to a poem, then Apply again without edits: second Apply is visibly faster (cached calibration memo hit).
+
 ## Notes for whoever runs this
 
 - Task 9's report flagged `applyCellOverride`/`applyBandhWidth` as older apply entry points that were

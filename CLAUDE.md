@@ -113,6 +113,7 @@ Click inside an Ashaar Poem block (or on plain text) → onSelectionChanged()
   → justifySelection() itself still drives AshaarTune.probeFont()/calibrate() and
     AshaarJustify.justifyLine() per cell, as before — the panel only changed how its
     inputs (justifyMode/strength/gap/width/etc.) are gathered and applied.
+  → Re-render button (block scope) re-applies params on document edits; apply-to-all targets (cell/bandh/poem) propagate via nulls; Capture reads cell formatting (fill, text color) as read-only in the pane; refresh-cost caption distinguishes rebuild from re-justify; lineHeightPt and separatorPt (advanced section) govern line spacing and inter-poem gaps.
 ```
 
 ### Poetry Input Format
