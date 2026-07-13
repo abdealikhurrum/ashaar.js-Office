@@ -64,7 +64,7 @@ there is a single checklist to work through, rather than four scattered ones.
 - [ ] Capture from theme-picker-shaded cell — verify the pane color swatch updates to show the selected color (Word may return a color NAME instead of #RRGGBB; if swatch stays stale while "on" is checked, this is a known deferred normalization issue — report it).
 - [ ] Capture → Apply → Update Profile round trip — capture a layout, apply it to define a profile, Update an existing profile to persist the captured shape.
 - [ ] Apply-to fan-out with ⟲-cleared fields — clear a field with ⟲, select "Whole poem" as apply target, Apply: the clear (null) propagates to every cell and all-null overrides are deleted from the tag.
-- [ ] "Apply to" select does not reset after Apply — verify a leftover "Whole poem" selection from a prior Apply doesn't affect the next cell edit (known Minor).
+- [ ] "Apply to" selects reset to "This cell"/"This gap" after a successful Apply — a leftover "Whole poem" selection must NOT survive into the next edit.
 - [ ] Line height (lineHeightPt) stops nastaliq clipping — set to ~1.8× font size on a clipping poem, Apply: lines no longer collide vertically.
 - [ ] Separator (separatorPt) sizing — set to 1pt, Apply: tables nearly touch, never merge; increase the setting: inter-poem gaps visibly widen.
 - [ ] Cost caption accuracy — refresh-cost caption correctly distinguishes rebuild (full re-calibration) from re-justify (same params, new text) based on the apply scope and context.
