@@ -2331,13 +2331,16 @@
     var opts = options();
     var source = "";
     var existingFont = "";
+    var ccPayload = null;   // the block's OWN persisted tag payload (v3)
 
     await withWord(async function (context) {
       var selection = context.document.getSelection();
       var cc = selection.parentContentControlOrNullObject;
-      cc.load("title");
+      cc.load("title,tag");
       await context.sync();
-      var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem") ? cc.getRange() : selection;
+      var isBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
+      if (isBlock) ccPayload = AshaarWord.parseContentControlTag(cc.tag);
+      var workRange = isBlock ? cc.getRange() : selection;
       var tables = workRange.tables;
       tables.load("items");
       await context.sync();
@@ -2385,7 +2388,17 @@
 
     input.value = source;
     // Step 1: bare rebuild — gap/width from the pane, font pinned, size preserved.
-    await insertPoem(true, { justifyMode: "none", fontCsName: fontCsName });
+    // The fresh contentControlTag write inside insertPoem must carry the block's
+    // OWN persisted settings (profile / local / profileCache from the tag we just
+    // read), not whatever options() supplies for fresh inserts — otherwise a
+    // rebuild would discard the tag layers Apply (or an earlier session) wrote.
+    var rebuildOverride = { justifyMode: "none", fontCsName: fontCsName };
+    if (ccPayload) {
+      rebuildOverride.profile = ccPayload.profile;
+      rebuildOverride.local = ccPayload.local;
+      rebuildOverride.profileCache = ccPayload.profileCache;
+    }
+    await insertPoem(true, rebuildOverride);
     // Step 2: fill in place with the correct per-cell mechanism for the chosen
     // mode (skipped when the pane mode is "none").
     if (opts.justifyMode && opts.justifyMode !== "none") await justifySelection();
@@ -3497,6 +3510,12 @@
         tagWritten();
         await reapplyBlock();
       }
+      // Success tail — must run AFTER the pipelines: they consume pending via
+      // options() → panelValues() (resolved old tag + pending overlay), so the
+      // clear can only happen once they've rendered with the new values. A
+      // strict tag-write throw above skips this tail (pending survives for
+      // retry).
+      _panel.pending = { set: {}, clear: [] };
       _lastBlockTag = null;   // force reflection to re-read the updated tag
       await reflectActiveContext();
       // No blanket "Applied." here: the render/justify pipeline above sets the
@@ -3510,11 +3529,11 @@
     }
   }
 
-  // Tag write persisted: the pending edits are committed, so clear them and
-  // show an interim status; the render/justify pipeline that follows owns the
-  // final message.
+  // Tag write persisted: interim status only. Pending must NOT be cleared here
+  // — the render/justify pipeline that follows consumes it (options() →
+  // panelValues() overlays pending on the resolved values); applyPanel's
+  // success tail clears it after the pipeline has rendered.
   function tagWritten() {
-    _panel.pending = { set: {}, clear: [] };
     setMessage("Settings saved — re-rendering…");
   }
 
