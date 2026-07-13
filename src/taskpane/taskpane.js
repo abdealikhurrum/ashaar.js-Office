@@ -425,10 +425,14 @@
     return Object.keys(loadProfileStore());
   }
 
-  // Read the profile name assigned to the Ashaar Poem block at the cursor ("" if none).
+  // Read the profile name assigned to the Ashaar Poem block at the cursor
+  // ({name:"", tag:""} if none). `tag` is the block's CURRENT raw content-
+  // control tag at the moment of the read — callers that need to re-identify
+  // this exact physical block later (e.g. applyProfileToQaseeda's onlyBlockTag
+  // scoping) capture it here rather than opening a second Word.run.
   async function getQaseedaAtSelection() {
-    var qaseeda = "";
-    if (typeof Word === "undefined") return qaseeda;
+    var result = { name: "", tag: "" };
+    if (typeof Word === "undefined") return result;
     try {
       await Word.run(async function (context) {
         var cc = context.document.getSelection().parentContentControlOrNullObject;
@@ -436,11 +440,12 @@
         await context.sync();
         if (!cc.isNullObject && cc.title === "Ashaar Poem") {
           var payload = AshaarWord.parseContentControlTag(cc.tag);
-          qaseeda = (payload && payload.profile) || "";
+          result.name = (payload && payload.profile) || "";
+          result.tag = cc.tag;
         }
       });
-    } catch (e) { /* leave qaseeda empty */ }
-    return qaseeda;
+    } catch (e) { /* leave result empty */ }
+    return result;
   }
 
   // Read-only: show the bandh cell-map (labels + gaps) for the Ashaar Poem block
@@ -1068,7 +1073,7 @@
   // see memory width-engine-rebuild-not-setwidth); same width for all bandhs →
   // same-GRID bandhs get an identical gridCol (harmony). (2) JUSTIFY — re-gather
   // the fresh bare tables and fill each cell to its box = span × (target/GRID).
-  async function applyProfileToQaseeda(name) {
+  async function applyProfileToQaseeda(name, opts) {
     if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to apply a qaseeda."); return; }
     var profile = getProfile(name);
     var CELL_MARGIN_PT = 5.76;
@@ -1092,12 +1097,34 @@
     var qDebug = !!(debugMode && debugMode.checked);
     var qDiags = [];
     var qMeta = {};
+    // §1 cascade descope: opts.onlyBlockTag scopes both passes to a single
+    // physical block instead of every block tagged with this profile. The tag
+    // string CANNOT be reused as-is across passes — pass 1 rewrites cc.tag
+    // (setTagRunFonts healing the runFonts pack, on BOTH the rebuild path and
+    // the sizeSig-skip path below) before pass 2 re-gathers, so a fresh gather
+    // in pass 2 would see a different tag than the one captured at delegation
+    // time and silently match nothing. Instead, pass 1 threads out the tag it
+    // ITSELF ends up writing (blk.oldTag, the value both continuation paths
+    // persist to cc.tag) via this closure var, and pass 2 filters against
+    // that resolved value, falling back to the original opts.onlyBlockTag only
+    // for the defensive case where pass 1 never reached that point (which
+    // always exits before pass 2 runs anyway — see the two early summary
+    // returns below).
+    var onlyBlockResolvedTags = null;
 
     try {
       // ── Pass 1: SIZE — rebuild each block at one shared target width ───────────
       await Word.run(async function (context) {
         var blocks = await gatherQaseedaBlocks(context, name);
-        if (!blocks.length) { summary = "No blocks are tagged with qaseeda “" + name + "”."; return; }
+        if (opts && opts.onlyBlockTag) {
+          blocks = blocks.filter(function (b) { return b.tag === opts.onlyBlockTag; });
+        }
+        if (!blocks.length) {
+          summary = (opts && opts.onlyBlockTag)
+            ? "This poem is not tagged with qaseeda “" + name + "”."
+            : "No blocks are tagged with qaseeda “" + name + "”.";
+          return;
+        }
         blockCount = blocks.length;
         var cap = await captureQaseedaTables(context, blocks, profile);
         // Just-in-time font-measurement gate (Task 9): once the distinct-face
@@ -1116,6 +1143,13 @@
         cap.blockInfos.forEach(function (blk, b) {
           blk.oldTag = AshaarWord.setTagRunFonts(blk.oldTag, capRuns.blockPacks[b]);
         });
+        // Both continuation paths below (sizeSig skip → `blk.cc.tag = blk.oldTag`;
+        // rebuild → `wrapOoxmlControl(ooxmlBody, "Ashaar Poem", blk.oldTag)`)
+        // persist blk.oldTag as the block's on-disk tag, so this is the value
+        // pass 2 must filter against — capture it now, before either path runs.
+        if (opts && opts.onlyBlockTag) {
+          onlyBlockResolvedTags = cap.blockInfos.map(function (blk) { return blk.oldTag; });
+        }
         // Re-measure with the real run fonts: repair the representative fonts
         // and rebuild natPx/qMatrix from the reconciled runs — the cell-level
         // font read resolves to the theme default after a justify, which
@@ -1210,6 +1244,10 @@
       var changed = 0, coloured = 0;
       await Word.run(async function (context) {
         var blocks = await gatherQaseedaBlocks(context, name);
+        if (opts && opts.onlyBlockTag) {
+          var filterTags = onlyBlockResolvedTags || [opts.onlyBlockTag];
+          blocks = blocks.filter(function (b) { return filterTags.indexOf(b.tag) !== -1; });
+        }
         if (!blocks.length) return;
         // Ensure the rebuilt (SDT-created) controls show the block outline.
         blocks.forEach(function (cc) { cc.appearance = "BoundingBox"; });
@@ -1590,8 +1628,11 @@
       // Remember the width we sized to, so a later justify-only apply (strength,
       // fill mode, per-cell override) skips the destructive rebuild.
       if (sizeSig) _appliedSizeSig[name] = sizeSig;
-      summary = "Applied qaseeda “" + name + "” to " + blockCount + " block(s); justified " + changed + " cell(s)"
-        + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + ".";
+      summary = (opts && opts.onlyBlockTag)
+        ? "Applied to this poem; justified " + changed + " cell(s)"
+          + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + "."
+        : "Applied qaseeda “" + name + "” to " + blockCount + " block(s); justified " + changed + " cell(s)"
+          + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + ".";
     } catch (error) {
       summary = "Apply failed: " + describeError(error);
     }
@@ -2319,8 +2360,11 @@
     // they stay consistent — instead of the free-form local justify below. Only
     // fires for tagged blocks; untagged blocks justify exactly as before.
     try {
-      var qname = await getQaseedaAtSelection();
-      if (qname && loadProfileStore()[qname]) { await applyProfileToQaseeda(qname); return; }
+      var qsel = await getQaseedaAtSelection();
+      if (qsel.name && loadProfileStore()[qsel.name]) {
+        await applyProfileToQaseeda(qsel.name, { onlyBlockTag: qsel.tag });
+        return;
+      }
     } catch (e) { /* fall through to normal justify */ }
 
     // "Let Word fill it": native Word kashida (jc) instead of manual tatweel
