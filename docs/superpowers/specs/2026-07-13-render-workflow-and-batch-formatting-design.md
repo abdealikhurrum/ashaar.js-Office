@@ -23,6 +23,8 @@ hampers authors while they are still writing.
 6. Every action's refresh cost is visible before it runs (poem rebuild vs re-justify).
 7. Font recognition is never corrupted by justification artifacts.
 8. Probe/calibration run once per font/poem, not on every Apply.
+9. Vertical rhythm is controllable: minimum line height (nastaliq clipping) and
+   inter-table separator height are poem-scope settings.
 
 ## Non-goals (explicitly deferred)
 
@@ -161,6 +163,32 @@ autotune module was designed for bake-once reuse (`session.bake()` → recipe �
 **Deferred:** pre-baked recipes for bundled fonts (Jameel/Mehr/Noto) shipped as JSON via
 `bake()`/`loadRecipe`, eliminating first-apply calibration on fresh machines.
 
+## 9. Vertical rhythm: line height & table separator
+
+**Problems (observed):** nastaliq ligature stacks draw taller than the font's declared
+metrics and clip at line-box/cell boundaries; and the inter-table separator is a bare
+`<w:p/>` (a full Normal-height line), so stacked bandh tables sit ~14pt apart with no
+way to tighten them (adjacent tables with NO separator merge — the paragraph is
+load-bearing).
+
+**Design — two new canonical settings keys (poem scope, profile-ownable):**
+
+- `lineHeightPt` — default `null` (Word auto). When set, every misra paragraph emits
+  `<w:spacing w:after="80" w:line="{pt*20}" w:lineRule="atLeast"/>` (all misra paragraph
+  emission sites in word-html.js: misraParaXml, runsToMisraXml, the distribute variant).
+  `atLeast` grows for tall ink and never clips (never `exact`); it also shields against
+  host-document Normal styles with exact spacing.
+- `separatorPt` — default `1`. The inter-table separator paragraph becomes
+  `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="{pt*20}" w:lineRule="exact"/>
+  <w:rPr><w:sz w:val="2"/></w:rPr></w:p>` at every table-join site (renderForWordOoxml's
+  join and the rebuild-path empty paragraphs). Tables read as contiguous by default but
+  can never merge. Takes effect on next Apply/Re-render (no retroactive document change).
+
+Both keys ride the full existing machinery: `defaultSettings` → profile mapping
+(`settingsFromProfile`/`profileFromSettings`) → tag `local` → resolver → panel Advanced
+controls (plain scalar `data-key` inputs) → `options()` → OOXML emission. The unified
+spec's canonical-keys list is extended by these two.
+
 ## Interfaces & storage summary
 
 | Change | Where |
@@ -170,6 +198,7 @@ autotune module was designed for bake-once reuse (`session.bake()` → recipe �
 | Apply-target toggle | pane state only (not persisted) |
 | Refresh-cost caption | pane state only (computed per refresh) |
 | Probe cache | in-memory + localStorage `ashaar:fontProbe:<family>` (versioned) |
+| `lineHeightPt` / `separatorPt` | canonical settings keys (profile + tag local) |
 | Calibration memo | in-memory only |
 | Capture | read-only Office.js loads → pending buffer |
 | Strip-before-detect | render/justify pipelines + font-reader filter |
