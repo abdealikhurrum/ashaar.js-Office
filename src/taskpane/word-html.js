@@ -1114,6 +1114,21 @@
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
+  // Rebuild-skip signature for the apply pipeline: identical signature ⇒ the
+  // tables are already sized/shaped correctly and the destructive rebuild can
+  // be skipped. MUST include every structural input (a gap-only change used to
+  // slip through when the sig was width+source only).
+  function applySizeSignature(args) {
+    args = args || {};
+    var parts = [String(args.targetTwips || 0), String(args.gap != null ? args.gap : ""), String(args.misraPattern || "")];
+    (args.sources || []).forEach(function (s) {
+      var h = 0; s = String(s || "");
+      for (var i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+      parts.push((h >>> 0).toString(16));
+    });
+    return parts.join("|");
+  }
+
   function justifyPlainTextBlock(text, opts, colWidthPx) {
     return String(text || "").split(/\r?\n/).map(function (line) {
       return line.trim() ? justifyText(line, opts, colWidthPx) : line;
@@ -1872,6 +1887,7 @@
     packRunWords: packRunWords,
     reconcileRunWords: reconcileRunWords,
     setTagRunFonts: setTagRunFonts,
+    applySizeSignature: applySizeSignature,
     setTagBandhWidth: setTagBandhWidth,
     justifyPlainTextBlock: justifyPlainTextBlock,
     coalesceRuns: coalesceRuns,

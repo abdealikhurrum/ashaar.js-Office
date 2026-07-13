@@ -1143,3 +1143,15 @@ console.log("word-html tests passed");
   assert.equal(p.v, 3, "any setter write upgrades to v3");
   assert.equal(p.local.gap, 8, "migrated local survives the setter");
 }
+
+// ── applySizeSignature ───────────────────────────────────────────────────────
+{
+  const base = { targetTwips: 9360, sources: ["متن الف", "متن ب"], gap: 4, misraPattern: "paired" };
+  const sig = AshaarWord.applySizeSignature(base);
+  assert.equal(typeof sig, "string");
+  assert.equal(AshaarWord.applySizeSignature(base), sig, "deterministic");
+  assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { gap: 8 })), sig, "gap changes sig");
+  assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { misraPattern: "single" })), sig, "pattern changes sig");
+  assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { targetTwips: 9000 })), sig, "width changes sig");
+  assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { sources: ["متن الف"] })), sig, "source changes sig");
+}

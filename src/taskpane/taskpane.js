@@ -1216,11 +1216,13 @@
         // last apply this session, the tables are already sized correctly — skip
         // the destructive rebuild and let pass 2 just re-justify. Only a real width
         // change (mode/pct/text) triggers the rebuild.
-        var srcSig = cap.blockInfos.map(function (b) {
-          var h = 0, s = b.source; for (var i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-          return (h >>> 0).toString(16);
-        }).join(",");
-        sizeSig = targetTwips + "|" + srcSig;
+        sizeSig = AshaarWord.applySizeSignature({
+          targetTwips: targetTwips,
+          sources: cap.blockInfos.map(function (b) { return b.source; }),
+          // Structural inputs: any block's effective gap/pattern participates.
+          gap: cap.blockInfos.map(function (b) { return Number((b.payload.local || {}).gap != null ? b.payload.local.gap : ""); }).join(","),
+          misraPattern: cap.blockInfos.map(function (b) { return b.payload.misraPattern || ""; }).join(","),
+        });
         var needRebuild = _appliedSizeSig[name] !== sizeSig;
         if (qDebug) { qMeta.targetTwips = targetTwips; qMeta.rebuild = needRebuild; qMeta.repName = cap.repName; }
         if (!needRebuild) {
