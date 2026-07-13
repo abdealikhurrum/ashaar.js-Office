@@ -18,8 +18,18 @@ Run with `npm start` against test-documents/marsiya-test.docx.
 - [ ] Gap chip: symbol + colors render in the spacing cell; `Set as default for all bandhs` propagates.
 - [ ] Unmeasurable font prompts once; after registering via Fonts strip it never prompts again.
 - [ ] Legacy document (v2 tags, from main branch): opens, panel reflects old settings as local dots, Apply upgrades tag to v3, nothing visually moves except requested changes.
+      Known migration-fidelity limit: v2 tags never persisted the auto-fit/fixed width flag, so a
+      legacy "fixed %" block may render as auto-fit after migration, with `widthPct` still shown as a
+      local dot — there is no source data to recover which mode the block was actually in.
 - [ ] Adopt Existing Table → Replace Selection (Table Input tab) round-trips.
 - [ ] Apply twice in a row is idempotent (Debug dump: no growing nat/target/nSp/segs).
+- [ ] Advanced → Font correction factor persists via Apply and Save as…
+- [ ] Advanced → Debug colors toggle on/off and persist
+
+Tester note: if Apply reports an error AFTER the tag write completes (poem scope), the settings ARE
+already persisted to the tag — the reported failure is from the render/justify pipeline that runs
+after the write, not the write itself. Re-click Apply to retry the render; there is no need to re-enter
+the settings.
 
 ## Additional items accumulated from Tasks 7-9 (PENDING USER, not yet run in Word)
 

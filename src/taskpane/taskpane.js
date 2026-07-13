@@ -3308,6 +3308,12 @@
   }
 
   function dirtyOrNull(key) {
+    // Regression guard: a pending CLEAR (⟲ on a cell-sourced key) must win over
+    // the cell-source fallback below, or Apply would re-write the old override
+    // value right back onto the cell and the ⟲ could never actually clear it.
+    // setTagOverride treats an all-null overrides object as "delete this
+    // override" — returning null here is what makes that delete happen.
+    if (_panel.pending.clear.indexOf(key) !== -1) return null;
     return (key in _panel.pending.set) ? _panel.pending.set[key]
       : (_panel.resolved && _panel.resolved.source[key] === "cell" ? _panel.resolved.values[key] : null);
   }
@@ -3574,6 +3580,43 @@
         _panel.pending = AshaarPanel.mergePending(_panel.pending, span.getAttribute("data-key"), null);
         refreshPanel();
       });
+    });
+    // Advanced: font correction (fontCorrections) and debug colors (debugColors)
+    // are compound values (a map / a two-color object) — the generic scalar
+    // [data-key] listener above can't build them, so these inputs deliberately
+    // carry no data-key and get their own listeners here.
+    var corrFontEl = document.getElementById("sp-corr-font");
+    var corrFactorEl = document.getElementById("sp-corr-factor");
+    function applyCorrFactor() {
+      var fontName = (corrFontEl.value || "").trim();
+      if (!fontName) return; // nothing to key the correction on
+      var factor = Number(corrFactorEl.value);
+      var map = {};
+      var cur = panelValues().fontCorrections || {};
+      Object.keys(cur).forEach(function (k) { map[k] = cur[k]; });
+      // 1.0 (or garbage) = no correction — delete rather than store a no-op.
+      if (!isFinite(factor) || factor === 1) delete map[fontName];
+      else map[fontName] = factor;
+      _panel.pending = AshaarPanel.mergePending(_panel.pending, "fontCorrections", map);
+      refreshPanel();
+    }
+    corrFontEl.addEventListener("change", applyCorrFactor);
+    corrFactorEl.addEventListener("change", applyCorrFactor);
+
+    var debugTatweelEl = document.getElementById("sp-debug-tatweel");
+    var debugTatweelOnEl = document.getElementById("sp-debug-tatweel-on");
+    var debugSpaceEl = document.getElementById("sp-debug-space");
+    var debugSpaceOnEl = document.getElementById("sp-debug-space-on");
+    function applyDebugColors() {
+      var obj = {
+        tatweel: debugTatweelOnEl.checked ? debugTatweelEl.value : "",
+        space: debugSpaceOnEl.checked ? debugSpaceEl.value : "",
+      };
+      _panel.pending = AshaarPanel.mergePending(_panel.pending, "debugColors", obj);
+      refreshPanel();
+    }
+    [debugTatweelEl, debugTatweelOnEl, debugSpaceEl, debugSpaceOnEl].forEach(function (el) {
+      el.addEventListener("change", applyDebugColors);
     });
     ["poem", "bandh", "cell", "gap"].forEach(function (lvl) {
       document.getElementById("sp-chip-" + lvl).addEventListener("click", function () {
