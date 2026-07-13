@@ -235,6 +235,8 @@
       fontMode: "document",
       tatweelCount: Number(v.strength || 6),
       gapWidth: Number(v.gap != null ? v.gap : 4),
+      lineHeightPt: v.lineHeightPt,
+      separatorPt: v.separatorPt,
       tableWidthPct: v.widthMode === "fixed" ? Number(v.widthPct || 50) : 100,
       autoFitWidth: v.widthMode !== "fixed",
       // v3 tag fields for fresh inserts. When the panel is focused on an
@@ -2702,7 +2704,7 @@
             var jRunsC = jSelC.runs.map(function (r) {
               return { text: r.text, csName: r.swap ? (cellDesc.kasheedaName || repName) : (cellDesc.wordName || repName), sizePt: repSize };
             });
-            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(jRunsC, repSize) });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(jRunsC, repSize, opts) });
             return;
           }
           // Natural-fit: fill to the position's matrix width (φ pushes toward the
@@ -2752,7 +2754,7 @@
             var mBudget = AshaarMatrix.cellFitBudget(mNatural, colPx, cellPhi);
             var mselC = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, mBudget);
             var moutC = mselC.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
-            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml([{ text: moutC, csName: cellDesc.wordName || repName, sizePt: repSize }], repSize) });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml([{ text: moutC, csName: cellDesc.wordName || repName, sizePt: repSize }], repSize, opts) });
             return;
           }
           var mReach = colPx - 0.28 * repSize * 96 / 72;
@@ -2833,7 +2835,7 @@
             var gBudgetC = AshaarMatrix.cellFitBudget(gNatural, colPx, cellPhi);
             var concC = AshaarJustify.justifyRunsConcentrated(primRuns, gBudgetC, Object.assign({}, calibParams, gMax));
             var cfRuns = concC.runs.map(function (r, i) { return { text: r.text, csName: runs[i].name, sizePt: runs[i].size }; });
-            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(cfRuns, repSize) });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(cfRuns, repSize, opts) });
             return;
           }
           // Natural-fit: fill to the position's matrix width; capped micro-spaces

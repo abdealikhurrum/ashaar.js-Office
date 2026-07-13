@@ -16,7 +16,7 @@
   // settings-keyed), so its list is empty here.
   var SCOPE_FIELDS = {
     poem: ["justifyMode", "fillMode", "strength", "gap", "widthMode", "widthPct",
-           "layoutMode", "colWidthMode", "misraWidthPt", "fontCorrections", "debugColors"],
+           "layoutMode", "colWidthMode", "misraWidthPt", "lineHeightPt", "separatorPt", "fontCorrections", "debugColors"],
     bandh: ["misraWidthPt"],
     cell: ["strength", "misraWidthPt", "capEm"],
     gap: [],

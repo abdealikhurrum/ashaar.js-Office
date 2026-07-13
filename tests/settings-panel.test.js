@@ -124,4 +124,10 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
   assert.equal(gap.dirty, true);
 }
 
+// ── §9 keys are poem-scope panel fields ──────────────────────────────────────
+{
+  assert.ok(AshaarPanel.SCOPE_FIELDS.poem.indexOf("lineHeightPt") !== -1);
+  assert.ok(AshaarPanel.SCOPE_FIELDS.poem.indexOf("separatorPt") !== -1);
+}
+
 console.log("settings-panel tests passed");
