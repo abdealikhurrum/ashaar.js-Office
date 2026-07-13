@@ -100,4 +100,28 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
   assert.deepEqual(local, { gap: 8, widthPct: 80 });
 }
 
+// ── pendingToLocal: clears are scope-gated like sets ─────────────────────────
+{
+  const local = { gap: 8, widthPct: 80 };
+  const p = { set: {}, clear: ["gap"] };
+  const next = AshaarPanel.pendingToLocal(local, p, AshaarPanel.SCOPE_FIELDS.cell);
+  assert.deepEqual(next, { gap: 8, widthPct: 80 }, "cell scope cannot clear a poem-scope key");
+  const nextPoem = AshaarPanel.pendingToLocal(local, p, AshaarPanel.SCOPE_FIELDS.poem);
+  assert.deepEqual(nextPoem, { widthPct: 80 }, "owning scope clears it");
+}
+
+// ── panelStateFor: pending clear shows the inherited value, dirty ────────────
+{
+  const store = { K: profileFromSettings("K", Object.assign(defaultSettings(), { gap: 6 })) };
+  const resolved = resolveSettings({ payload: { profile: "K", local: { gap: 8 } }, profileStore: store, scope: { level: "poem" } });
+  const st = AshaarPanel.panelStateFor({
+    resolved,
+    pending: { set: {}, clear: ["gap"] },
+    target: { kind: "block", scope: { level: "poem" }, cellEnabled: false, gapEnabled: false },
+  });
+  const gap = st.controls.find((c) => c.key === "gap");
+  assert.equal(gap.value, 6, "clear falls back to profile layer");
+  assert.equal(gap.dirty, true);
+}
+
 console.log("settings-panel tests passed");

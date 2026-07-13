@@ -177,7 +177,7 @@
   //   payload:      parsed v3 tag payload (or null for a plain selection)
   //   profileStore: { name: profile } (localStorage contents)
   //   scope:        { level: "poem"|"bandh"|"cell"|"gap", key?: "A2:3" }
-  // Returns { values, source, profileName, profileMissing, usedCache }.
+  // Returns { values, source, inherited, profileName, profileMissing, usedCache }.
   function resolveSettings(args) {
     args = args || {};
     var payload = args.payload || null;

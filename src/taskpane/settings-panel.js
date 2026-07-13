@@ -111,7 +111,9 @@
   function pendingToLocal(local, pending, scopeKeys) {
     var out = {};
     Object.keys(local || {}).forEach(function (k) {
-      if (pending.clear.indexOf(k) === -1) out[k] = local[k];
+      var cleared = pending.clear.indexOf(k) !== -1 &&
+        (!scopeKeys || scopeKeys.indexOf(k) !== -1);
+      if (!cleared) out[k] = local[k];
     });
     Object.keys(pending.set).forEach(function (k) {
       if (!scopeKeys || scopeKeys.indexOf(k) !== -1) out[k] = pending.set[k];
