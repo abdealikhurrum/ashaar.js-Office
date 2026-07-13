@@ -2623,6 +2623,10 @@
         fontProfile = pk ? _tuneCache.getProbe(pk) : null;
         if (fontProfile) {
           probeCacheStatus = "hit";
+          // JSON storage strips the FontProfile's getQuality/getTierQuality
+          // methods (buildSlots calls getQuality unconditionally when a
+          // profile is present) — reattach them before use.
+          fontProfile = AshaarTuneCache.rehydrateFontProfile(fontProfile);
         } else {
           probeCacheStatus = "miss";
           try { fontProfile = await AshaarTune.probeFont({ fontFamily: repName, fontSize: 64 }); }
