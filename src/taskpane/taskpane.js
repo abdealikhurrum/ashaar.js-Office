@@ -991,16 +991,19 @@
     // returns wrong widths (mis-ranking swaps / mis-sizing the matrix). The rep
     // font alone isn't enough for multi-font poems or Jameel's wide face. See
     // memory font-measurement-model.
+    // faceNameSet (name-only, no size) also feeds the Task 9 JIT measurement
+    // gate — collected here since this is the one pass over every cell.
+    var faceNameSet = {};
     if (canvasCtx && typeof document !== "undefined" && document.fonts && document.fonts.load) {
       var faceSet = {};
       blockInfos.forEach(function (blk) {
         blk.tableInfos.forEach(function (info) {
           info.cells.forEach(function (c) {
             var fnm = c.fontName || repName, fsz = c.fontSize || repSize;
-            if (fnm) faceSet[fsz + "pt \"" + fnm + "\""] = true;
+            if (fnm) { faceSet[fsz + "pt \"" + fnm + "\""] = true; faceNameSet[fnm] = true; }
             var kn = (typeof AshaarFonts !== "undefined" && AshaarFonts.descriptorForFontName)
               ? AshaarFonts.descriptorForFontName(fnm).kasheedaName : null;
-            if (kn) faceSet[fsz + "pt \"" + kn + "\""] = true;
+            if (kn) { faceSet[fsz + "pt \"" + kn + "\""] = true; faceNameSet[kn] = true; }
           });
         });
       });
@@ -1031,7 +1034,7 @@
     }
     var qMatrix = AshaarMatrix.buildMatrix(qMatrixCells);
 
-    return { blockInfos: blockInfos, pagePt: pagePt, pageTwips: pageTwips, repName: repName, repSize: repSize, canvasCtx: canvasCtx, qMatrix: qMatrix };
+    return { blockInfos: blockInfos, pagePt: pagePt, pageTwips: pageTwips, repName: repName, repSize: repSize, canvasCtx: canvasCtx, qMatrix: qMatrix, faceNames: Object.keys(faceNameSet) };
   }
 
   // Read each content cell's ORIGINAL per-word fonts (name/size/style/color)
@@ -1247,6 +1250,12 @@
         if (!blocks.length) { summary = "No blocks are tagged with qaseeda “" + name + "”."; return; }
         blockCount = blocks.length;
         var cap = await captureQaseedaTables(context, blocks, profile);
+        // Just-in-time font-measurement gate (Task 9): once the distinct-face
+        // set is built (captureQaseedaTables → cap.faceNames), confirm the
+        // WebView can measure every one BEFORE any structural rebuild or tag
+        // write below. "cancel" aborts pass 1 entirely — pass 2 never runs.
+        var qGate = await ensureFacesMeasurable(cap.faceNames);
+        if (qGate === "cancel") { summary = "Add the font, then Apply again."; return; }
         // Snapshot per-word fonts NOW — the rebuild below discards them. Reads
         // are reconciled against each block's tag (the source of truth; the
         // document read is lossy after a justify), and the healed pack goes
@@ -1895,6 +1904,67 @@
     return AshaarFontStore.listFonts().then(renderFontList, function () {});
   }
 
+  // Just-in-time font-measurement gate (Task 9). Force-load every face; when
+  // one is invisible to the WebView (Word renders it but canvas can't measure
+  // it) surface the inline prompt. Resolves "ok" when all faces measure,
+  // "continue" when the user accepts fallback metrics, "cancel" when they go
+  // add the font. See memory font-measurement-model.
+  async function ensureFacesMeasurable(faceNames) {
+    var missing = [];
+    for (var i = 0; i < faceNames.length; i++) {
+      var f = faceNames[i];
+      try { await document.fonts.load('16pt "' + f + '"'); } catch (e) {}
+      if (!document.fonts.check('16pt "' + f + '"')) missing.push(f);
+    }
+    if (!missing.length) return "ok";
+    return await new Promise(function (resolve) {
+      var box = document.getElementById("sp-font-prompt");
+      document.getElementById("sp-font-prompt-name").textContent = missing.join('", "');
+      box.hidden = false;
+      document.getElementById("sp-font-prompt-add").onclick = function () {
+        box.hidden = true;
+        var strip = document.getElementById("fonts-strip");
+        strip.open = true;
+        document.getElementById("font-upload-name").value = missing[0];
+        resolve("cancel");
+      };
+      document.getElementById("sp-font-prompt-continue").onclick = function () {
+        box.hidden = true;
+        resolve("continue");
+      };
+    });
+  }
+
+  // Distinct font faces used by the current block's cells (read-only capture
+  // for the JIT gate above) — no tag write, so a "cancel" leaves nothing to
+  // undo. Errors (transient selection state) degrade to an empty face list,
+  // which makes the gate resolve "ok" and let the caller's own routing surface
+  // any real problem.
+  async function collectBlockFaceNames() {
+    var names = {};
+    if (typeof Word === "undefined") return [];
+    try {
+      await Word.run(async function (context) {
+        var cc = await findBlockAt(context);
+        var tables = cc.getRange().tables;
+        tables.load("items");
+        await context.sync();
+        tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+        await context.sync();
+        tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
+        await context.sync();
+        var cells = [];
+        tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) {
+          cell.body.font.load("name");
+          cells.push(cell);
+        }); }); });
+        await context.sync();
+        cells.forEach(function (cell) { if (cell.body.font && cell.body.font.name) names[cell.body.font.name] = true; });
+      });
+    } catch (e) { /* transient selection — gate degrades to no known faces */ }
+    return Object.keys(names);
+  }
+
   // Auto-detect the family from the picked file and prefill the name field.
   function onFontFilePicked() {
     setFontUploadStatus("", "");
@@ -2533,6 +2603,11 @@
         selection.load("text");
         selection.font.load("name,size");
         await context.sync();
+        // Just-in-time font-measurement gate (Task 9): a plain selection has no
+        // block/cell fonts to gather, so gate on this single face. "cancel"
+        // aborts before insertText below — nothing in the document changes.
+        var plainGate = await ensureFacesMeasurable(selection.font.name ? [selection.font.name] : []);
+        if (plainGate === "cancel") { setMessage("Add the font, then Apply again."); return; }
         // Resolve the mechanism from the selection's REAL font: true
         // whitespace-shaping fonts (Noto/Gulzar/Scheherazade) shatter under
         // injected tatweels, so downgrade kashida→spacing for them; generic /
@@ -3455,11 +3530,20 @@
     try {
       if (!target || target.kind !== "block") {
         // Plain selection: one-shot justify with panel values; nothing persisted.
+        // (The single-face gate for this route lives inside justifySelection's
+        // own no-tables capture — it reads the selection's real font there.)
         await justifySelection();   // justifySelection reads options() → panelValues()
         _panel.pending = { set: {}, clear: [] };
         refreshPanel();
         return;
       }
+      // Just-in-time font-measurement gate (Task 9), BEFORE any routing/tag
+      // write: gather this block's distinct cell font faces and confirm the
+      // WebView can measure them. "cancel" aborts here — pending edits survive
+      // for retry (the routing branches below, which write tags, haven't run).
+      var gateFaces = await collectBlockFaceNames();
+      var gateResult = await ensureFacesMeasurable(gateFaces);
+      if (gateResult === "cancel") { setMessage("Add the font, then Apply again."); return; }
       if (_panel.scopeLevel === "poem") {
         await applyPoemScope(target, values);
       } else if (_panel.scopeLevel === "bandh") {
