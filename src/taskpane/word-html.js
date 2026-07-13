@@ -907,6 +907,17 @@
       sourceHash: (hash >>> 0).toString(16)
     };
     if (cellPatterns && cellPatterns.length) payload.cells = cellPatterns;
+    // Final review I1: Re-render's bare rebuild calls this to mint a FRESH
+    // tag and previously carried only profile/local/profileCache (spec §2's
+    // carry list) — so per-cell overrides (including fill/color, which
+    // postdate that spec), gap slotDecor, and bandh widthPt were silently
+    // dropped on every Re-render / structural poem-scope Apply. Same
+    // opts-driven carry pattern as profile/local/profileCache above; guarded
+    // on non-empty so callers that never pass these (grid/template inserts)
+    // are unaffected.
+    if (opts.overrides && typeof opts.overrides === "object" && Object.keys(opts.overrides).length) payload.overrides = opts.overrides;
+    if (opts.slotDecor && typeof opts.slotDecor === "object" && Object.keys(opts.slotDecor).length) payload.slotDecor = opts.slotDecor;
+    if (typeof opts.widthPt === "number" && opts.widthPt > 0) payload.widthPt = opts.widthPt;
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 

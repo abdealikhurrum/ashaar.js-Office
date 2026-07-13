@@ -1199,3 +1199,34 @@ console.log("word-html tests passed");
   const t2 = AshaarWord.setTagOverride(t1, "A2:3", { strength: null, widthPt: null, capEm: null, fill: null, color: null });
   assert.strictEqual("A2:3" in AshaarWord.parseContentControlTag(t2).overrides, false, "all-null deletes");
 }
+
+// ── Final review I1: contentControlTag carries overrides/slotDecor/widthPt
+// when the caller (reRender's rebuild) supplies them — previously only
+// profile/local/profileCache survived a fresh-tag mint, so a Re-render (or
+// any structural poem-scope Apply, which reuses the same rebuild) silently
+// dropped per-cell overrides, gap decor, and bandh width. ──────────────────
+{
+  const tag = AshaarWord.contentControlTag("poem", {
+    profile: "Q",
+    overrides: { "0:A1": { strength: 9, fill: "#F5F0E0" } },
+    slotDecor: { "0:A#1": { symbol: "؎" } },
+    widthPt: 240
+  });
+  const p = AshaarWord.parseContentControlTag(tag);
+  assert.deepStrictEqual(p.overrides, { "0:A1": { strength: 9, fill: "#F5F0E0" } }, "overrides carried");
+  assert.deepStrictEqual(p.slotDecor, { "0:A#1": { symbol: "؎" } }, "slotDecor carried");
+  assert.strictEqual(p.widthPt, 240, "widthPt carried");
+
+  // Absent/empty → no key at all (other call sites, e.g. grid/template
+  // inserts, never pass these and must be unaffected: parseContentControlTag
+  // still normalizes to {} / {} / null on read either way).
+  const bare = AshaarWord.contentControlTag("poem", { profile: "Q" });
+  const pb = AshaarWord.parseContentControlTag(bare);
+  assert.deepStrictEqual(pb.overrides, {}, "no overrides passed → empty map");
+  assert.deepStrictEqual(pb.slotDecor, {}, "no slotDecor passed → empty map");
+  assert.strictEqual(pb.widthPt, null, "no widthPt passed → null");
+
+  // Empty objects also don't leak an empty key into the payload.
+  const emptyOv = AshaarWord.contentControlTag("poem", { overrides: {}, slotDecor: {}, widthPt: 0 });
+  assert.deepStrictEqual(AshaarWord.parseContentControlTag(emptyOv).overrides, {}, "empty overrides object omitted");
+}

@@ -360,16 +360,22 @@
     layoutSpec.value = layoutSpecForPreset(layoutPreset.value, misraCount.value);
   }
 
+  // Final review I3: returns true/false so a caller further up the chain
+  // (e.g. reRender) can gate ITS OWN trailing message instead of
+  // unconditionally overwriting whatever this set. Existing callers that
+  // don't need the signal are unaffected (they just don't await the value).
   async function withWord(callback) {
     if (typeof Word === "undefined") {
       setMessage("Open this task pane inside Word to update the document.");
-      return;
+      return false;
     }
     try {
       await Word.run(callback);
       setMessage("Done.");
+      return true;
     } catch (error) {
       setMessage(describeError(error));
+      return false;
     }
   }
 
@@ -1230,7 +1236,7 @@
   // same-GRID bandhs get an identical gridCol (harmony). (2) JUSTIFY — re-gather
   // the fresh bare tables and fill each cell to its box = span × (target/GRID).
   async function applyProfileToQaseeda(name, opts) {
-    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to apply a qaseeda."); return; }
+    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to apply a qaseeda."); return false; }
     var profile = getProfile(name);
     var CELL_MARGIN_PT = 5.76;
     var MARGIN_PX = CELL_MARGIN_PT * 96 / 72;
@@ -1253,6 +1259,11 @@
     var qDebug = !!(debugMode && debugMode.checked);
     var qDiags = [];
     var qMeta = {};
+    // Final review I3: true only when the outer catch fires (a real pipeline
+    // exception) — the honest success/failure signal returned below so
+    // reRender can gate its own trailing message instead of unconditionally
+    // overwriting this one.
+    var qFailed = false;
     // §1 cascade descope: opts.onlyBlockTag scopes both passes to a single
     // physical block instead of every block tagged with this profile. The tag
     // string CANNOT be reused as-is across passes — pass 1 rewrites cc.tag
@@ -1432,7 +1443,10 @@
           await context.sync();
         }
       });
-      if (summary) { setMessage(summary); return; }
+      // Final review I3: an honest success/failure signal so callers (reRender)
+      // can gate their own trailing message instead of unconditionally
+      // overwriting this one.
+      if (summary) { setMessage(summary); return false; }
 
       // ── Pass 2: JUSTIFY — fill each cell of the fresh tables to its box ────────
       var changed = 0, coloured = 0;
@@ -1882,6 +1896,7 @@
           + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + ".";
     } catch (error) {
       summary = "Apply failed: " + describeError(error);
+      qFailed = true;
     }
     if (qDebug && debugOutput) {
       var qHead = "dbg=v5(gap-spacing)  target=" + (qMeta.targetTwips || 0) + "tw  rebuild=" + (qMeta.rebuild ? "YES" : "no")
@@ -1904,6 +1919,7 @@
            + qMeta.storedRFonts.join("\n  ") : "");
     }
     setMessage(summary);
+    return !qFailed;
   }
 
 
@@ -2079,7 +2095,9 @@
   }
 
   async function insertPoem(replaceSelection, optsOverride) {
-    await withWord(async function (context) {
+    // Final review I3: propagate withWord's success flag so reRender (which
+    // delegates its rebuild step to this function) can gate its own message.
+    return await withWord(async function (context) {
       var opts = options();
       // Re-render passes overrides (e.g. justifyMode:"none" for a bare rebuild,
       // fontCsName to pin the poem's existing font). Merge over the pane opts.
@@ -2508,18 +2526,36 @@
       rebuildOverride.profile = ccPayload.profile;
       rebuildOverride.local = ccPayload.local;
       rebuildOverride.profileCache = ccPayload.profileCache;
+      // Final review I1: the fresh tag insertPoem mints via contentControlTag
+      // must also carry these three or a Re-render (and structural poem-scope
+      // Apply, which reuses this same path) silently destroys per-cell
+      // overrides, gap decor, and bandh width — actively so for fill/color,
+      // since the next justify pass's always-assert fill resets shading to
+      // white once the override is gone. Deliberately extends spec §2's carry
+      // list (which predates fill/color living in overrides) — recorded as a
+      // spec deviation in the final-fixes report.
+      rebuildOverride.overrides = ccPayload.overrides;
+      rebuildOverride.slotDecor = ccPayload.slotDecor;
+      rebuildOverride.widthPt = ccPayload.widthPt;
     }
-    await insertPoem(true, rebuildOverride);
+    // Final review I3: track both steps' own success flags — the trailing
+    // "Re-rendered" message below must not overwrite either step's failure
+    // message (withWord's describeError(...), or applyProfileToQaseeda's
+    // "Apply failed: …" when the hybrid qaseeda trigger fires inside
+    // justifySelection). Message-last rule: success text only when the
+    // pipeline actually succeeded.
+    var rebuildOk = await insertPoem(true, rebuildOverride);
     if (run) run.phase("rebuild");
     // Step 2: fill in place with the correct per-cell mechanism for the chosen
     // mode (skipped when the pane mode is "none").
-    if (opts.justifyMode && opts.justifyMode !== "none") await justifySelection();
+    var justifyOk = true;
+    if (opts.justifyMode && opts.justifyMode !== "none") justifyOk = await justifySelection();
     if (run) run.phase("justify");
     if (run) {
       run.end();
       debugOutput.textContent += "\n" + JSON.stringify(run.report());
     }
-    setMessage("Re-rendered (font & size preserved).");
+    if (rebuildOk && justifyOk) setMessage("Re-rendered (font & size preserved).");
   }
 
   // justify-mode dropdown is "Word justify" (opts.justifyMode === "css") on
@@ -2583,10 +2619,10 @@
       await context.sync();
     });
 
-    if (!source.trim()) return; // a friendly message was already shown
+    if (!source.trim()) return false; // a friendly message was already shown
 
     input.value = source;
-    await insertPoem(true);
+    return await insertPoem(true);
   }
 
   // Wrapper: suppress active-context reflection while our own justify mutates
@@ -2609,15 +2645,16 @@
     try {
       var qsel = await getQaseedaAtSelection();
       if (qsel.name && loadProfileStore()[qsel.name]) {
-        await applyProfileToQaseeda(qsel.name, { onlyBlockTag: qsel.tag });
-        return;
+        // Final review I3: propagate the honest success flag to the caller
+        // (justifySelection → reRender) instead of an unconditional return.
+        return await applyProfileToQaseeda(qsel.name, { onlyBlockTag: qsel.tag });
       }
     } catch (e) { /* fall through to normal justify */ }
 
     // "Let Word fill it": native Word kashida (jc) instead of manual tatweel
     // insertion / spacing math. Entirely different code path — skip the
     // probe/calibrate/tatweel machinery below and delegate.
-    if (opts.justifyMode === "css") { await justifySelectionWordFill(opts); return; }
+    if (opts.justifyMode === "css") { return await justifySelectionWordFill(opts); }
 
     // Fallback font from the pane — used only when a cell reports no explicit font.
     var fbMode = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
@@ -2647,7 +2684,7 @@
     // cancel message. Hoisted flag; re-set the message after (last write wins).
     var plainGateCancelled = false;
 
-    await withWord(async function (context) {
+    var ranOk = await withWord(async function (context) {
       var selection = context.document.getSelection();
 
       // Find enclosing Ashaar Poem content control (the poem is the calibration unit)
@@ -3399,6 +3436,10 @@
     });
     // Re-assert the cancel message AFTER withWord's unconditional "Done.".
     if (plainGateCancelled) setMessage("Add the font, then Apply again.");
+    // Final review I3: a gate cancel is a soft early-return inside the
+    // callback — withWord itself still reports true (Word.run didn't throw)
+    // — so override the signal to false here for an honest result.
+    return plainGateCancelled ? false : ranOk;
   }
 
   // Adopt an existing Word table of poetry: read its cells, reconstruct the
