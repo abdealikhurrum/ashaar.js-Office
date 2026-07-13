@@ -476,6 +476,11 @@
   // ── Unified settings panel state ──────────────────────────────────────────
   var _panel = {
     pending: { set: {}, clear: [] },
+    // The profile dropdown's chosen-but-not-Assigned value. Like pending, it
+    // must survive re-renders: DocumentSelectionChanged fires constantly in
+    // Word and renderPanel resets the dropdown to the tag's resolved profile —
+    // without this, the user's choice vanished before they could click Assign.
+    pendingProfile: null,
     scopeLevel: "poem",
     target: null,      // { kind:"block"|"selection", cc?, payload?, scope, cellEnabled, gapEnabled, cellLabel?, gapKey? }
     resolved: null,
@@ -549,7 +554,10 @@
     sel.innerHTML = "<option value=\"\">(none)</option>" + names.map(function (n) {
       return "<option value=\"" + String(n).replace(/"/g, "&quot;") + "\">" + String(n) + "</option>";
     }).join("");
-    sel.value = st.profileRow.missing ? "" : st.profileRow.name;
+    // An un-Assigned dropdown choice wins over the resolved name — reflection
+    // re-renders constantly in Word and must not wipe the user's selection.
+    sel.value = _panel.pendingProfile != null ? _panel.pendingProfile
+      : (st.profileRow.missing ? "" : st.profileRow.name);
     document.getElementById("sp-profile-assign").disabled = !st.profileRow.assignEnabled;
     document.getElementById("sp-profile-update").hidden = !st.profileRow.updateVisible;
     document.getElementById("sp-profile-update").textContent = "Update \"" + st.profileRow.name + "\"";
@@ -581,6 +589,7 @@
         // is a null-object proxy and property access throws inside Word.run.
         if (isBlock ? cc.tag !== _lastBlockTag : _lastBlockTag !== null) {
           _panel.pending = { set: {}, clear: [] };
+          _panel.pendingProfile = null;
           _lastBlockTag = isBlock ? cc.tag : null;
         }
         refreshPanel();
@@ -3362,7 +3371,11 @@
   // success tail; and the message goes BEFORE applyProfileToQaseeda so the
   // pipeline's own success/failure summary stays last (same rule as applyPanel).
   async function assignProfile() {
-    var name = document.getElementById("sp-profile").value;
+    // Prefer the pending (chosen-but-not-yet-Assigned) value: reflection may
+    // have re-rendered the dropdown between the user's choice and this click.
+    var name = _panel.pendingProfile != null
+      ? _panel.pendingProfile
+      : document.getElementById("sp-profile").value;
     try {
       await withWordStrict(async function (context) {
         var cc = await findBlockAt(context);
@@ -3373,6 +3386,7 @@
       setMessage("Assign failed: " + (e && e.message ? e.message : e));
       return;
     }
+    _panel.pendingProfile = null;  // the choice is now the tag's resolved profile
     setMessage(name ? "Assigned to \"" + name + "\" — refreshing…" : "Profile link removed.");
     if (name) await applyProfileToQaseeda(name);
     _lastBlockTag = null; await reflectActiveContext();
@@ -3634,6 +3648,13 @@
     });
     document.getElementById("sp-revert").addEventListener("click", revertToProfile);
     document.getElementById("sp-apply").addEventListener("click", applyPanel);
+    // The dropdown choice is pending until Assign — reflection re-renders the
+    // panel on every Word selection change and must not wipe it.
+    document.getElementById("sp-profile").addEventListener("change", function () {
+      var resolvedName = _panel.resolved ? _panel.resolved.profileName : "";
+      var v = document.getElementById("sp-profile").value;
+      _panel.pendingProfile = (v === resolvedName) ? null : v;
+    });
     document.getElementById("sp-profile-assign").addEventListener("click", assignProfile);
     // Save as… uses an inline name row (window.prompt is disallowed in Office
     // add-in webviews; it silently returns null inside Word).
