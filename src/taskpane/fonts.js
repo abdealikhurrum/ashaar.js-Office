@@ -36,11 +36,18 @@
     // line by swapping whole fasls to the wider Kasheeda face; see
     // kashida-fontswap.js for the pure selection logic.
     jameel: { id: "jameel", label: "Jameel Noori Kasheeda",
-      css: "'Jameel Noori Nastaleeq Kasheeda','Jameel Noori Nastaleeq',serif",
+      // MarkSafe build: vocalized Arabic keeps the wide kashida ligature forms
+      // with harakat anchored (the stock Kasheeda drops vocalized words to
+      // narrow forms). Family name MUST stay ≤31 chars: Word truncates longer
+      // font names at 31, and "Jameel Noori Nastaleeq Kasheeda MarkSafe"
+      // truncated to exactly the stock Kasheeda's name — swaps silently
+      // rendered the old font (burned 2026-07-13). Old plain-Kasheeda runs
+      // migrate via LEGACY_NAMES below.
+      css: "'Jameel Kasheeda MarkSafe','Jameel Noori Nastaleeq',serif",
       wordName: "Jameel Noori Nastaleeq",                 // base face
-      kasheedaName: "Jameel Noori Nastaleeq Kasheeda",    // wider face (font-swap target)
+      kasheedaName: "Jameel Kasheeda MarkSafe", // wider face (font-swap target)
       mechanism: "font-swap", bundled: true, private: true, readerNote: true,
-      file: "JameelNooriNastaleeq-Regular.ttf", kasheedaFile: "JameelNooriNastaleeqKasheeda.ttf" },
+      file: "JameelNooriNastaleeq-Regular.ttf", kasheedaFile: "JameelKasheedaMarkSafe.ttf" },
     gulzar: { id: "gulzar", label: "Gulzar",
       css: "'Gulzar',serif", wordName: "Gulzar",
       mechanism: "whitespace", bundled: true, file: "Gulzar-Regular.woff2" }
@@ -56,8 +63,19 @@
   // Arabic fonts (e.g. Fatemi Maqala), Latin defaults, empty/absent — returns a
   // synthetic "generic" descriptor so those runs run the tatweel engine
   // (AshaarJustify.justifyLine/justifyRuns) instead of being forced to spacing.
-  function descriptorForFontName(name) {
+  // Retired face names → the base face they migrate to. The plain Kasheeda
+  // face was replaced by the MarkSafe build (emit-only rename, 2026-07-13);
+  // runs/tag-packs from older sessions still carry the plain name. Mapping it
+  // to the BASE face lets the swap engine re-decide and re-emit as MarkSafe —
+  // documents self-heal on their next justify instead of falling to generic.
+  var LEGACY_NAMES = { "Jameel Noori Nastaleeq Kasheeda": "Jameel Noori Nastaleeq" };
+  function normalizeLegacyFontName(name) {
     var n = String(name == null ? "" : name).trim();
+    return LEGACY_NAMES[n] || n;
+  }
+
+  function descriptorForFontName(name) {
+    var n = normalizeLegacyFontName(name);
     if (n) {
       for (var id in LIST) {
         if (!LIST.hasOwnProperty(id)) continue;
@@ -79,6 +97,7 @@
 
   return { LIST: LIST, get: get, mechanismOf: mechanismOf,
     descriptorForFontName: descriptorForFontName,
+    normalizeLegacyFontName: normalizeLegacyFontName,
     mechanismForFontName: mechanismForFontName, wordNameOf: wordNameOf,
     kasheedaNameOf: kasheedaNameOf, cssFamilyOf: cssFamilyOf, tatweelRulesOf: tatweelRulesOf };
 }));

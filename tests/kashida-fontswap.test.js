@@ -62,4 +62,24 @@ assert.strictEqual(r2.reason, "no kasheeda variants");
   assert.strictEqual(s4.runs[0].swap, false, "overshoot farther than capped-space landing -> spaces win");
 }
 
+// ── splitSpans keeps combining marks attached to their base letter ───────────
+// Orphaned marks shattered vocalized words once MarkSafe made vocalized fasls
+// swappable: a span starting with shadda/fatha/damma renders on a dotted
+// circle when its run gets a different font (seen live 2026-07-13).
+{
+  const MARK_AT_START = /^[ؐ-ًؚ-ٰٟۖ-ۜ۟-۪ۨ-ۭ]/;
+  assert.deepStrictEqual(K.splitSpans("تَدَّعيهِ"), ["تَدَّ", "عيهِ"], "shadda+fatha stay with د");
+  assert.deepStrictEqual(K.splitSpans("صِغارُها"), ["صِغا", "رُ", "ها"], "damma stays with ر");
+  assert.deepStrictEqual(K.splitSpans("عَجِزَت"), ["عَجِزَ", "ت"], "fatha stays with ز");
+  assert.deepStrictEqual(K.splitSpans("هَمَّهُ"), ["هَمَّهُ"], "fully-joined word unchanged");
+  // Property: NO span may ever start with a combining mark.
+  ["تَدَّعيهِ الضَراغِم", "صِغارُها", "وَقَدْ", "أَوَّاب"].forEach(function (t) {
+    K.splitSpans(t).forEach(function (s) {
+      assert.strictEqual(MARK_AT_START.test(s), false, "span starts with mark: " + JSON.stringify(s) + " in " + t);
+    });
+  });
+  // Round-trip: spans always reassemble to the input.
+  assert.strictEqual(K.splitSpans("تَدَّعيهِ الضَراغِم").join(""), "تَدَّعيهِ الضَراغِم");
+}
+
 console.log("kashida-fontswap tests passed");

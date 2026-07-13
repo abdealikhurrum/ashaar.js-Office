@@ -25,7 +25,18 @@ assert.strictEqual(AshaarFonts.mechanismOf("nope"), "whitespace");
 // "whitespace", so those runs still kashida instead of being forced to spacing.
 assert.strictEqual(AshaarFonts.mechanismForFontName("Mehr Nastaliq Web"), "tatweel");
 assert.strictEqual(AshaarFonts.mechanismForFontName("Jameel Noori Nastaleeq"), "font-swap");         // base face
-assert.strictEqual(AshaarFonts.mechanismForFontName("Jameel Noori Nastaleeq Kasheeda"), "font-swap"); // wide face
+assert.strictEqual(AshaarFonts.mechanismForFontName("Jameel Kasheeda MarkSafe"), "font-swap"); // wide face
+// Emit-only rename + legacy migration (user decision 2026-07-13, refined after
+// Word testing): the PLAIN Kasheeda name is a retired alias of the BASE face.
+// Old runs/tag-packs resolve to jameel (not generic — that injected generic
+// tatweels into Kasheeda words) and re-emit as MarkSafe on the next justify.
+assert.strictEqual(AshaarFonts.normalizeLegacyFontName("Jameel Noori Nastaleeq Kasheeda"), "Jameel Noori Nastaleeq");
+assert.strictEqual(AshaarFonts.normalizeLegacyFontName("Gulzar"), "Gulzar", "identity for everything else");
+assert.strictEqual(AshaarFonts.normalizeLegacyFontName(null), "");
+assert.strictEqual(AshaarFonts.mechanismForFontName("Jameel Noori Nastaleeq Kasheeda"), "font-swap");
+assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq Kasheeda").id, "jameel");
+assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq Kasheeda").kasheedaName,
+  "Jameel Kasheeda MarkSafe", "legacy name swaps to the MarkSafe target");
 assert.strictEqual(AshaarFonts.mechanismForFontName("Noto Nastaliq Urdu"), "whitespace");
 assert.strictEqual(AshaarFonts.mechanismForFontName("Gulzar"), "whitespace");
 assert.strictEqual(AshaarFonts.mechanismForFontName("Scheherazade New"), "whitespace");
@@ -41,8 +52,8 @@ assert.strictEqual(AshaarFonts.mechanismForFontName("  Gulzar  "), "whitespace")
 assert.strictEqual(AshaarFonts.descriptorForFontName("Mehr Nastaliq Web").id, "mehr");
 assert.strictEqual(AshaarFonts.descriptorForFontName("Mehr Nastaliq Web").mechanism, "tatweel");
 assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq").id, "jameel");        // base face
-assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq Kasheeda").id, "jameel"); // wide face → same descriptor
-assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq").kasheedaName, "Jameel Noori Nastaleeq Kasheeda");
+assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Kasheeda MarkSafe").id, "jameel"); // wide face → same descriptor
+assert.strictEqual(AshaarFonts.descriptorForFontName("Jameel Noori Nastaleeq").kasheedaName, "Jameel Kasheeda MarkSafe");
 assert.strictEqual(AshaarFonts.descriptorForFontName("Noto Nastaliq Urdu").mechanism, "whitespace");
 // unknown → synthetic generic descriptor (no faces, generic mechanism)
 var gd = AshaarFonts.descriptorForFontName("Fatemi Maqala");
@@ -64,7 +75,7 @@ assert.strictEqual(AshaarFonts.wordNameOf("jameel"), "Jameel Noori Nastaleeq"); 
 assert.strictEqual(AshaarFonts.wordNameOf("document"), null);
 
 // kasheeda (wider, font-swap target) names
-assert.strictEqual(AshaarFonts.kasheedaNameOf("jameel"), "Jameel Noori Nastaleeq Kasheeda");
+assert.strictEqual(AshaarFonts.kasheedaNameOf("jameel"), "Jameel Kasheeda MarkSafe");
 assert.strictEqual(AshaarFonts.kasheedaNameOf("mehr"), null);
 
 // css families

@@ -14,13 +14,26 @@
   // Letters that do NOT join to the following letter → a segment ends after them.
   var NONJOIN = "اأإآٱدذڈرزڑژوؤءے";
 
+  // Arabic combining marks (harakat, shadda, sukun, superscript alef, Quranic
+  // annotation marks). Joining-transparent: they belong to the PRECEDING base
+  // letter and must never start a span — an orphaned mark at a run boundary
+  // renders on a dotted circle and shatters the word once the runs carry
+  // different fonts (seen live with MarkSafe swaps, 2026-07-13).
+  var COMBINING = /[ؐ-ًؚ-ٰٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/;
+
   function splitSpans(text) {
     var spans = [], cur = "";
     for (var i = 0; i < text.length; i++) {
       var ch = text.charAt(i);
       if (ch === " ") { if (cur) { spans.push(cur); cur = ""; } spans.push(" "); continue; }
       cur += ch;
-      if (NONJOIN.indexOf(ch) !== -1) { spans.push(cur); cur = ""; }
+      if (NONJOIN.indexOf(ch) !== -1) {
+        // Pull the letter's combining marks into this span before closing it.
+        while (i + 1 < text.length && COMBINING.test(text.charAt(i + 1))) {
+          cur += text.charAt(i + 1); i++;
+        }
+        spans.push(cur); cur = "";
+      }
     }
     if (cur) spans.push(cur);
     return spans;

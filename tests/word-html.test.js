@@ -650,7 +650,7 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   const xml = AshaarWord.runsToMisraXml(
     [{text:"كہہ", swap:true},{text:" ", swap:false},{text:"تھے", swap:false}],
     "right", { fontMode: "jameel" });
-  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "wider face on swapped fasl");
+  assert.ok(xml.indexOf('w:cs="Jameel Kasheeda MarkSafe"') !== -1, "wider face on swapped fasl");
   assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq"') !== -1, "base face on non-swapped fasl");
   console.log("word-html font-swap emitter tests passed");
 }
@@ -698,7 +698,7 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
 // ── misraRunsXml: Natural-fit per-run cs faces with a REAL jc ─────────────────
 {
   const xml = AshaarWord.misraRunsXml(
-    [{ text: "كہہ", csName: "Jameel Noori Nastaleeq Kasheeda" },
+    [{ text: "كہہ", csName: "Jameel Kasheeda MarkSafe" },
      { text: " ", csName: "Jameel Noori Nastaleeq" },
      { text: "تھے", csName: "Jameel Noori Nastaleeq" }],
     "right", 16
@@ -709,10 +709,10 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   assert.ok(xml.indexOf("distribute") === -1, "never emits distribute");
   assert.match(xml, /<w:bidi\/>/, "rtl paragraph");
   assert.match(xml, /<w:rtl\/>/, "rtl runs");
-  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "wider face on swapped fasl");
+  assert.ok(xml.indexOf('w:cs="Jameel Kasheeda MarkSafe"') !== -1, "wider face on swapped fasl");
   assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq"') !== -1, "base face on the rest");
   // ascii+hAnsi named too, so Font.name round-trips on a re-apply (idempotency).
-  assert.ok(xml.indexOf('w:ascii="Jameel Noori Nastaleeq Kasheeda"') !== -1, "ascii set for round-trip read");
+  assert.ok(xml.indexOf('w:ascii="Jameel Kasheeda MarkSafe"') !== -1, "ascii set for round-trip read");
   assert.ok(xml.indexOf('w:hAnsi="Jameel Noori Nastaleeq"') !== -1, "hAnsi set for round-trip read");
   assert.match(xml, /<w:sz w:val="32"\/>/, "16pt -> 32 half-points from fallback");
   assert.ok(xml.indexOf("كہہ") !== -1 && xml.indexOf("تھے") !== -1, "carries text");
@@ -762,14 +762,14 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
 // reads back one family for the whole word.
 {
   const xml = AshaarWord.misraRunsXml(
-    [{ text: "كہہ", csName: "Jameel Noori Nastaleeq Kasheeda", asciiName: "Jameel Noori Nastaleeq" },
+    [{ text: "كہہ", csName: "Jameel Kasheeda MarkSafe", asciiName: "Jameel Noori Nastaleeq" },
      { text: "تھے", csName: "Jameel Noori Nastaleeq", asciiName: "Jameel Noori Nastaleeq" }],
     "right", 16
   );
-  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "cs keeps the swapped (Kasheeda) face");
-  assert.ok(xml.indexOf('w:ascii="Jameel Noori Nastaleeq Kasheeda"') === -1, "ascii never names the Kasheeda face");
-  assert.ok(xml.indexOf('w:hAnsi="Jameel Noori Nastaleeq Kasheeda"') === -1, "hAnsi never names the Kasheeda face");
-  assert.match(xml, /w:ascii="Jameel Noori Nastaleeq" w:hAnsi="Jameel Noori Nastaleeq" w:cs="Jameel Noori Nastaleeq Kasheeda"/,
+  assert.ok(xml.indexOf('w:cs="Jameel Kasheeda MarkSafe"') !== -1, "cs keeps the swapped (Kasheeda) face");
+  assert.ok(xml.indexOf('w:ascii="Jameel Kasheeda MarkSafe"') === -1, "ascii never names the Kasheeda face");
+  assert.ok(xml.indexOf('w:hAnsi="Jameel Kasheeda MarkSafe"') === -1, "hAnsi never names the Kasheeda face");
+  assert.match(xml, /w:ascii="Jameel Noori Nastaleeq" w:hAnsi="Jameel Noori Nastaleeq" w:cs="Jameel Kasheeda MarkSafe"/,
     "swapped run: ascii+hAnsi base, cs Kasheeda");
   // Without asciiName the old behavior holds (ascii = cs) — single-face runs.
   const plain = AshaarWord.misraRunsXml([{ text: "x", csName: "Amiri" }], "right", 16);
@@ -784,7 +784,7 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
 // the source of truth. pack → store on apply; reconcile → heal "" reads on the
 // next capture (a clean read wins — the user may have re-fonted a word by hand).
 {
-  const J = "Jameel Noori Nastaleeq", JK = "Jameel Noori Nastaleeq Kasheeda";
+  const J = "Jameel Noori Nastaleeq", JK = "Jameel Kasheeda MarkSafe";
   const words = [
     { text: "على", name: J, size: 16 }, { text: "قدر", name: J, size: 16 },
     { text: "أهل", name: "Amiri", size: 16 }, { text: "العزم", name: "Amiri", size: 16 }

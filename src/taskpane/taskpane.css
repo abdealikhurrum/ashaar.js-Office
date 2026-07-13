@@ -33,6 +33,12 @@
   font-family: "Jameel Noori Nastaleeq Kasheeda";
   src: url("../../assets/fonts/JameelNooriNastaleeqKasheeda.ttf") format("truetype");
 }
+/* Mark-safe Kasheeda build (~/jnnk-marksafe): vocalized Arabic reaches the wide
+   kashida ligatures with harakat anchored. Local-only file, never deployed. */
+@font-face {
+  font-family: "Jameel Kasheeda MarkSafe";
+  src: url("../../assets/fonts/JameelKasheedaMarkSafe.ttf") format("truetype");
+}
 
 /* Use the user's LOCALLY-INSTALLED AL-KANZ (an Al-Fatemi derivative) if present,
    so justification metrics match Word without redistributing the font file.

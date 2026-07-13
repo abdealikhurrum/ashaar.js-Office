@@ -915,6 +915,15 @@
         out.bold = !!out.bold; out.italic = !!out.italic;
         return out;
       });
+      // Legacy-face migration (MarkSafe rename): words read from the document
+      // or healed from an old tag pack may still name the retired plain
+      // Kasheeda face. Normalize to the base face BEFORE re-packing/emitting —
+      // the swap engine then re-decides and re-emits the current Kasheeda
+      // target, so documents self-heal on their next justify.
+      healed.forEach(function (w) {
+        w.name = AshaarFonts.normalizeLegacyFontName(w.name);
+        if (w.raw) w.raw = AshaarFonts.normalizeLegacyFontName(w.raw);
+      });
       var nAmbig = words.reduce(function (a, w) { return a + (w.raw ? 0 : 1); }, 0);
       blockPacks[r.b][r.cellKey] = AshaarWord.packRunWords(healed);
       out[r.key] = {
@@ -1551,9 +1560,12 @@
       summary = "Apply failed: " + describeError(error);
     }
     if (qDebug && debugOutput) {
-      var qHead = "dbg=v4(gap-spacing)  target=" + (qMeta.targetTwips || 0) + "tw  rebuild=" + (qMeta.rebuild ? "YES" : "no")
+      var qHead = "dbg=v5(gap-spacing)  target=" + (qMeta.targetTwips || 0) + "tw  rebuild=" + (qMeta.rebuild ? "YES" : "no")
         + "  repName=" + (qMeta.repName || "?") + "  writeFails=" + (qMeta.writeFails || 0)
         + (qMeta.adaptT != null ? "  adaptT=" + qMeta.adaptT + "px" : "")
+        // Registry beacon: proves WHICH bundle the WebView is actually running
+        // (stale-cache flapping burned a MarkSafe test session, 2026-07-13).
+        + "\nregistry: jameelKasheeda=" + AshaarFonts.kasheedaNameOf("jameel")
         + "\nkey      col   nat   tgt  achv  +px   fin  segs (family/mechanism)";
       debugOutput.textContent = !qDiags.length ? "(no content cells justified)" :
         qHead + "\n" + qDiags.map(function (d) {
