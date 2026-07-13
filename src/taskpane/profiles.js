@@ -196,6 +196,10 @@
     if (prof) layer = settingsFromProfile(prof);
     else if (profileMissing && payload && isObj(payload.profileCache)) { layer = payload.profileCache; usedCache = true; }
     if (layer) {
+      // Provenance heuristic (accepted plan-owner decision, 2026-07-12): a
+      // profile-emitted key whose value EQUALS the default keeps source
+      // "default" — the provenance dot lights only for values that differ
+      // from defaults. Pinned by a regression test in profiles-resolve.test.js.
       Object.keys(layer).forEach(function (k) {
         if (k in values && layer[k] !== defs[k]) { values[k] = layer[k]; source[k] = "profile"; }
       });

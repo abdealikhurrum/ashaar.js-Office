@@ -159,4 +159,19 @@ const {
   assert.equal("font" in p, false, "font is not a profile setting");
 }
 
+// ── Provenance heuristic (accepted decision): profile value equal to the
+// default keeps source "default"; only differing values claim "profile" ─────
+{
+  const values = Object.assign(defaultSettings(), { strength: 9 });
+  // gap stays at the default (4) but the profile still emits it.
+  const store = { K: profileFromSettings("K", values) };
+  const r = resolveSettings({ payload: { profile: "K", local: {} }, profileStore: store, scope: { level: "poem" } });
+  assert.equal(r.values.strength, 9);
+  assert.equal(r.source.strength, "profile", "differing value claims profile");
+  assert.equal(r.values.gap, 4);
+  assert.equal(r.source.gap, "default", "profile value equal to default stays default");
+  assert.equal(r.values.justifyMode, "kashida");
+  assert.equal(r.source.justifyMode, "default", "profile-owned justifyMode at default value stays default");
+}
+
 console.log("profiles-resolve tests passed");
