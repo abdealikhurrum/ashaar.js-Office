@@ -987,12 +987,15 @@
     if (!payload) return tag;
     var ov = payload.overrides && typeof payload.overrides === "object" ? payload.overrides : {};
     var has = override && typeof override === "object" &&
-      (override.strength != null || override.widthPt != null || override.capEm != null);
+      (override.strength != null || override.widthPt != null || override.capEm != null ||
+        (override.fill != null && override.fill !== "") || (override.color != null && override.color !== ""));
     if (has) {
       var clean = {};
       if (override.strength != null) clean.strength = override.strength;
       if (override.widthPt != null) clean.widthPt = override.widthPt;
       if (override.capEm != null) clean.capEm = override.capEm;
+      if (override.fill != null && override.fill !== "") clean.fill = override.fill;
+      if (override.color != null && override.color !== "") clean.color = override.color;
       ov[key] = clean;
     } else {
       delete ov[key];

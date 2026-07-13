@@ -1552,7 +1552,11 @@
                 : Math.max(1, (c.cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
               var p = prepContentCell(c, info, bIdx + ":" + tIdx + ":" + cIdx, colPx);
               if (!p) return;
-              if (p.xml) cellPlans.push({ cell: c.cell, ooxml: p.xml }); // no-fill emit
+              // §4 fill/color: the raw override (unfiltered by resolveCellOverride,
+              // which only carries strength/widthPt/capEm) — read straight off the
+              // tag so the write loop below can (re)assert or clear it.
+              var cellOv = c.ovKey ? (info.overrides[c.ovKey] || {}) : {};
+              if (p.xml) cellPlans.push({ cell: c.cell, ooxml: p.xml, ov: cellOv }); // no-fill emit
               else preps.push(p);
             });
           });
@@ -1583,7 +1587,7 @@
 
         preps.forEach(function (p) {
           var x = emitContentCell(p, adaptT);
-          if (x) cellPlans.push({ cell: p.c.cell, ooxml: x });
+          if (x) cellPlans.push({ cell: p.c.cell, ooxml: x, ov: p.cOv || {} });
         });
         await context.sync(); // commit the spacing-cell decorations
 
@@ -1596,6 +1600,14 @@
           try {
             cp.cell.body.clear();
             cp.cell.body.insertOoxml(AshaarWord.wrapOoxml(cp.ooxml), Word.InsertLocation.replace);
+            // §4 fill/color: must come AFTER the clear+insert above — clear()
+            // wipes any formatting set on the (now-empty) body, so setting
+            // body.font.color earlier would have no effect once the new runs
+            // land. shadingColor rejects "" / "No color"; "#FFFFFF" clears it
+            // (same quirk as the spacing-cell decor branch above).
+            var ov = cp.ov || {};
+            cp.cell.shadingColor = ov.fill || "#FFFFFF";
+            if (ov.color) cp.cell.body.font.color = ov.color;
             await context.sync();
             changed++;
           } catch (e) { writeFails++; /* leave the cell as its bare rebuild */ }
@@ -2874,7 +2886,7 @@
             var jRunsC = jSelC.runs.map(function (r) {
               return { text: r.text, csName: r.swap ? (cellDesc.kasheedaName || repName) : (cellDesc.wordName || repName), sizePt: repSize };
             });
-            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(jRunsC, repSize, opts) });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(jRunsC, repSize, opts), ov: cellOv });
             return;
           }
           // Natural-fit: fill to the position's matrix width (φ pushes toward the
@@ -2894,7 +2906,7 @@
           var jn = AshaarResidual.capMicroSpaces(jTarget - sel.fill * jTarget, jGaps, jSpacePx, repSize * 96 / 72, cellCapEm);
           var jRuns = AshaarResidual.injectSpaceRuns(sel.runs, jn, MICRO_SPACE);
           var swapXml = AshaarWord.runsToMisraXml(jRuns, cellAlign, opts, repSize);
-          plans.push({ cell: cell, ooxml: swapXml });
+          plans.push({ cell: cell, ooxml: swapXml, ov: cellOv });
           return; // handled — skip the tatweel/spacing paths for this cell
         }
 
@@ -2924,7 +2936,7 @@
             var mBudget = AshaarMatrix.cellFitBudget(mNatural, colPx, cellPhi);
             var mselC = AshaarKashidaFontswap.selectSwapRuns(mtoks, mwb, mww, mBudget);
             var moutC = mselC.runs.map(function (r, i) { return (r.swap && mww[i] > mwb[i]) ? melong[i] : mtoks[i]; }).join("");
-            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml([{ text: moutC, csName: cellDesc.wordName || repName, sizePt: repSize }], repSize, opts) });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml([{ text: moutC, csName: cellDesc.wordName || repName, sizePt: repSize }], repSize, opts), ov: cellOv });
             return;
           }
           var mReach = colPx - 0.28 * repSize * 96 / 72;
@@ -2941,7 +2953,10 @@
           var mSpacePx = canvasCtx.measureText(MICRO_SPACE).width || 1;
           var mn = AshaarResidual.capMicroSpaces(mTarget - msel.fill * mTarget, mGaps, mSpacePx, repSize * 96 / 72, cellCapEm);
           var mfinal = AshaarWord.distributeMicroSpaces([mout], mn, MICRO_SPACE)[0];
-          if (mfinal !== current) plans.push({ cell: cell, flat: mfinal, align: cellAlignOf(cell) });
+          if (mfinal !== current) plans.push({ cell: cell, flat: mfinal, align: cellAlignOf(cell), ov: cellOv });
+          // §4: text unchanged but a fill/color override still needs (re)asserting
+          // on this cell (e.g. strength/width untouched, only decor edited).
+          else if (cellOv) plans.push({ cell: cell, ov: cellOv });
           return;
         }
 
@@ -2967,7 +2982,8 @@
         // justify the flattened line as before (single-font behavior).
         if (!canvasCtx || colPx <= 0) {
           var flat = AshaarWord.justifyPlainTextBlock(stripJustification(current), opts, colPx);
-          if (flat !== current) plans.push({ cell: cell, flat: flat });
+          if (flat !== current) plans.push({ cell: cell, flat: flat, ov: cellOv });
+          else if (cellOv) plans.push({ cell: cell, ov: cellOv });
           return;
         }
 
@@ -3005,7 +3021,7 @@
             var gBudgetC = AshaarMatrix.cellFitBudget(gNatural, colPx, cellPhi);
             var concC = AshaarJustify.justifyRunsConcentrated(primRuns, gBudgetC, Object.assign({}, calibParams, gMax));
             var cfRuns = concC.runs.map(function (r, i) { return { text: r.text, csName: runs[i].name, sizePt: runs[i].size }; });
-            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(cfRuns, repSize, opts) });
+            plans.push({ cell: cell, ooxml: AshaarWord.misraDistributeXml(cfRuns, repSize, opts), ov: cellOv });
             return;
           }
           // Natural-fit: fill to the position's matrix width; capped micro-spaces
@@ -3058,9 +3074,9 @@
         var alignedOk = runs.every(function (r, i) {
           return outTexts[i].split(" ").length === r.refs.length;
         });
-        if (!alignedOk) { plans.push({ cell: cell, flat: outTexts.join(" "), align: cellAlignOf(cell) }); return; }
+        if (!alignedOk) { plans.push({ cell: cell, flat: outTexts.join(" "), align: cellAlignOf(cell), ov: cellOv }); return; }
 
-        plans.push({ cell: cell, runs: runs, outTexts: outTexts, sp: sp, align: cellAlignOf(cell) });
+        plans.push({ cell: cell, runs: runs, outTexts: outTexts, sp: sp, align: cellAlignOf(cell), ov: cellOv });
       });
 
       // Phase 2 (write): one context.sync() per cell so a range failure on one
@@ -3076,6 +3092,20 @@
         return Word.Alignment.centered;
       }
 
+      // §4 cell fill/color: read straight off the tag override (bypasses
+      // resolveCellOverride, which only carries strength/widthPt/capEm) — a
+      // no-op for cells outside a persisted bandh map (__ovKey null: plain
+      // selections, adopted tables with no cell pattern) so this never touches
+      // shading on tables our override system doesn't own. shadingColor
+      // rejects "" / "No color"; "#FFFFFF" clears it (same quirk documented at
+      // applyProfileToQaseeda's spacing-cell decor branch).
+      function applyCellDecor(cell, ov) {
+        if (!cell.__ovKey) return;
+        ov = ov || {};
+        cell.shadingColor = ov.fill || "#FFFFFF";
+        if (ov.color) cell.body.font.color = ov.color;
+      }
+
       var changed = 0;
       for (var pi = 0; pi < plans.length; pi++) {
         var p = plans[pi];
@@ -3083,6 +3113,7 @@
           try {
             p.cell.body.clear();
             p.cell.body.insertOoxml(AshaarWord.wrapOoxml(p.ooxml), Word.InsertLocation.replace);
+            applyCellDecor(p.cell, p.ov);
             await context.sync();
             changed++;
           } catch (e) {
@@ -3094,6 +3125,15 @@
           var flatPara = p.cell.body.paragraphs.getFirst();
           flatPara.insertText(p.flat, Word.InsertLocation.replace);
           if (p.align) flatPara.alignment = officeAlign(p.align);
+          applyCellDecor(p.cell, p.ov);
+          await context.sync();
+          changed++;
+          continue;
+        }
+        if (!p.runs) {
+          // §4 decor-only: justified text is unchanged this pass, but the
+          // cell's fill/color override still needs (re)asserting or clearing.
+          applyCellDecor(p.cell, p.ov);
           await context.sync();
           changed++;
           continue;
@@ -3111,10 +3151,15 @@
             });
           });
           if (p.align) { p.cell.body.paragraphs.getFirst().alignment = officeAlign(p.align); cellChanged = true; }
+          // Only force a sync for the decor write when there's an active
+          // override to apply — an unconditional reset here would sync every
+          // managed cell on every re-justify, even ones with no override.
+          if (p.ov && (p.ov.fill || p.ov.color)) { applyCellDecor(p.cell, p.ov); cellChanged = true; }
           if (cellChanged) { await context.sync(); changed++; }
         } catch (e) {
           // Queued range write failed at sync (or count mismatch) — flatten.
           p.cell.body.paragraphs.getFirst().insertText(p.outTexts.join(" "), Word.InsertLocation.replace);
+          applyCellDecor(p.cell, p.ov);
           await context.sync();
           changed++;
           if (debug) diags.push({ i: diags.length, font: "RANGE-FALLBACK", text: (e && e.message || "").slice(0, 14) });
@@ -3463,6 +3508,8 @@
           var cc = await findBlockAt(context);
           var override = {
             strength: dirtyOrNull("strength"), widthPt: dirtyOrNull("misraWidthPt"), capEm: dirtyOrNull("capEm"),
+            fill: document.getElementById("sp-cell-fill-on").checked ? document.getElementById("sp-cell-fill").value : null,
+            color: document.getElementById("sp-cell-color-on").checked ? document.getElementById("sp-cell-color").value : null,
           };
           var keys = cellTargetKeys(cc.tag, "content", target.cellLabel, "sp-cell-target");
           // Setters compose: feed each returned tag into the next call. ⟲-cleared

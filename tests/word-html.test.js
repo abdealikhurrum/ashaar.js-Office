@@ -1159,3 +1159,13 @@ console.log("word-html tests passed");
   // cell), so anchor on the table-boundary sequence rather than a bare scan.
   assert.strictEqual(xml.indexOf("</w:tbl><w:p/><w:tbl>") === -1, true, "no bare separator paragraphs remain between tables");
 }
+
+// ── §4 cell fill/color overrides ─────────────────────────────────────────────
+{
+  const base = AshaarWord.contentControlTag("متن", {});
+  const t1 = AshaarWord.setTagOverride(base, "A2:3", { strength: null, widthPt: null, capEm: null, fill: "#F5F0E0", color: "#A7352A" });
+  const p1 = AshaarWord.parseContentControlTag(t1);
+  assert.deepStrictEqual(p1.overrides["A2:3"], { fill: "#F5F0E0", color: "#A7352A" });
+  const t2 = AshaarWord.setTagOverride(t1, "A2:3", { strength: null, widthPt: null, capEm: null, fill: null, color: null });
+  assert.strictEqual("A2:3" in AshaarWord.parseContentControlTag(t2).overrides, false, "all-null deletes");
+}
