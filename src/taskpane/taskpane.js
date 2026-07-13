@@ -397,6 +397,13 @@
     }
   }
 
+  // Strict variant for the panel Apply paths: failures must propagate so
+  // applyPanel keeps pending edits for retry (spec: apply failure keeps edits).
+  async function withWordStrict(callback) {
+    if (typeof Word === "undefined") throw new Error("Open this task pane inside Word to update the document.");
+    await Word.run(callback);
+  }
+
   // ── Qaseeda profiles — document store + block tagging (P2) ────────────────
   // Profiles live in Word document settings (one authoritative copy that travels
   // with the .docx), keyed by name. A block is linked to a qaseeda by the
@@ -3458,14 +3465,14 @@
       if (_panel.scopeLevel === "poem") {
         await applyPoemScope(target, values);
       } else if (_panel.scopeLevel === "bandh") {
-        await withWord(async function (context) {
+        await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);           // helper below
           cc.tag = AshaarWord.setTagBandhWidth(cc.tag, values.misraWidthPt || 0);
           await context.sync();
         });
         await reapplyBlock();                            // re-justify in place
       } else if (_panel.scopeLevel === "cell") {
-        await withWord(async function (context) {
+        await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
           cc.tag = AshaarWord.setTagOverride(cc.tag, target.cellLabel, {
             strength: dirtyOrNull("strength"), widthPt: dirtyOrNull("misraWidthPt"), capEm: dirtyOrNull("capEm"),
@@ -3474,7 +3481,7 @@
         });
         await reapplyBlock();
       } else if (_panel.scopeLevel === "gap") {
-        await withWord(async function (context) {
+        await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
           cc.tag = AshaarWord.setTagSlotDecor(cc.tag, target.gapKey, {
             symbol: document.getElementById("sp-gap-symbol").value,
@@ -3517,7 +3524,7 @@
     var structuralDirty = ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode"].some(function (k) {
       return (k in _panel.pending.set) || _panel.pending.clear.indexOf(k) !== -1;
     });
-    await withWord(async function (context) {
+    await withWordStrict(async function (context) {
       var cc = await findBlockAt(context);
       var payload = AshaarWord.parseContentControlTag(cc.tag);
       var newLocal = AshaarPanel.pendingToLocal(payload.local, _panel.pending, AshaarPanel.SCOPE_FIELDS.poem);
