@@ -7,21 +7,28 @@
   var modeConvert = document.getElementById("mode-convert");
   var tablePanel = document.getElementById("table-mode-panel");
   var convertPanel = document.getElementById("convert-mode-panel");
-  var justifyMode = document.getElementById("justify-mode");
-  var justifyFillMode = document.getElementById("justify-fill-mode");
-  var layoutMode = document.getElementById("layout-mode");
-  var widthMode = document.getElementById("width-mode");
+  // TRANSITIONAL (removed in cleanup task): old controls were replaced by the
+  // Settings panel; give dead references an inert element so bind() survives.
+  function elOrStub(el) {
+    return el || { value: "", checked: false, hidden: true, textContent: "",
+      addEventListener: function () {}, appendChild: function () {},
+      style: {}, options: [], innerHTML: "" };
+  }
+  var justifyMode = elOrStub(document.getElementById("justify-mode"));
+  var justifyFillMode = elOrStub(document.getElementById("justify-fill-mode"));
+  var layoutMode = elOrStub(document.getElementById("layout-mode"));
+  var widthMode = elOrStub(document.getElementById("width-mode"));
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
   var layoutPreset = document.getElementById("layout-preset");
   var layoutSpec = document.getElementById("layout-spec");
-  var fontMode = document.getElementById("font-mode");
-  var tatweelCount = document.getElementById("tatweel-count");
-  var tatweelValue = document.getElementById("tatweel-value");
-  var gapWidth = document.getElementById("gap-width");
-  var tableWidth = document.getElementById("table-width");
-  var tableWidthValue = document.getElementById("table-width-value");
-  var autoFitWidth = document.getElementById("auto-fit-width");
+  var fontMode = elOrStub(document.getElementById("font-mode"));
+  var tatweelCount = elOrStub(document.getElementById("tatweel-count"));
+  var tatweelValue = elOrStub(document.getElementById("tatweel-value"));
+  var gapWidth = elOrStub(document.getElementById("gap-width"));
+  var tableWidth = elOrStub(document.getElementById("table-width"));
+  var tableWidthValue = elOrStub(document.getElementById("table-width-value"));
+  var autoFitWidth = elOrStub(document.getElementById("auto-fit-width"));
 
   // Table width as a fraction of the page text column (centred). 100% = full width.
   function tableWidthPct() {
@@ -72,22 +79,22 @@
   var layoutViewNumbersBtn = document.getElementById("layout-view-numbers");
   var debugMode = document.getElementById("debug-mode");
   var debugOutput = document.getElementById("debug-output");
-  var qaseedaName = document.getElementById("qaseeda-name");
-  var qaseedaNames = document.getElementById("qaseeda-names");
-  var qaseedaWidthMode = document.getElementById("qaseeda-width-mode");
-  var qaseedaWidthPct = document.getElementById("qaseeda-width-pct");
-  var qaseedaJustifyMode = document.getElementById("qaseeda-justify-mode");
-  var qaseedaFillMode = document.getElementById("qaseeda-fill-mode");
-  var qaseedaMisraWidth = document.getElementById("qaseeda-misra-width");
-  var qaseedaStrength = document.getElementById("qaseeda-strength");
-  var qaseedaStrengthValue = document.getElementById("qaseeda-strength-value");
-  var qaseedaCorrFont = document.getElementById("qaseeda-corr-font");
-  var qaseedaCorrFactor = document.getElementById("qaseeda-corr-factor");
-  var qaseedaDebugTatweel = document.getElementById("qaseeda-debug-tatweel");
-  var qaseedaDebugTatweelOn = document.getElementById("qaseeda-debug-tatweel-on");
-  var qaseedaDebugSpace = document.getElementById("qaseeda-debug-space");
-  var qaseedaDebugSpaceOn = document.getElementById("qaseeda-debug-space-on");
-  var qaseedaFontStatus = document.getElementById("qaseeda-font-status");
+  var qaseedaName = elOrStub(document.getElementById("qaseeda-name"));
+  var qaseedaNames = elOrStub(document.getElementById("qaseeda-names"));
+  var qaseedaWidthMode = elOrStub(document.getElementById("qaseeda-width-mode"));
+  var qaseedaWidthPct = elOrStub(document.getElementById("qaseeda-width-pct"));
+  var qaseedaJustifyMode = elOrStub(document.getElementById("qaseeda-justify-mode"));
+  var qaseedaFillMode = elOrStub(document.getElementById("qaseeda-fill-mode"));
+  var qaseedaMisraWidth = elOrStub(document.getElementById("qaseeda-misra-width"));
+  var qaseedaStrength = elOrStub(document.getElementById("qaseeda-strength"));
+  var qaseedaStrengthValue = elOrStub(document.getElementById("qaseeda-strength-value"));
+  var qaseedaCorrFont = elOrStub(document.getElementById("qaseeda-corr-font"));
+  var qaseedaCorrFactor = elOrStub(document.getElementById("qaseeda-corr-factor"));
+  var qaseedaDebugTatweel = elOrStub(document.getElementById("qaseeda-debug-tatweel"));
+  var qaseedaDebugTatweelOn = elOrStub(document.getElementById("qaseeda-debug-tatweel-on"));
+  var qaseedaDebugSpace = elOrStub(document.getElementById("qaseeda-debug-space"));
+  var qaseedaDebugSpaceOn = elOrStub(document.getElementById("qaseeda-debug-space-on"));
+  var qaseedaFontStatus = elOrStub(document.getElementById("qaseeda-font-status"));
 
   // Format collected per-cell justification metrics into the Debug panel.
   function renderDebug(diags) {
@@ -548,15 +555,15 @@
   // cursor. Resolves (tableIndex, label) via the SP1 cells map. Hides the editor
   // for gaps, non-content, or maps-absent blocks.
   async function reflectActiveCell(context, sel, cc, isBlock, payload) {
-    var editor = document.getElementById("cell-override");
+    var editor = elOrStub(document.getElementById("cell-override"));
     _activeOvKey = null;
     // Bandh-level editor: visible whenever the cursor is inside any Ashaar
     // block (it targets the block, not a cell). Don't clobber a mid-edit value:
     // only repopulate when the input isn't focused.
-    var bandhEl = document.getElementById("bandh-override");
+    var bandhEl = elOrStub(document.getElementById("bandh-override"));
     if (bandhEl) {
       bandhEl.hidden = !isBlock;
-      var bw = document.getElementById("bandh-ov-width");
+      var bw = elOrStub(document.getElementById("bandh-ov-width"));
       if (isBlock && bw && document.activeElement !== bw) {
         bw.value = (payload && payload.widthPt != null) ? payload.widthPt : "";
       }
@@ -585,7 +592,7 @@
     var map = AshaarCellMap.buildBandhCellMap(payload.cells[tIdx]);
     var inRow = map.filter(function (e) { return e.row === tcell.rowIndex; });
     var entry = inRow[tcell.cellIndex];
-    var decorEl = document.getElementById("slot-decor");
+    var decorEl = elOrStub(document.getElementById("slot-decor"));
     if (!entry) { editor.hidden = true; if (decorEl) decorEl.hidden = true; _activeOvKey = null; _activeDecorKey = null; return; }
     if (entry.kind === "content") {
       if (decorEl) decorEl.hidden = true;
@@ -605,15 +612,15 @@
 
   function populateCellEditor(label, ov) {
     ov = ov || {};
-    var lbl = document.getElementById("cell-override-label");
+    var lbl = elOrStub(document.getElementById("cell-override-label"));
     if (lbl) lbl.textContent = label || "";
-    document.getElementById("cell-ov-strength").value = (ov.strength != null) ? ov.strength : "";
-    document.getElementById("cell-ov-width").value = (ov.widthPt != null) ? ov.widthPt : "";
-    document.getElementById("cell-ov-cap").value = (ov.capEm != null) ? ov.capEm : "";
+    elOrStub(document.getElementById("cell-ov-strength")).value = (ov.strength != null) ? ov.strength : "";
+    elOrStub(document.getElementById("cell-ov-width")).value = (ov.widthPt != null) ? ov.widthPt : "";
+    elOrStub(document.getElementById("cell-ov-cap")).value = (ov.capEm != null) ? ov.capEm : "";
   }
 
   function readCellEditor() {
-    function num(id) { var v = document.getElementById(id).value; return v === "" ? null : Number(v); }
+    function num(id) { var v = elOrStub(document.getElementById(id)).value; return v === "" ? null : Number(v); }
     var ov = {};
     var s = num("cell-ov-strength"); if (s != null) ov.strength = Math.max(1, Math.min(10, s));
     var w = num("cell-ov-width"); if (w != null) ov.widthPt = w;
@@ -648,7 +655,7 @@
       });
     } catch (e) { /* ignore */ } finally { _reflectBusy = false; }
     if (clear) {
-      var lbl = document.getElementById("cell-override-label");
+      var lbl = elOrStub(document.getElementById("cell-override-label"));
       populateCellEditor(lbl ? lbl.textContent : "", null);
     }
     try {
@@ -664,7 +671,7 @@
     if (typeof Word === "undefined") return;
     if (_ovApplyBusy) { setMessage("Still applying the previous change…"); return; }
     _ovApplyBusy = true;
-    var bw = document.getElementById("bandh-ov-width");
+    var bw = elOrStub(document.getElementById("bandh-ov-width"));
     var v = null;
     if (!clear && bw && bw.value !== "") v = Math.max(1, Number(bw.value));
     var qname = "";
@@ -691,18 +698,18 @@
   function hexToWord(v) { return (v || "").replace(/^#/, ""); }
   function populateDecorEditor(slot, d) {
     d = d || {};
-    var lbl = document.getElementById("slot-decor-label"); if (lbl) lbl.textContent = slot || "";
-    document.getElementById("slot-decor-symbol").value = d.symbol || "";
-    document.getElementById("slot-decor-fill-on").checked = !!d.fill;
-    if (d.fill) document.getElementById("slot-decor-fill").value = "#" + d.fill;
-    if (d.color) document.getElementById("slot-decor-color").value = "#" + d.color;
+    var lbl = elOrStub(document.getElementById("slot-decor-label")); if (lbl) lbl.textContent = slot || "";
+    elOrStub(document.getElementById("slot-decor-symbol")).value = d.symbol || "";
+    elOrStub(document.getElementById("slot-decor-fill-on")).checked = !!d.fill;
+    if (d.fill) elOrStub(document.getElementById("slot-decor-fill")).value = "#" + d.fill;
+    if (d.color) elOrStub(document.getElementById("slot-decor-color")).value = "#" + d.color;
   }
   function readDecorEditor() {
     var d = {};
-    var sym = document.getElementById("slot-decor-symbol").value;
+    var sym = elOrStub(document.getElementById("slot-decor-symbol")).value;
     if (sym) d.symbol = sym;
-    if (document.getElementById("slot-decor-fill-on").checked) d.fill = hexToWord(document.getElementById("slot-decor-fill").value);
-    if (sym) d.color = hexToWord(document.getElementById("slot-decor-color").value);
+    if (elOrStub(document.getElementById("slot-decor-fill-on")).checked) d.fill = hexToWord(elOrStub(document.getElementById("slot-decor-fill")).value);
+    if (sym) d.color = hexToWord(elOrStub(document.getElementById("slot-decor-color")).value);
     return d;
   }
   // Write the editor state to the active gap's per-slot decoration on the block
@@ -726,7 +733,7 @@
         qname = (AshaarWord.parseContentControlTag(cc.tag) || {}).qaseeda || "";
       });
     } catch (e) { /* ignore */ } finally { _reflectBusy = false; }
-    if (clear) populateDecorEditor(document.getElementById("slot-decor-label").textContent, null);
+    if (clear) populateDecorEditor(elOrStub(document.getElementById("slot-decor-label")).textContent, null);
     try {
       if (qname && loadProfileStore()[qname]) await applyProfileToQaseeda(qname);
       else setMessage("Gap decoration saved — apply a qaseeda to this block to render it.");
@@ -3383,7 +3390,7 @@
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
     document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
     document.getElementById("replace-selection").addEventListener("click", function () { insertPoem(true); });
-    document.getElementById("justify-selection").addEventListener("click", justifySelection);
+    elOrStub(document.getElementById("justify-selection")).addEventListener("click", justifySelection);
     var showMapBtn = document.getElementById("show-cell-map");
     if (showMapBtn) showMapBtn.addEventListener("click", showCellMap);
     if (typeof Office !== "undefined" && Office.context && Office.context.document &&
@@ -3410,7 +3417,7 @@
     if (decorClear) decorClear.addEventListener("click", function () { applySlotDecor(true); });
     var decorSaveProfile = document.getElementById("slot-decor-save-profile");
     if (decorSaveProfile) decorSaveProfile.addEventListener("click", saveSlotDecorToProfile);
-    document.getElementById("re-render").addEventListener("click", reRender);
+    elOrStub(document.getElementById("re-render")).addEventListener("click", reRender);
     document.getElementById("reset-justification").addEventListener("click", resetJustification);
     document.getElementById("load-selection").addEventListener("click", loadSelection);
     // Import-options (separator flexibility): auto-normalize on paste; manual overrides.
@@ -3436,9 +3443,9 @@
     // Qaseeda profile panel
     qaseedaStrength.addEventListener("input", function () { qaseedaStrengthValue.textContent = qaseedaStrength.value; });
     qaseedaName.addEventListener("change", loadQaseedaIntoPanel);
-    document.getElementById("qaseeda-assign").addEventListener("click", assignBlockToQaseeda);
-    document.getElementById("qaseeda-apply").addEventListener("click", saveAndApplyQaseeda);
-    document.getElementById("qaseeda-font-check").addEventListener("click", checkQaseedaFont);
+    elOrStub(document.getElementById("qaseeda-assign")).addEventListener("click", assignBlockToQaseeda);
+    elOrStub(document.getElementById("qaseeda-apply")).addEventListener("click", saveAndApplyQaseeda);
+    elOrStub(document.getElementById("qaseeda-font-check")).addEventListener("click", checkQaseedaFont);
 
     // Custom fonts: register any stored fonts before measurement, wire the UI.
     if (typeof AshaarFontStore !== "undefined") {

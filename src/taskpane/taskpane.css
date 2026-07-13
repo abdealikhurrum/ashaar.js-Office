@@ -694,3 +694,17 @@ input[type="range"][disabled] { opacity: 0.45; }
 .cell-override label { display: block; margin: 4px 0; }
 .cell-override input { width: 90px; }
 .cell-override-head { font-weight: 600; margin-bottom: 4px; }
+
+/* ── Unified settings panel ─────────────────────────────────────────────── */
+.settings-panel { border-bottom: 1px solid var(--border, #d8d2c4); padding-bottom: 8px; }
+.sp-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sp-target { font-weight: 600; }
+.sp-chips { display: flex; gap: 4px; }
+.sp-chip { padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border, #d8d2c4); background: transparent; cursor: pointer; }
+.sp-chip.is-active { background: var(--accent, #1f6f68); color: #fff; }
+.sp-chip:disabled { opacity: 0.4; cursor: default; }
+.sp-profile-row { display: flex; align-items: center; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
+.sp-src { color: var(--accent, #1f6f68); cursor: pointer; font-weight: 700; }
+.sp-footer { display: flex; justify-content: space-between; margin-top: 8px; }
+.sp-font-prompt { background: #fdf3e7; border: 1px solid #e8c9a0; padding: 8px; margin-top: 8px; }
+.fonts-strip { margin: 8px 0; }

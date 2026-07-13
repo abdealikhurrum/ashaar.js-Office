@@ -37,43 +37,118 @@
         <button id="mode-convert" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="convert-mode-panel">Ashaar.js Convert</button>
       </div>
 
-      <section class="controls shared-controls" aria-label="Shared formatting controls">
-        <div class="field">
-          <label for="font-mode">Font</label>
-          <select id="font-mode"></select>
-          <p id="font-install-note" class="adopt-hint" hidden></p>
+      <section id="settings-panel" class="controls settings-panel" aria-label="Settings">
+        <div class="sp-header">
+          <div id="sp-target" class="sp-target">Selection</div>
+          <div id="sp-chips" class="sp-chips" hidden>
+            <button id="sp-chip-poem" type="button" class="sp-chip is-active" data-level="poem">Poem</button>
+            <button id="sp-chip-bandh" type="button" class="sp-chip" data-level="bandh">Bandh</button>
+            <button id="sp-chip-cell" type="button" class="sp-chip" data-level="cell" disabled>Cell</button>
+            <button id="sp-chip-gap" type="button" class="sp-chip" data-level="gap" disabled>Gap</button>
+          </div>
         </div>
-        <div class="field">
-          <label for="justify-mode">Justification</label>
-          <select id="justify-mode">
-            <option value="kashida" selected>Kashida</option>
-            <option value="css">Word justify</option>
-            <option value="spacing">Spacing preview</option>
-            <option value="none">None</option>
-          </select>
+
+        <div class="sp-profile-row">
+          <label for="sp-profile">Profile</label>
+          <select id="sp-profile"></select>
+          <button id="sp-profile-assign" type="button" class="button--secondary">Assign</button>
+          <button id="sp-profile-saveas" type="button" class="button--secondary">Save as…</button>
+          <button id="sp-profile-update" type="button" hidden>Update</button>
+          <button id="sp-profile-restore" type="button" hidden>Restore profile from this poem</button>
         </div>
-        <div class="field">
-          <label for="justify-fill-mode">Fill mode</label>
-          <select id="justify-fill-mode">
-            <option value="natural-fit" selected>Natural-fit (harmony)</option>
-            <option value="cell-fit">Cell-fit (precise)</option>
-          </select>
+
+        <div id="sp-body-poem" class="sp-body">
+          <div class="field"><label for="sp-justify-mode">Justification <span class="sp-src" data-key="justifyMode"></span></label>
+            <select id="sp-justify-mode" data-key="justifyMode">
+              <option value="kashida" selected>Kashida</option>
+              <option value="css">Word justify</option>
+              <option value="spacing">Spacing preview</option>
+              <option value="none">None</option>
+            </select></div>
+          <div class="field"><label for="sp-fill-mode">Fill mode <span class="sp-src" data-key="fillMode"></span></label>
+            <select id="sp-fill-mode" data-key="fillMode">
+              <option value="natural-fit" selected>Natural-fit (harmony)</option>
+              <option value="cell-fit">Cell-fit (precise)</option>
+              <option value="adaptive">Adaptive</option>
+            </select></div>
+          <div class="field"><label for="sp-strength">Kashida strength <span id="sp-strength-value">6</span> <span class="sp-src" data-key="strength"></span></label>
+            <input id="sp-strength" data-key="strength" type="range" min="1" max="10" value="6"></div>
+          <div class="field"><label for="sp-gap">Misra gap <span class="sp-src" data-key="gap"></span></label>
+            <input id="sp-gap" data-key="gap" type="number" min="0" max="20" value="4"></div>
+          <div class="field"><label for="sp-width-mode">Width <span class="sp-src" data-key="widthMode"></span></label>
+            <select id="sp-width-mode" data-key="widthMode">
+              <option value="auto-fit" selected>Auto-fit</option>
+              <option value="fixed">Fixed %</option>
+            </select>
+            <input id="sp-width-pct" data-key="widthPct" type="number" min="25" max="100" step="5" value="50"></div>
+          <details class="sp-advanced"><summary>Advanced</summary>
+            <div class="field"><label for="sp-layout-mode">Layout <span class="sp-src" data-key="layoutMode"></span></label>
+              <select id="sp-layout-mode" data-key="layoutMode">
+                <option value="balanced" selected>Balanced table</option>
+                <option value="equal">Equal table</option>
+                <option value="compact">Compact table</option>
+                <option value="stacked">Stacked</option>
+                <option value="auto">Auto preview</option>
+              </select></div>
+            <div class="field"><label for="sp-col-width-mode">Column widths <span class="sp-src" data-key="colWidthMode"></span></label>
+              <select id="sp-col-width-mode" data-key="colWidthMode">
+                <option value="optimized" selected>Optimized</option>
+                <option value="fixed">Fixed</option>
+              </select></div>
+            <div class="field"><label for="sp-misra-width">Misra width (pt) <span class="sp-src" data-key="misraWidthPt"></span></label>
+              <input id="sp-misra-width" data-key="misraWidthPt" type="number" min="1" placeholder="auto (harmony)"></div>
+            <div class="field"><label for="sp-corr-font">Font correction</label>
+              <input id="sp-corr-font" type="text" class="template-name-input" placeholder="font name">
+              <input id="sp-corr-factor" type="number" min="0.5" max="2" step="0.01" value="1"></div>
+            <div class="field"><label>Debug: color tatweels</label>
+              <input id="sp-debug-tatweel" type="color" value="#a7352a">
+              <label class="adopt-check"><input type="checkbox" id="sp-debug-tatweel-on"> on</label></div>
+            <div class="field"><label>Debug: color micro-spaces</label>
+              <input id="sp-debug-space" type="color" value="#1f6f68">
+              <label class="adopt-check"><input type="checkbox" id="sp-debug-space-on"> on</label></div>
+          </details>
         </div>
-        <div class="field">
-          <label for="tatweel-count">Kashida strength <span id="tatweel-value">7</span></label>
-          <input id="tatweel-count" type="range" min="1" max="10" value="7">
+
+        <div id="sp-body-bandh" class="sp-body" hidden>
+          <div class="field"><label for="sp-bandh-width">Misra width (pt) <span class="sp-src" data-key="misraWidthPt"></span></label>
+            <input id="sp-bandh-width" data-key="misraWidthPt" type="number" min="1" placeholder="inherit"></div>
         </div>
-        <div class="field">
-          <label for="gap-width">Middle gap</label>
-          <input id="gap-width" type="number" min="0" max="20" value="4">
+
+        <div id="sp-body-cell" class="sp-body" hidden>
+          <div class="field"><label for="sp-cell-strength">Strength <span class="sp-src" data-key="strength"></span></label>
+            <input id="sp-cell-strength" data-key="strength" type="number" min="1" max="10" placeholder="inherit"></div>
+          <div class="field"><label for="sp-cell-width">Target width (pt) <span class="sp-src" data-key="misraWidthPt"></span></label>
+            <input id="sp-cell-width" data-key="misraWidthPt" type="number" min="1" placeholder="inherit"></div>
+          <div class="field"><label for="sp-cell-cap">Cap lift (em) <span class="sp-src" data-key="capEm"></span></label>
+            <input id="sp-cell-cap" data-key="capEm" type="number" min="0" step="0.01" placeholder="0.28"></div>
         </div>
-        <div class="field">
-          <label for="table-width">Table width <span id="table-width-value">50</span>%</label>
-          <input id="table-width" type="range" min="25" max="100" step="5" value="50">
-          <label class="auto-fit-check"><input type="checkbox" id="auto-fit-width"> Auto-fit to text</label>
+
+        <div id="sp-body-gap" class="sp-body" hidden>
+          <div class="field"><label for="sp-gap-symbol">Symbol</label>
+            <input id="sp-gap-symbol" type="text" placeholder="e.g. ؎ (blank = none)"></div>
+          <div class="field"><label for="sp-gap-fill">Fill color</label>
+            <input id="sp-gap-fill" type="color" value="#f5f0e0">
+            <label class="adopt-check"><input type="checkbox" id="sp-gap-fill-on"> on</label></div>
+          <div class="field"><label for="sp-gap-color">Symbol color</label>
+            <input id="sp-gap-color" type="color" value="#a7352a"></div>
+          <button id="sp-gap-default" type="button" class="button--secondary">Set as default for all bandhs</button>
         </div>
+
+        <div id="sp-font-prompt" class="sp-font-prompt" hidden>
+          ⚠ Can't measure "<span id="sp-font-prompt-name"></span>" — justification would be inaccurate.
+          <button id="sp-font-prompt-add" type="button">Add font file…</button>
+          <button id="sp-font-prompt-continue" type="button" class="button--secondary">Continue anyway</button>
+        </div>
+
+        <div class="sp-footer">
+          <button id="sp-revert" type="button" class="button--secondary">Reset to defaults</button>
+          <button id="sp-apply" type="button">Apply</button>
+        </div>
+      </section>
+
+      <details id="fonts-strip" class="fonts-strip">
+        <summary>Fonts</summary>
         <div class="field font-store">
-          <label for="font-upload">Custom fonts</label>
           <input id="font-upload" type="file" accept=".ttf,.otf,.woff,.woff2">
           <input id="font-upload-name" type="text" class="template-name-input" placeholder="Register as (name Word uses)">
           <div class="font-store-actions">
@@ -82,9 +157,9 @@
           </div>
           <div id="font-upload-status" class="qaseeda-font-status" aria-live="polite"></div>
           <ul id="font-list" class="font-list"></ul>
-          <p class="adopt-hint">Load a font from your computer so kashida metrics match Word. Stored on this machine for future sessions — nothing is uploaded to a server.</p>
+          <p class="adopt-hint">Load a font from your computer so kashida metrics match Word. Stored on this machine — nothing is uploaded to a server.</p>
         </div>
-      </section>
+      </details>
 
       <section id="table-mode-panel" class="mode-panel is-active" role="tabpanel" aria-labelledby="mode-table">
         <div class="section-title">
@@ -133,6 +208,7 @@
 
         <section class="adopt-panel" aria-label="Adopt existing table">
           <button id="adopt-table" type="button">Adopt Existing Table</button>
+          <button id="adopt-replace-selection" type="button" class="button--secondary">Replace Selection</button>
           <p class="adopt-hint">Cursor in a table of poetry? Adopt it into a clean, justifiable Ashaar block.</p>
           <details class="adopt-advanced">
             <summary>Adopt options</summary>
@@ -189,26 +265,6 @@
           <textarea id="poem-input" spellcheck="false" dir="rtl">دل ناداں تجھے ہوا کیا ہے \ آخر اس درد کی دوا کیا ہے</textarea>
         </section>
 
-        <section class="controls" aria-label="Conversion controls">
-          <div class="field">
-          <label for="layout-mode">Conversion layout</label>
-          <select id="layout-mode">
-            <option value="balanced" selected>Balanced table</option>
-            <option value="equal">Equal table</option>
-            <option value="compact">Compact table</option>
-            <option value="stacked">Stacked</option>
-            <option value="auto">Auto preview</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="width-mode">Column widths</label>
-          <select id="width-mode">
-            <option value="optimized" selected>Optimized</option>
-            <option value="fixed">Fixed</option>
-          </select>
-        </div>
-        </section>
-
         <section class="actions" aria-label="Conversion actions">
           <button id="insert-poem" type="button">Insert as Table</button>
           <button id="insert-tabstop" type="button">Insert as Paragraphs</button>
@@ -248,106 +304,10 @@
       </section>
 
       <section class="actions" aria-label="Justification actions">
-        <button id="justify-selection" type="button">Justify Selected Text</button>
-        <button id="re-render" type="button" class="button--secondary">Re-render (keep font)</button>
         <button id="reset-justification" type="button" class="button--secondary">Reset (clear kashida &amp; spaces)</button>
         <button id="show-cell-map" type="button" class="button--secondary">Show cell structure</button>
         <div id="cell-map-view" class="cell-map-view" hidden></div>
-        <div id="cell-override" class="cell-override" hidden>
-          <div class="cell-override-head">Cell <span id="cell-override-label"></span></div>
-          <label>Strength <input id="cell-ov-strength" type="number" min="1" max="10" placeholder="inherit"></label>
-          <label>Target width (pt) <input id="cell-ov-width" type="number" min="1" placeholder="inherit"></label>
-          <label>Cap lift (em) <input id="cell-ov-cap" type="number" min="0" step="0.01" placeholder="0.28"></label>
-          <button id="cell-ov-apply" type="button">Save &amp; Apply</button>
-          <button id="cell-ov-clear" type="button" class="button--secondary">Clear cell override</button>
-        </div>
-        <div id="bandh-override" class="cell-override" hidden>
-          <div class="cell-override-head">Bandh (this block)</div>
-          <label>Misra width (pt) <input id="bandh-ov-width" type="number" min="1" placeholder="inherit qaseeda"></label>
-          <button id="bandh-ov-apply" type="button">Save &amp; Apply</button>
-          <button id="bandh-ov-clear" type="button" class="button--secondary">Clear</button>
-        </div>
-        <div id="slot-decor" class="cell-override" hidden>
-          <div class="cell-override-head">Gap <span id="slot-decor-label"></span></div>
-          <label>Symbol <input id="slot-decor-symbol" type="text" placeholder="e.g. ؎ (blank = none)"></label>
-          <label>Fill color <input id="slot-decor-fill" type="color" value="#f5f0e0"> <span class="adopt-check"><input type="checkbox" id="slot-decor-fill-on"> on</span></label>
-          <label>Symbol color <input id="slot-decor-color" type="color" value="#a7352a"></label>
-          <button id="slot-decor-save-profile" type="button" class="button--secondary">Set as default for all bandhs</button>
-          <button id="slot-decor-clear" type="button" class="button--secondary">Clear gap decoration</button>
-        </div>
       </section>
-
-      <details class="qaseeda-panel">
-        <summary>Qaseeda profile</summary>
-        <div class="qaseeda-body">
-          <p class="adopt-hint">Name a poem, tag its blocks, then size &amp; justify them all the same with one click.</p>
-          <div class="field">
-            <label for="qaseeda-name">Qaseeda name</label>
-            <input id="qaseeda-name" type="text" class="template-name-input" placeholder="e.g. Karbala" list="qaseeda-names">
-            <datalist id="qaseeda-names"></datalist>
-          </div>
-          <div class="field">
-            <label for="qaseeda-width-mode">Width</label>
-            <select id="qaseeda-width-mode">
-              <option value="auto-fit" selected>Auto-fit to text</option>
-              <option value="fixed">Fixed %</option>
-            </select>
-            <input id="qaseeda-width-pct" type="number" min="25" max="100" step="5" value="50">
-          </div>
-          <div class="field">
-            <label for="qaseeda-strength">Kashida strength <span id="qaseeda-strength-value">7</span></label>
-            <input id="qaseeda-strength" type="range" min="1" max="10" value="7">
-          </div>
-          <div class="qaseeda-assign-row">
-            <button id="qaseeda-assign" type="button" class="button--secondary">Assign block at cursor</button>
-            <button id="qaseeda-apply" type="button">Save &amp; Apply to all</button>
-          </div>
-          <details class="qaseeda-advanced">
-            <summary>Advanced</summary>
-            <div class="qaseeda-advanced-body">
-              <div class="field">
-                <label for="qaseeda-justify-mode">Justification mode</label>
-                <select id="qaseeda-justify-mode">
-                  <option value="kashida" selected>Kashida</option>
-                  <option value="spacing">Spacing</option>
-                  <option value="css">Word justify</option>
-                  <option value="none">None</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="qaseeda-fill-mode">Fill mode</label>
-                <select id="qaseeda-fill-mode">
-                  <option value="natural-fit" selected>Natural-fit (harmony)</option>
-                  <option value="cell-fit">Cell-fit (precise)</option>
-                  <option value="adaptive">Adaptive (equal reach, small gaps)</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="qaseeda-misra-width">Misra width (pt)</label>
-                <input id="qaseeda-misra-width" type="number" min="1" placeholder="auto (harmony)">
-              </div>
-              <div class="field">
-                <label for="qaseeda-corr-font">Per-font width correction</label>
-                <input id="qaseeda-corr-font" type="text" class="template-name-input" placeholder="font name">
-                <input id="qaseeda-corr-factor" type="number" min="0.5" max="2" step="0.01" value="1">
-              </div>
-              <div class="field">
-                <label for="qaseeda-debug-tatweel">Highlight kashida</label>
-                <input id="qaseeda-debug-tatweel" type="color" value="#a7352a">
-                <label class="adopt-check"><input type="checkbox" id="qaseeda-debug-tatweel-on"> on</label>
-              </div>
-              <div class="field">
-                <label for="qaseeda-debug-space">Highlight spaces</label>
-                <input id="qaseeda-debug-space" type="color" value="#1f6f68">
-                <label class="adopt-check"><input type="checkbox" id="qaseeda-debug-space-on"> on</label>
-              </div>
-              <p class="adopt-hint">Colours the tatweels / micro-spaces inserted by justification so you can see where they landed. Applied on “Save &amp; Apply to all”.</p>
-              <button id="qaseeda-font-check" type="button" class="button--secondary">Check font at cursor</button>
-              <div id="qaseeda-font-status" class="qaseeda-font-status" aria-live="polite"></div>
-            </div>
-          </details>
-        </div>
-      </details>
 
       <div id="message" role="status" aria-live="polite"></div>
 
@@ -377,6 +337,7 @@
           "./separators.js",
           "./layout-grid.js",
           "./font-store.js",
+          "./settings-panel.js",
           "./taskpane.js"
         ];
         // Parser-inserted, non-async document.write preserves load+exec order —
