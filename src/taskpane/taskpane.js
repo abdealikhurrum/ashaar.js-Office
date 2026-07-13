@@ -520,15 +520,88 @@
   var _activeDecorKey = null;        // slot-decor key of the spacing cell at the cursor (or null)
   var _activeSlot = null;            // slot-position (e.g. "A#1") of the spacing cell at the cursor
 
-  // Populate the pane's block-level controls from a parsed tag payload.
-  function syncBlockControls(payload) {
-    if (!payload) return;
-    if (payload.fontMode) fontMode.value = payload.fontMode;
-    if (payload.justifyMode) justifyMode.value = payload.justifyMode;
-    if (justifyFillMode && payload.fillMode) justifyFillMode.value = AshaarProfiles.normalizeFillMode(payload.fillMode);
-    if (payload.tatweelCount != null) { tatweelCount.value = payload.tatweelCount; if (tatweelValue) tatweelValue.textContent = String(payload.tatweelCount); }
-    if (payload.tableWidthPct != null && tableWidth) { tableWidth.value = payload.tableWidthPct; if (tableWidthValue) tableWidthValue.textContent = String(payload.tableWidthPct); }
-    if (payload.qaseeda) { var st = loadProfileStore()[payload.qaseeda]; if (st) profileToPanel(st); }
+  // ── Unified settings panel state ──────────────────────────────────────────
+  var _panel = {
+    pending: { set: {}, clear: [] },
+    scopeLevel: "poem",
+    target: null,      // { kind:"block"|"selection", cc?, payload?, scope, cellEnabled, gapEnabled, cellLabel?, gapKey? }
+    resolved: null,
+  };
+
+  var SP_BODIES = { poem: "sp-body-poem", bandh: "sp-body-bandh", cell: "sp-body-cell", gap: "sp-body-gap" };
+
+  function panelValues() {
+    var out = {};
+    var base = _panel.resolved ? _panel.resolved.values : AshaarProfiles.defaultSettings();
+    Object.keys(base).forEach(function (k) { out[k] = base[k]; });
+    _panel.pending.clear.forEach(function (k) {
+      if (_panel.resolved && _panel.resolved.inherited) out[k] = _panel.resolved.inherited[k];
+    });
+    Object.keys(_panel.pending.set).forEach(function (k) { out[k] = _panel.pending.set[k]; });
+    return out;
+  }
+
+  function refreshPanel() {
+    var target = _panel.target || { kind: "selection", scope: { level: "poem" } };
+    var scope = { level: _panel.scopeLevel, key: target.kind === "block"
+      ? (_panel.scopeLevel === "cell" ? target.cellLabel : _panel.scopeLevel === "gap" ? target.gapKey : undefined)
+      : undefined };
+    _panel.resolved = AshaarProfiles.resolveSettings({
+      payload: target.kind === "block" ? target.payload : null,
+      profileStore: loadProfileStore(),
+      scope: scope,
+    });
+    var st = AshaarPanel.panelStateFor({ resolved: _panel.resolved, pending: _panel.pending,
+      target: { kind: target.kind, scope: scope, cellEnabled: !!target.cellEnabled,
+                gapEnabled: !!target.gapEnabled, cellLabel: target.cellLabel, gapLabel: target.gapKey } });
+    renderPanel(st);
+  }
+
+  function renderPanel(st) {
+    document.getElementById("sp-target").textContent = st.header.title;
+    var chipsWrap = document.getElementById("sp-chips");
+    chipsWrap.hidden = st.chips.length === 0;
+    st.chips.forEach(function (c) {
+      var el = document.getElementById("sp-chip-" + c.level);
+      el.disabled = !c.enabled;
+      el.classList.toggle("is-active", c.active);
+    });
+    Object.keys(SP_BODIES).forEach(function (lvl) {
+      document.getElementById(SP_BODIES[lvl]).hidden = lvl !== _panel.scopeLevel;
+    });
+    // Values + provenance dots. Controls carry data-key; skip ones the user is
+    // mid-editing (focused).
+    st.controls.forEach(function (c) {
+      var body = document.getElementById(SP_BODIES[_panel.scopeLevel]);
+      // NOTE (bug found in Task 6 browser verification, fixed here): the
+      // provenance dot (.sp-src) and its form control share the same data-key
+      // and the dot comes first in DOM order for every field markup, so an
+      // unscoped selector grabbed the span instead of the input/select and
+      // silently no-opped every value write. Exclude .sp-src explicitly.
+      var input = body.querySelector('[data-key="' + c.key + '"]:not(.sp-src)');
+      if (input && document.activeElement !== input) {
+        input.value = c.value == null ? "" : c.value;
+        if (c.key === "strength") document.getElementById("sp-strength-value").textContent = String(c.value);
+      }
+      var src = body.querySelector('.sp-src[data-key="' + c.key + '"]');
+      if (src) {
+        src.textContent = (c.source === "local" || c.dirty) ? "•" : "";
+        src.title = c.dirty ? "edited — Apply to commit; click to reset"
+          : c.source === "local" ? "local tweak — click to reset to inherited" : "";
+      }
+    });
+    // Profile row.
+    var sel = document.getElementById("sp-profile");
+    var names = listProfileNames();
+    sel.innerHTML = "<option value=\"\">(none)</option>" + names.map(function (n) {
+      return "<option value=\"" + String(n).replace(/"/g, "&quot;") + "\">" + String(n) + "</option>";
+    }).join("");
+    sel.value = st.profileRow.missing ? "" : st.profileRow.name;
+    document.getElementById("sp-profile-assign").disabled = !st.profileRow.assignEnabled;
+    document.getElementById("sp-profile-update").hidden = !st.profileRow.updateVisible;
+    document.getElementById("sp-profile-update").textContent = "Update \"" + st.profileRow.name + "\"";
+    document.getElementById("sp-profile-restore").hidden = !st.profileRow.restoreVisible;
+    document.getElementById("sp-revert").textContent = st.footer.revertLabel;
   }
 
   // Reflect the Ashaar block (and the cell, Task 4) at the cursor in the pane.
@@ -542,41 +615,35 @@
         await context.sync();
         var isBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
         var payload = isBlock ? AshaarWord.parseContentControlTag(cc.tag) : null;
-        // Resync block-level controls only when the active block changes, so
-        // moving the cursor within a block never clobbers a mid-edit control.
-        if (isBlock && cc.tag !== _lastBlockTag) { _lastBlockTag = cc.tag; syncBlockControls(payload); }
-        if (!isBlock) { _lastBlockTag = null; }
         await reflectActiveCell(context, sel, cc, isBlock, payload);
+        _panel.target = isBlock
+          ? { kind: "block", cc: cc, payload: payload, tag: cc.tag,
+              cellEnabled: !!_activeOvKey, gapEnabled: !!_activeDecorKey,
+              cellLabel: _activeOvKey, gapKey: _activeDecorKey,
+              scope: { level: _panel.scopeLevel } }
+          : { kind: "selection", scope: { level: "poem" } };
+        if (!isBlock) _panel.scopeLevel = "poem";
+        // A new block target drops stale pending edits; same block keeps them.
+        if (cc.tag !== _lastBlockTag) { _panel.pending = { set: {}, clear: [] }; _lastBlockTag = isBlock ? cc.tag : null; }
+        refreshPanel();
       });
     } catch (e) { /* selection transient — ignore */ }
   }
 
-  // Show/populate the per-cell override editor for the content cell at the
-  // cursor. Resolves (tableIndex, label) via the SP1 cells map. Hides the editor
-  // for gaps, non-content, or maps-absent blocks.
+  // Detect the content/spacing cell at the cursor. Resolves (tableIndex, label)
+  // via the SP1 cells map and sets _activeOvKey/_activeDecorKey/_activeSlot for
+  // the settings panel (chip enablement, scope key) — no DOM writes here; the
+  // removed per-cell/per-gap editors were retired in favor of the panel.
   async function reflectActiveCell(context, sel, cc, isBlock, payload) {
-    var editor = elOrStub(document.getElementById("cell-override"));
     _activeOvKey = null;
-    // Bandh-level editor: visible whenever the cursor is inside any Ashaar
-    // block (it targets the block, not a cell). Don't clobber a mid-edit value:
-    // only repopulate when the input isn't focused.
-    var bandhEl = elOrStub(document.getElementById("bandh-override"));
-    if (bandhEl) {
-      bandhEl.hidden = !isBlock;
-      var bw = elOrStub(document.getElementById("bandh-ov-width"));
-      if (isBlock && bw && document.activeElement !== bw) {
-        bw.value = (payload && payload.widthPt != null) ? payload.widthPt : "";
-      }
-    }
-    if (!editor) return;
-    if (!isBlock || !payload || !payload.cells) { editor.hidden = true; return; }
+    if (!isBlock || !payload || !payload.cells) return;
 
     var tcell = sel.parentTableCellOrNullObject;
     tcell.load("rowIndex,cellIndex,isNullObject");
     var tbls = cc.getRange().tables;
     tbls.load("items");
     await context.sync();
-    if (tcell.isNullObject) { editor.hidden = true; return; }
+    if (tcell.isNullObject) return;
 
     // §6a: which block table contains the selection? (No stable table id, so
     // match by range intersection.)
@@ -587,26 +654,19 @@
     await context.sync();
     var tIdx = -1;
     for (var k = 0; k < inters.length; k++) { if (!inters[k].isNullObject) { tIdx = k; break; } }
-    if (tIdx < 0 || !payload.cells[tIdx]) { editor.hidden = true; return; }
+    if (tIdx < 0 || !payload.cells[tIdx]) return;
 
     var map = AshaarCellMap.buildBandhCellMap(payload.cells[tIdx]);
     var inRow = map.filter(function (e) { return e.row === tcell.rowIndex; });
     var entry = inRow[tcell.cellIndex];
-    var decorEl = elOrStub(document.getElementById("slot-decor"));
-    if (!entry) { editor.hidden = true; if (decorEl) decorEl.hidden = true; _activeOvKey = null; _activeDecorKey = null; return; }
+    if (!entry) { _activeOvKey = null; _activeDecorKey = null; return; }
     if (entry.kind === "content") {
-      if (decorEl) decorEl.hidden = true;
       _activeDecorKey = null;
       _activeOvKey = AshaarOverrides.overrideKey(tIdx, entry.label);
-      populateCellEditor(entry.label, (payload.overrides || {})[_activeOvKey]);
-      editor.hidden = false;
-    } else { // spacing → decoration editor
-      editor.hidden = true;
+    } else { // spacing → decoration slot
       _activeOvKey = null;
       _activeDecorKey = AshaarOverrides.overrideKey(tIdx, entry.slot);
       _activeSlot = entry.slot;
-      populateDecorEditor(entry.slot, (payload.slotDecor || {})[_activeDecorKey]);
-      if (decorEl) decorEl.hidden = false;
     }
   }
 
@@ -3356,6 +3416,16 @@
     reader.readAsText(file);
   }
 
+  // Settings-panel action handlers — stubbed here so bind() can wire the
+  // buttons now; Tasks 7-8 replace these bodies with the real Apply/Profile
+  // pipelines.
+  async function applyPanel() { setMessage("Apply lands in the next task."); }
+  async function assignProfile() { setMessage("Apply lands in the next task."); }
+  async function saveAsProfile() { setMessage("Apply lands in the next task."); }
+  async function updateProfile() { setMessage("Apply lands in the next task."); }
+  async function restoreProfileFromPoem() { setMessage("Apply lands in the next task."); }
+  async function revertToProfile() { setMessage("Apply lands in the next task."); }
+
   var isBound = false;
 
   function bind() {
@@ -3447,6 +3517,39 @@
     elOrStub(document.getElementById("qaseeda-apply")).addEventListener("click", saveAndApplyQaseeda);
     elOrStub(document.getElementById("qaseeda-font-check")).addEventListener("click", checkQaseedaFont);
 
+    // Settings panel: every data-key control feeds the pending buffer.
+    document.querySelectorAll("#settings-panel [data-key]").forEach(function (input) {
+      input.addEventListener("change", function () {
+        var key = input.getAttribute("data-key");
+        var raw = input.value;
+        var val = input.type === "number" || input.type === "range"
+          ? (raw === "" ? null : Number(raw)) : raw;
+        _panel.pending = AshaarPanel.mergePending(_panel.pending, key, val);
+        refreshPanel();
+      });
+    });
+    // Provenance dots double as per-setting reset.
+    document.querySelectorAll("#settings-panel .sp-src").forEach(function (span) {
+      span.addEventListener("click", function () {
+        _panel.pending = AshaarPanel.mergePending(_panel.pending, span.getAttribute("data-key"), null);
+        refreshPanel();
+      });
+    });
+    ["poem", "bandh", "cell", "gap"].forEach(function (lvl) {
+      document.getElementById("sp-chip-" + lvl).addEventListener("click", function () {
+        _panel.scopeLevel = lvl;
+        _panel.pending = { set: {}, clear: [] }; // scope switch discards unapplied edits
+        refreshPanel();
+      });
+    });
+    document.getElementById("sp-revert").addEventListener("click", revertToProfile);
+    document.getElementById("sp-apply").addEventListener("click", applyPanel);
+    document.getElementById("sp-profile-assign").addEventListener("click", assignProfile);
+    document.getElementById("sp-profile-saveas").addEventListener("click", saveAsProfile);
+    document.getElementById("sp-profile-update").addEventListener("click", updateProfile);
+    document.getElementById("sp-profile-restore").addEventListener("click", restoreProfileFromPoem);
+    document.getElementById("adopt-replace-selection").addEventListener("click", function () { insertPoem(true); });
+
     // Custom fonts: register any stored fonts before measurement, wire the UI.
     if (typeof AshaarFontStore !== "undefined") {
       AshaarFontStore.registerAll().then(refreshFontList, function () {});
@@ -3463,6 +3566,7 @@
     setMode("table");
     renderTemplateList();
     populateQaseedaNames();
+    refreshPanel(); // initial render: no active block yet → "Selection", defaults
   }
 
   if (window.Office && Office.onReady) {
