@@ -592,6 +592,7 @@
     document.getElementById("sp-revert").textContent = st.footer.revertLabel;
     document.getElementById("sp-cost").textContent = st.footer.costLabel;
     document.getElementById("sp-apply").title = st.footer.costLabel;
+    document.getElementById("sp-rerender").disabled = !( _panel.target && _panel.target.kind === "block");
   }
 
   // Reflect the Ashaar block (and the cell, Task 4) at the cursor in the pane.
@@ -3850,6 +3851,7 @@
       });
     });
     document.getElementById("sp-revert").addEventListener("click", revertToProfile);
+    document.getElementById("sp-rerender").addEventListener("click", reRender);
     document.getElementById("sp-apply").addEventListener("click", applyPanel);
     // The dropdown choice is pending until Assign — reflection re-renders the
     // panel on every Word selection change and must not wipe it.
