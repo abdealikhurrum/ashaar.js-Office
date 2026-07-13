@@ -246,24 +246,34 @@
     }
   }
 
+  // Thin adapter over the Settings panel: every insert/justify/re-render path
+  // still calls options() for its knobs, so this is the ONE place the panel's
+  // resolved+pending values (panelValues()) reach the rest of the file. Table
+  // Input-only fields (bandhCount, layoutSpec, qaseeda) still read their own
+  // (non-panel) controls directly — the panel governs poem justify/layout/width.
   function options() {
+    var v = panelValues();
     return {
-      justifyMode: justifyMode.value,
-      justify: justifyMode.value === "none" ? false : justifyMode.value,
-      fillMode: (justifyFillMode && justifyFillMode.value) || "natural-fit",
-      layoutMode: layoutMode.value,
-      layout: layoutMode.value,
-      widthMode: widthMode.value,
+      justifyMode: v.justifyMode,
+      justify: v.justifyMode === "none" ? false : v.justifyMode,
+      fillMode: v.fillMode,
+      layoutMode: v.layoutMode,
+      layout: v.layoutMode,
+      widthMode: v.colWidthMode,
       bandhCount: Number(bandhCount.value || 1),
       misraCount: Number(misraCount.value || 4),
+      // Table-Input misra pattern control; the panel has no field for this.
       misraPattern: layoutPreset.value,
       layoutSpec: (!tablePanel.hidden) ? layoutSpec.value : "",
-      fontMode: fontMode.value,
-      tatweelCount: Number(tatweelCount.value || 0),
-      gapWidth: Number(gapWidth.value || 4),
-      tableWidthPct: tableWidthPct(),
-      autoFitWidth: !!(autoFitWidth && autoFitWidth.checked),
-      qaseeda: (qaseedaName && qaseedaName.value ? qaseedaName.value.trim() : "")
+      fontMode: "document",
+      tatweelCount: Number(v.strength || 6),
+      gapWidth: Number(v.gap != null ? v.gap : 4),
+      tableWidthPct: v.widthMode === "fixed" ? Number(v.widthPct || 50) : 100,
+      autoFitWidth: v.widthMode !== "fixed",
+      qaseeda: (qaseedaName && qaseedaName.value ? qaseedaName.value.trim() : ""),
+      // v3 tag fields for fresh inserts (Task 2's writer reads these):
+      profile: _panel.resolved ? _panel.resolved.profileName : "",
+      local: AshaarPanel.pendingToLocal({}, _panel.pending, AshaarPanel.SCOPE_FIELDS.poem),
     };
   }
 
@@ -960,9 +970,11 @@
 
     // Grid geometry per table from its OWN source + the block's stored opts (so it
     // matches the rendered table). Zips onto captured cells by emission order.
+    var geoProfileStore = loadProfileStore();
     blockInfos.forEach(function (blk) {
       var p = blk.payload;
-      var geomOpts = { gapWidth: Number(p.gapWidth || 4), layoutMode: p.layoutMode || "balanced" };
+      var eff = AshaarProfiles.resolveSettings({ payload: p, profileStore: geoProfileStore, scope: { level: "poem" } }).values;
+      var geomOpts = { gapWidth: eff.gap, layoutMode: eff.layoutMode };
       blk.tableInfos.forEach(function (info) {
         var flatGeo = [], grid = 0;
         try {
@@ -1288,11 +1300,16 @@
         // last apply this session, the tables are already sized correctly — skip
         // the destructive rebuild and let pass 2 just re-justify. Only a real width
         // change (mode/pct/text) triggers the rebuild.
+        var sizeSigProfileStore = loadProfileStore();
         sizeSig = AshaarWord.applySizeSignature({
           targetTwips: targetTwips,
           sources: cap.blockInfos.map(function (b) { return b.source; }),
-          // Structural inputs: any block's effective gap/pattern participates.
-          gap: cap.blockInfos.map(function (b) { return Number((b.payload.local || {}).gap != null ? b.payload.local.gap : ""); }).join(","),
+          // Structural inputs: any block's EFFECTIVE (resolver) gap/pattern
+          // participates — not just the local delta, so a profile-driven gap
+          // change also triggers the rebuild.
+          gap: cap.blockInfos.map(function (b) {
+            return AshaarProfiles.resolveSettings({ payload: b.payload, profileStore: sizeSigProfileStore, scope: { level: "poem" } }).values.gap;
+          }).join(","),
           misraPattern: cap.blockInfos.map(function (b) { return b.payload.misraPattern || ""; }).join(","),
         });
         var needRebuild = _appliedSizeSig[name] !== sizeSig;
@@ -1310,10 +1327,11 @@
           var blk = cap.blockInfos[bi];
           if (!blk.source.trim()) continue;
           var p = blk.payload;
+          var eff = AshaarProfiles.resolveSettings({ payload: p, profileStore: sizeSigProfileStore, scope: { level: "poem" } }).values;
           var renderOpts = {
-            layoutMode: p.layoutMode || "balanced",
-            gapWidth: Number(p.gapWidth || 4),
-            fontMode: p.fontMode || "document",
+            layoutMode: eff.layoutMode,
+            gapWidth: eff.gap,
+            fontMode: "document",
             misraPattern: p.misraPattern || "paired",
             misraCount: Number(p.misraCount || 4),
             tatweelCount: 0,
@@ -3424,7 +3442,99 @@
   // Settings-panel action handlers — stubbed here so bind() can wire the
   // buttons now; Tasks 7-8 replace these bodies with the real Apply/Profile
   // pipelines.
-  async function applyPanel() { setMessage("Apply lands in the next task."); }
+  // One Apply: route by target and scope. Writes deltas to the owning tag
+  // slot, then re-renders/justifies. Pending clears only on success.
+  async function applyPanel() {
+    var target = _panel.target;
+    var values = panelValues();
+    try {
+      if (!target || target.kind !== "block") {
+        // Plain selection: one-shot justify with panel values; nothing persisted.
+        await justifySelection();   // justifySelection reads options() → panelValues()
+        _panel.pending = { set: {}, clear: [] };
+        refreshPanel();
+        return;
+      }
+      if (_panel.scopeLevel === "poem") {
+        await applyPoemScope(target, values);
+      } else if (_panel.scopeLevel === "bandh") {
+        await withWord(async function (context) {
+          var cc = await findBlockAt(context);           // helper below
+          cc.tag = AshaarWord.setTagBandhWidth(cc.tag, values.misraWidthPt || 0);
+          await context.sync();
+        });
+        await reapplyBlock();                            // re-justify in place
+      } else if (_panel.scopeLevel === "cell") {
+        await withWord(async function (context) {
+          var cc = await findBlockAt(context);
+          cc.tag = AshaarWord.setTagOverride(cc.tag, target.cellLabel, {
+            strength: dirtyOrNull("strength"), widthPt: dirtyOrNull("misraWidthPt"), capEm: dirtyOrNull("capEm"),
+          });
+          await context.sync();
+        });
+        await reapplyBlock();
+      } else if (_panel.scopeLevel === "gap") {
+        await withWord(async function (context) {
+          var cc = await findBlockAt(context);
+          cc.tag = AshaarWord.setTagSlotDecor(cc.tag, target.gapKey, {
+            symbol: document.getElementById("sp-gap-symbol").value,
+            fill: document.getElementById("sp-gap-fill-on").checked ? document.getElementById("sp-gap-fill").value : "",
+            color: document.getElementById("sp-gap-color").value,
+          });
+          await context.sync();
+        });
+        await reapplyBlock();
+      }
+      _panel.pending = { set: {}, clear: [] };
+      _lastBlockTag = null;   // force reflection to re-read the updated tag
+      await reflectActiveContext();
+      setMessage("Applied.");
+    } catch (e) {
+      // Keep pending for retry (spec: apply failure keeps edits).
+      setMessage("Apply failed: " + (e && e.message ? e.message : e));
+    }
+  }
+
+  function dirtyOrNull(key) {
+    return (key in _panel.pending.set) ? _panel.pending.set[key]
+      : (_panel.resolved && _panel.resolved.source[key] === "cell" ? _panel.resolved.values[key] : null);
+  }
+
+  // Locate the enclosing Ashaar Poem control at the cursor (throws if none).
+  async function findBlockAt(context) {
+    var sel = context.document.getSelection();
+    var cc = sel.parentContentControlOrNullObject;
+    cc.load("title,tag");
+    await context.sync();
+    if (cc.isNullObject || cc.title !== "Ashaar Poem") throw new Error("Click inside an Ashaar poem first.");
+    return cc;
+  }
+
+  // Poem scope: persist local deltas, then rebuild-if-structural + justify.
+  // Reuses reRender()'s bare-rebuild + justifySelection() fill, both of which
+  // now read options() → panelValues(), i.e. the resolved values.
+  async function applyPoemScope(target, values) {
+    var structuralDirty = ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode"].some(function (k) {
+      return (k in _panel.pending.set) || _panel.pending.clear.indexOf(k) !== -1;
+    });
+    await withWord(async function (context) {
+      var cc = await findBlockAt(context);
+      var payload = AshaarWord.parseContentControlTag(cc.tag);
+      var newLocal = AshaarPanel.pendingToLocal(payload.local, _panel.pending, AshaarPanel.SCOPE_FIELDS.poem);
+      var tag = AshaarWord.setTagLocal(cc.tag, newLocal);
+      // Snapshot the profile layer for cross-machine portability.
+      var prof = payload.profile ? loadProfileStore()[payload.profile] : null;
+      if (prof) tag = AshaarWord.setTagProfileCache(tag, AshaarProfiles.settingsFromProfile(prof));
+      cc.tag = tag;
+      await context.sync();
+    });
+    if (structuralDirty) await reRender();     // bare rebuild + in-place justify
+    else await justifySelection();             // justify only — no destructive rebuild
+  }
+
+  // Re-justify the block in place (non-structural scopes).
+  async function reapplyBlock() { await justifySelection(); }
+
   async function assignProfile() { setMessage("Apply lands in the next task."); }
   async function saveAsProfile() { setMessage("Apply lands in the next task."); }
   async function updateProfile() { setMessage("Apply lands in the next task."); }
