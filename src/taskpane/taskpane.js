@@ -510,7 +510,26 @@
   // tag write; the render pass it triggers resets those cells to "black" and
   // the success tail empties the map (one-shot). Kept on a failed render so a
   // retry still clears — the tag is already colorless at that point.
-  var _pendingColorClears = {};
+  //   blockId scoping (fix round 2): override keys ("0:A1") are IDENTICAL
+  // across poems, so a retained map + a later render on a DIFFERENT poem
+  // would blacken the colliding cell there. blockId is
+  // AshaarWord.tagIdentity(tag) — the tag minus the per-apply runFonts heal,
+  // the ONE mutation the pipeline makes between Apply's write and
+  // consumption. cc.id can't serve: the size-rebuild path deletes and
+  // re-inserts the control (fresh id), while both consumers already resolve
+  // blocks by tag. A consumer applies a clear ONLY when its block's identity
+  // matches; retry-after-failure retention still works because the retried
+  // Apply writes the same payload → same identity.
+  var _pendingColorClears = { blockId: "", keys: {} };
+
+  // §4 (fix round 2): the _activeOvKey the decor inputs were last seeded for.
+  // Word fires DocumentSelectionChanged constantly (see the pendingProfile
+  // note in _panel) — an unconditional reseed on every reflection would wipe
+  // the user's checked-but-not-yet-Applied fill/color state mid-edit. Reseed
+  // only when the active cell actually CHANGES (null→key, key→key, key→null
+  // all update the tracker, so returning to a cell reseeds); the Apply
+  // success tail nulls the tracker to force a reseed from the fresh tag.
+  var _lastSeededOvKey = null;
 
   // ── Unified settings panel state ──────────────────────────────────────────
   var _panel = {
@@ -619,7 +638,12 @@
         var isBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
         var payload = isBlock ? AshaarWord.parseContentControlTag(cc.tag) : null;
         await reflectActiveCell(context, sel, cc, isBlock, payload);
-        if (_activeOvKey) seedCellDecorInputs(payload);
+        // Guarded reseed: only when the active cell CHANGED since the last
+        // seed — spurious same-cell reflections must not wipe mid-edit state.
+        if (_activeOvKey !== _lastSeededOvKey) {
+          if (_activeOvKey) seedCellDecorInputs(payload);
+          _lastSeededOvKey = _activeOvKey;
+        }
         _panel.target = isBlock
           ? { kind: "block", cc: cc, payload: payload, tag: cc.tag,
               cellEnabled: !!_activeOvKey, gapEnabled: !!_activeDecorKey,
@@ -643,7 +667,8 @@
   // §4 (fix): the cell fill/color controls live OUTSIDE the pending/data-key
   // system (same as the gap-decor inputs), so they are raw shared DOM state —
   // never re-rendered by renderPanel. Seed all four from the ACTIVE cell's
-  // persisted override on every cell reflection; otherwise a checked box left
+  // persisted override whenever the active cell CHANGES (guard in
+  // reflectActiveContext via _lastSeededOvKey); otherwise a checked box left
   // over from cell A would leak A's colors into an Apply on cell B, and an
   // unchecked box would silently DELETE B's persisted fill/color
   // (setTagOverride replaces the whole per-key override object). Called only
@@ -1558,6 +1583,16 @@
         }
 
         cap.blockInfos.forEach(function (blk, bIdx) {
+          // §4 transition-clear consumption gate: pending clears apply ONLY to
+          // the block that recorded them. Override keys ("0:A1") repeat across
+          // poems, so without this a retained map (render failed after a tag
+          // write) would blacken the colliding cell of whatever poem renders
+          // next. Identity = tagIdentity (tag minus the runFonts heal), the
+          // one field the pipeline mutates between Apply's write (blockId
+          // source) and this pass's capture (blk.oldTag).
+          var blkClears = (_pendingColorClears.blockId &&
+            AshaarWord.tagIdentity(blk.oldTag) === _pendingColorClears.blockId)
+            ? _pendingColorClears.keys : null;
           blk.tableInfos.forEach(function (info, tIdx) {
             // Cell box comes from the width we just rebuilt to: cwt = target/GRID.
             var cwtPx = info.grid > 0 ? (targetTwips / info.grid) * 96 / 1440 : 0;
@@ -1589,8 +1624,9 @@
               // which only carries strength/widthPt/capEm) — read straight off the
               // tag so the write loop below can (re)assert or clear it.
               var cellOv = c.ovKey ? (info.overrides[c.ovKey] || {}) : {};
-              if (p.xml) cellPlans.push({ cell: c.cell, ooxml: p.xml, ov: cellOv, ovKey: c.ovKey }); // no-fill emit
-              else preps.push(p);
+              var colorClear = !!(blkClears && c.ovKey && blkClears[c.ovKey]);
+              if (p.xml) cellPlans.push({ cell: c.cell, ooxml: p.xml, ov: cellOv, colorClear: colorClear }); // no-fill emit
+              else { p.colorClear = colorClear; preps.push(p); }
             });
           });
         });
@@ -1620,7 +1656,7 @@
 
         preps.forEach(function (p) {
           var x = emitContentCell(p, adaptT);
-          if (x) cellPlans.push({ cell: p.c.cell, ooxml: x, ov: p.cOv || {}, ovKey: p.c.ovKey });
+          if (x) cellPlans.push({ cell: p.c.cell, ooxml: x, ov: p.cOv || {}, colorClear: !!p.colorClear });
         });
         await context.sync(); // commit the spacing-cell decorations
 
@@ -1639,15 +1675,19 @@
             // land. shadingColor rejects "" / "No color"; "#FFFFFF" clears it
             // (same quirk as the spacing-cell decor branch above). Color has
             // no clear value, so a JUST-REMOVED color override (recorded in
-            // _pendingColorClears by the Apply that deleted it) resets to
-            // "black" — necessary because the capture reads live run colors
-            // as "original", so the old override color is baked into this
-            // cell's re-emitted runs. Accepted limitation: "black", not any
-            // pre-override manual text color (no source data to recover it).
+            // _pendingColorClears by the Apply that deleted it, block-scoped
+            // at plan time) resets to "black" — necessary because the capture
+            // reads live run colors as "original", so the old override color
+            // is baked into this cell's re-emitted runs. Accepted limitations:
+            // (1) "black", not any pre-override manual text color (no source
+            // data to recover it); (2) if THIS cell's write fails (catch
+            // below), the queued reset dies with the batch but the success
+            // tail still consumes the pending clear — the stale color
+            // survives and is re-baked by the next capture. Narrow, accepted.
             var ov = cp.ov || {};
             cp.cell.shadingColor = ov.fill || "#FFFFFF";
             if (ov.color) cp.cell.body.font.color = ov.color;
-            else if (cp.ovKey && _pendingColorClears[cp.ovKey]) cp.cell.body.font.color = "black";
+            else if (cp.colorClear) cp.cell.body.font.color = "black";
             await context.sync();
             changed++;
           } catch (e) { writeFails++; /* leave the cell as its bare rebuild */ }
@@ -2496,11 +2536,19 @@
 
       // Persisted bandh cell-map (content/spacing tag + labels) for this block,
       // when present — one pattern per stanza table, in document order.
-      var ccCells = null, ccOverrides = {};
+      var ccCells = null, ccOverrides = {}, ccColorClears = {};
       if (!cc.isNullObject && cc.title === "Ashaar Poem") {
         var ccPayload = AshaarWord.parseContentControlTag(cc.tag);
         ccCells = ccPayload && ccPayload.cells;
         ccOverrides = (ccPayload && ccPayload.overrides) || {};
+        // §4 transition-clear consumption gate: pending color clears apply
+        // ONLY to the block that recorded them — override keys ("0:A1")
+        // repeat across poems, so a retained map (failed render kept for
+        // retry) must not blacken a colliding cell of a different poem.
+        if (_pendingColorClears.blockId &&
+            AshaarWord.tagIdentity(cc.tag) === _pendingColorClears.blockId) {
+          ccColorClears = _pendingColorClears.keys;
+        }
       }
 
       var tables = workRange.tables;
@@ -3142,18 +3190,22 @@
       // applyProfileToQaseeda's spacing-cell decor branch) — so fill is
       // ALWAYS-assert: a deleted fill override clears on the next pass.
       // Color has no such clear value, so it clears by TRANSITION: the Apply
-      // that removed the override recorded the key in _pendingColorClears and
-      // we reset those cells to "black". Accepted limitation (same class as
-      // the width-drift trade-off): the reset restores "black", not any
-      // pre-override manual text color — the tag never captured one, and the
-      // qaseeda capture reads live run colors as "original", so there is no
-      // source data to recover it from.
+      // that removed the override recorded the key in _pendingColorClears
+      // (block-scoped — ccColorClears is non-empty only when this block's
+      // identity matches) and we reset those cells to "black". Accepted
+      // limitations (same class as the width-drift trade-off): (1) the reset
+      // restores "black", not any pre-override manual text color — the tag
+      // never captured one, and the qaseeda capture reads live run colors as
+      // "original", so there is no source data to recover it from; (2) if the
+      // one cell carrying a pending clear hits a per-cell write failure, the
+      // success tail consumes the clear anyway and the stale color survives
+      // (re-baked by the next capture). Narrow, accepted.
       function applyCellDecor(cell, ov) {
         if (!cell.__ovKey) return;
         ov = ov || {};
         cell.shadingColor = ov.fill || "#FFFFFF";
         if (ov.color) cell.body.font.color = ov.color;
-        else if (_pendingColorClears[cell.__ovKey]) cell.body.font.color = "black";
+        else if (ccColorClears[cell.__ovKey]) cell.body.font.color = "black";
       }
 
       var changed = 0;
@@ -3579,7 +3631,13 @@
           await context.sync();
           // Record only after the write committed — a strict-throw above must
           // not leave clears queued for a tag that still carries the color.
-          clearKeys.forEach(function (k) { _pendingColorClears[k] = true; });
+          // Scoped to this block's identity; a retry-Apply on the SAME block
+          // (same payload → same identity) MERGES so clears retained from a
+          // failed render survive (the retried diff finds nothing — the tag
+          // is already colorless), while a different block starts fresh.
+          var blockId = AshaarWord.tagIdentity(newTag);
+          if (_pendingColorClears.blockId !== blockId) _pendingColorClears = { blockId: blockId, keys: {} };
+          clearKeys.forEach(function (k) { _pendingColorClears.keys[k] = true; });
         });
         if (run) run.phase("tag write");
         tagWritten();
@@ -3610,7 +3668,8 @@
       // strict tag-write throw above skips this tail (pending survives for
       // retry).
       _panel.pending = { set: {}, clear: [] };
-      _pendingColorClears = {};  // one-shot: the pipeline above consumed them
+      _pendingColorClears = { blockId: "", keys: {} };  // one-shot: consumed above
+      _lastSeededOvKey = null;  // force the decor inputs to reseed from the fresh tag
       _lastBlockTag = null;   // force reflection to re-read the updated tag
       await reflectActiveContext();
       if (run) run.phase("reflect");

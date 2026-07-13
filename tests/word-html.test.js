@@ -1160,6 +1160,24 @@ console.log("word-html tests passed");
   assert.strictEqual(xml.indexOf("</w:tbl><w:p/><w:tbl>") === -1, true, "no bare separator paragraphs remain between tables");
 }
 
+// ── §4 fix: tagIdentity — block identity stable across the runFonts heal ────
+{
+  const t0 = AshaarWord.contentControlTag("متن", { profile: "Q" }, [[["c", "g", "c"]]]);
+  const t1 = AshaarWord.setTagOverride(t0, "0:A1", { strength: 9, color: "#A7352A" });
+  assert.ok(AshaarWord.tagIdentity(t1), "non-empty for ashaar tags");
+  assert.strictEqual(AshaarWord.tagIdentity(t1), AshaarWord.tagIdentity(t1), "deterministic");
+  // The per-apply runFonts heal (captureQaseedaCellRuns → setTagRunFonts) is
+  // the ONLY tag mutation between a panel Apply's write and the render pass
+  // that consumes it — identity must survive it.
+  const healed = AshaarWord.setTagRunFonts(t1, { "0:A1": "pack" });
+  assert.notStrictEqual(healed, t1, "heal really changed the tag string");
+  assert.strictEqual(AshaarWord.tagIdentity(healed), AshaarWord.tagIdentity(t1), "runFonts heal keeps identity");
+  // Different payloads (e.g. another poem's overrides) → different identity.
+  const other = AshaarWord.setTagOverride(t0, "0:A1", { strength: 5 });
+  assert.notStrictEqual(AshaarWord.tagIdentity(other), AshaarWord.tagIdentity(t1), "different overrides differ");
+  assert.strictEqual(AshaarWord.tagIdentity("not-ashaar"), "", "non-ashaar tag → empty identity");
+}
+
 // ── §4 cell fill/color overrides ─────────────────────────────────────────────
 {
   const base = AshaarWord.contentControlTag("متن", {});

@@ -1112,6 +1112,24 @@
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
+  // Stable block identity across ONE apply cycle: the parsed tag payload minus
+  // the per-apply-volatile runFonts heal (captureQaseedaCellRuns rewrites
+  // payload.runFonts between a panel Apply's tag write and the render pass that
+  // consumes it — every other field survives untouched). Used to scope
+  // transient per-apply state (e.g. pending color clears) to the block that
+  // created it: cc.id cannot serve because the size-rebuild path deletes and
+  // re-inserts the control (fresh id), while the tag is exactly what the apply
+  // pipeline already filters blocks by. Both sides of a comparison must come
+  // through THIS function (parse normalization keeps key order deterministic).
+  // Returns "" for non-ashaar tags.
+  function tagIdentity(tag) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return "";
+    var out = {};
+    Object.keys(payload).forEach(function (k) { if (k !== "runFonts") out[k] = payload[k]; });
+    return JSON.stringify(out);
+  }
+
   // Rebuild-skip signature for the apply pipeline: identical signature ⇒ the
   // tables are already sized/shaped correctly and the destructive rebuild can
   // be skipped. MUST include every structural input (a gap-only change used to
@@ -1903,6 +1921,7 @@
     packRunWords: packRunWords,
     reconcileRunWords: reconcileRunWords,
     setTagRunFonts: setTagRunFonts,
+    tagIdentity: tagIdentity,
     applySizeSignature: applySizeSignature,
     setTagBandhWidth: setTagBandhWidth,
     justifyPlainTextBlock: justifyPlainTextBlock,
