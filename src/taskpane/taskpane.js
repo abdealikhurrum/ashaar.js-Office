@@ -1836,14 +1836,17 @@
           // tables (GeneralException) — replacing INTO a control with block tables
           // fails at every scope. Only body-scope table insert works (proven by the
           // End path). So insert the rebuilt poem into the BODY just after the old
-          // control, wrap it in a fresh "Ashaar Poem" control, then delete the old
-          // control and its content. Net effect: the poem is replaced in place.
+          // control, then delete the old control and its content. The fresh
+          // "Ashaar Poem" control is embedded in the OOXML itself (w:sdt via
+          // wrapOoxmlControl — the same pattern the profile-apply rebuild uses):
+          // wrapping the insertOoxml RETURN range with insertContentControl is
+          // unreliable for multi-block content — Word clamps a control applied to
+          // a range starting inside a table to the FIRST ROW, so only the first
+          // row of the bandh ended up inside the control.
           var afterRange = poemCC.getRange("After");
-          var insertedRange = afterRange.insertOoxml(ooxml, Word.InsertLocation.start);
-          var newControl = insertedRange.insertContentControl();
-          newControl.title = "Ashaar Poem";
-          newControl.tag = newTag;
-          newControl.appearance = "BoundingBox";
+          afterRange.insertOoxml(
+            AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", newTag),
+            Word.InsertLocation.start);
           poemCC.delete(false); // remove old control + its content
           await context.sync();
           return;
