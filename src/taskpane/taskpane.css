@@ -708,3 +708,6 @@ input[type="range"][disabled] { opacity: 0.45; }
 .sp-footer { display: flex; justify-content: space-between; margin-top: 8px; }
 .sp-font-prompt { background: #fdf3e7; border: 1px solid #e8c9a0; padding: 8px; margin-top: 8px; }
 .fonts-strip { margin: 8px 0; }
+/* The hidden attribute must beat the display rules above (sp-chips is
+   display:flex), or hidden panel parts render at boot. */
+.settings-panel [hidden] { display: none !important; }
