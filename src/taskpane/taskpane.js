@@ -271,9 +271,11 @@
       tableWidthPct: v.widthMode === "fixed" ? Number(v.widthPct || 50) : 100,
       autoFitWidth: v.widthMode !== "fixed",
       qaseeda: (qaseedaName && qaseedaName.value ? qaseedaName.value.trim() : ""),
-      // v3 tag fields for fresh inserts (Task 2's writer reads these):
-      profile: _panel.resolved ? _panel.resolved.profileName : "",
-      local: AshaarPanel.pendingToLocal({}, _panel.pending, AshaarPanel.SCOPE_FIELDS.poem),
+      // v3 tag fields for fresh inserts. When the panel is focused on an
+      // EXISTING block, its pending/profile belong to that block — a fresh
+      // insert must not inherit them (cross-block leak).
+      profile: (_panel.target && _panel.target.kind === "block") ? "" : (_panel.resolved ? _panel.resolved.profileName : ""),
+      local: (_panel.target && _panel.target.kind === "block") ? {} : AshaarPanel.pendingToLocal({}, _panel.pending, AshaarPanel.SCOPE_FIELDS.poem),
     };
   }
 
@@ -3470,6 +3472,7 @@
           cc.tag = AshaarWord.setTagBandhWidth(cc.tag, values.misraWidthPt || 0);
           await context.sync();
         });
+        tagWritten();
         await reapplyBlock();                            // re-justify in place
       } else if (_panel.scopeLevel === "cell") {
         await withWordStrict(async function (context) {
@@ -3479,6 +3482,7 @@
           });
           await context.sync();
         });
+        tagWritten();
         await reapplyBlock();
       } else if (_panel.scopeLevel === "gap") {
         await withWordStrict(async function (context) {
@@ -3490,16 +3494,28 @@
           });
           await context.sync();
         });
+        tagWritten();
         await reapplyBlock();
       }
-      _panel.pending = { set: {}, clear: [] };
       _lastBlockTag = null;   // force reflection to re-read the updated tag
       await reflectActiveContext();
-      setMessage("Applied.");
+      // No blanket "Applied." here: the render/justify pipeline above sets the
+      // FINAL message ("Done." / its own error), and overwriting it would mask
+      // pipeline errors. Recorded limitation (final-review item): a render-
+      // pipeline failure AFTER the successful tag write is not detected by
+      // applyPanel — the tag state is already persisted at that point.
     } catch (e) {
       // Keep pending for retry (spec: apply failure keeps edits).
       setMessage("Apply failed: " + (e && e.message ? e.message : e));
     }
+  }
+
+  // Tag write persisted: the pending edits are committed, so clear them and
+  // show an interim status; the render/justify pipeline that follows owns the
+  // final message.
+  function tagWritten() {
+    _panel.pending = { set: {}, clear: [] };
+    setMessage("Settings saved — re-rendering…");
   }
 
   function dirtyOrNull(key) {
@@ -3535,6 +3551,7 @@
       cc.tag = tag;
       await context.sync();
     });
+    tagWritten();
     if (structuralDirty) await reRender();     // bare rebuild + in-place justify
     else await justifySelection();             // justify only — no destructive rebuild
   }
