@@ -700,8 +700,11 @@ input[type="range"][disabled] { opacity: 0.45; }
 .sp-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sp-target { font-weight: 600; }
 .sp-chips { display: flex; gap: 4px; }
-.sp-chip { padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border, #d8d2c4); background: transparent; cursor: pointer; }
-.sp-chip.is-active { background: var(--accent, #1f6f68); color: #fff; }
+/* Inactive chips must override the base button's white-on-accent text, or
+   they render invisible (white on the light pane) until hover re-tints them. */
+.sp-chip { padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border, #d8d2c4); background: transparent; color: var(--ink, #202124); font-weight: 400; min-height: 0; cursor: pointer; }
+.sp-chip:hover { background: var(--border, #d8d2c4); }
+.sp-chip.is-active, .sp-chip.is-active:hover { background: var(--accent, #1f6f68); color: #fff; }
 .sp-chip:disabled { opacity: 0.4; cursor: default; }
 .sp-profile-row { display: flex; align-items: center; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
 .sp-src { color: var(--accent, #1f6f68); cursor: pointer; font-weight: 700; }
