@@ -898,17 +898,12 @@
     }
     var payload = {
       k: "ashaar-poem",
-      v: 2,
-      layoutMode: opts.layoutMode || "balanced",
-      widthMode: opts.widthMode || "optimized",
-      justifyMode: opts.justifyMode || "kashida",
-      tatweelCount: Number(opts.tatweelCount || 0),
-      gapWidth: Number(opts.gapWidth || 4),
+      v: 3,
+      profile: typeof opts.profile === "string" ? opts.profile : "",
+      local: (opts.local && typeof opts.local === "object") ? opts.local : {},
+      profileCache: (opts.profileCache && typeof opts.profileCache === "object") ? opts.profileCache : null,
       misraPattern: opts.misraPattern || "paired",
       misraCount: Number(opts.misraCount || 4),
-      fontMode: opts.fontMode || "document",
-      tableWidthPct: Number(opts.tableWidthPct || 100),
-      qaseeda: opts.qaseeda || "",
       sourceHash: (hash >>> 0).toString(16)
     };
     if (cellPatterns && cellPatterns.length) payload.cells = cellPatterns;
@@ -916,31 +911,77 @@
   }
 
   // Decode an "ashaar:" content-control tag back into its payload object.
-  // Returns null for empty/non-ashaar/malformed tags. Guarantees a string
-  // `qaseeda` field so callers can read it without a presence check.
+  // Returns null for empty/non-ashaar/malformed tags. Guarantees a v3 shape
+  // (profile string, local object, profileCache object|null) for BOTH v2 and
+  // v3 tags, migrating v2 tags at read time (the document is not touched
+  // until the next write re-encodes as v3). `qaseeda` is kept as a
+  // deprecated alias of `profile` so untouched call sites keep working.
   function parseContentControlTag(tag) {
     if (typeof tag !== "string" || tag.indexOf("ashaar:") !== 0) return null;
     try {
       var payload = JSON.parse(decodeURIComponent(tag.slice("ashaar:".length)));
       if (!payload || typeof payload !== "object") return null;
-      if (typeof payload.qaseeda !== "string") payload.qaseeda = "";
       payload.cells = payload.cells || null;
       payload.overrides = (payload.overrides && typeof payload.overrides === "object") ? payload.overrides : {};
       payload.slotDecor = (payload.slotDecor && typeof payload.slotDecor === "object") ? payload.slotDecor : {};
       payload.runFonts = (payload.runFonts && typeof payload.runFonts === "object") ? payload.runFonts : null;
       payload.widthPt = (typeof payload.widthPt === "number" && payload.widthPt > 0) ? payload.widthPt : null;
+      // v2 → v3 read-time migration: stored preferences become local deltas
+      // (canonical keys), qaseeda becomes profile, fontMode is dropped. The
+      // document is not touched until the next write re-encodes as v3.
+      if (payload.v !== 3) {
+        var local = {};
+        if (payload.justifyMode != null) local.justifyMode = payload.justifyMode;
+        if (Number(payload.tatweelCount) > 0) local.strength = Number(payload.tatweelCount);
+        if (payload.gapWidth != null) local.gap = Number(payload.gapWidth);
+        if (payload.tableWidthPct != null) local.widthPct = Number(payload.tableWidthPct);
+        if (payload.layoutMode != null) local.layoutMode = payload.layoutMode;
+        if (payload.widthMode != null) local.colWidthMode = payload.widthMode;
+        if (payload.fillMode != null) local.fillMode = payload.fillMode;
+        payload.local = local;
+        payload.profile = payload.qaseeda || "";
+        payload.v = 3;
+        delete payload.justifyMode; delete payload.tatweelCount; delete payload.gapWidth;
+        delete payload.tableWidthPct; delete payload.layoutMode; delete payload.widthMode;
+        delete payload.fillMode; delete payload.fontMode;
+      }
+      if (typeof payload.profile !== "string") payload.profile = "";
+      payload.local = (payload.local && typeof payload.local === "object") ? payload.local : {};
+      payload.profileCache = (payload.profileCache && typeof payload.profileCache === "object") ? payload.profileCache : null;
+      payload.qaseeda = payload.profile; // deprecated alias, removed in cleanup task
       return payload;
     } catch (e) {
       return null;
     }
   }
 
-  // Return a copy of an "ashaar:" tag with only its qaseeda name replaced.
+  // Return a copy of an "ashaar:" tag with only its profile name replaced.
   // Non-ashaar / malformed tags are returned unchanged.
-  function setTagQaseeda(tag, name) {
+  function setTagProfile(tag, name) {
     var payload = parseContentControlTag(tag);
     if (!payload) return tag;
-    payload.qaseeda = name || "";
+    payload.profile = name || "";
+    payload.qaseeda = payload.profile;
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // Deprecated alias (v2 name) — remove with the cleanup task.
+  function setTagQaseeda(tag, name) { return setTagProfile(tag, name); }
+
+  // Return a copy of an "ashaar:" tag with the local delta map REPLACED.
+  // Callers compute the full new map (delete-by-omission).
+  function setTagLocal(tag, local) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    payload.local = (local && typeof local === "object") ? local : {};
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // Return a copy of an "ashaar:" tag with the profile snapshot set/cleared.
+  function setTagProfileCache(tag, cache) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    payload.profileCache = (cache && typeof cache === "object") ? cache : null;
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
@@ -1823,6 +1864,9 @@
     contentControlTag: contentControlTag,
     parseContentControlTag: parseContentControlTag,
     setTagQaseeda: setTagQaseeda,
+    setTagProfile: setTagProfile,
+    setTagLocal: setTagLocal,
+    setTagProfileCache: setTagProfileCache,
     setTagOverride: setTagOverride,
     setTagSlotDecor: setTagSlotDecor,
     packRunWords: packRunWords,

@@ -44,18 +44,14 @@ const compact = AshaarWord.renderForWord(source, {
 assert.match(compact, /colspan="5"|<col style="width:8%"/);
 
 const tag = AshaarWord.contentControlTag(source, {
-  layoutMode: "balanced",
-  widthMode: "optimized",
-  justifyMode: "kashida",
-  tatweelCount: 6,
-  gapWidth: 4
+  local: { layoutMode: "balanced", colWidthMode: "optimized", justifyMode: "kashida", strength: 6, gap: 4 }
 });
 
 assert.match(tag, /^ashaar:/);
 const payload = JSON.parse(decodeURIComponent(tag.replace(/^ashaar:/, "")));
 assert.equal(payload.k, "ashaar-poem");
-assert.equal(payload.layoutMode, "balanced");
-assert.equal(payload.fontMode, "document");
+assert.equal(payload.v, 3);
+assert.equal(payload.local.layoutMode, "balanced");
 assert.ok(payload.sourceHash);
 
 const template = AshaarWord.renderTemplateForWord({
@@ -404,18 +400,22 @@ const tblFull = Number(wFull.match(/<w:tblW w:w="(\d+)"/)[1]);
 const tblHalf = Number(wHalf.match(/<w:tblW w:w="(\d+)"/)[1]);
 assert.ok(tblHalf < tblFull && Math.abs(tblHalf * 2 - tblFull) <= 14, "tblW scales with textWidthTwips");
 
-// Content-control tag carries the chosen table width
-const tagW = AshaarWord.contentControlTag("x", { tableWidthPct: 50 });
+// Content-control tag carries the chosen table width (as a local delta)
+const tagW = AshaarWord.contentControlTag("x", { local: { widthPct: 50 } });
 assert.equal(
-  JSON.parse(decodeURIComponent(tagW.replace(/^ashaar:/, ""))).tableWidthPct, 50,
-  "tag carries tableWidthPct"
+  JSON.parse(decodeURIComponent(tagW.replace(/^ashaar:/, ""))).local.widthPct, 50,
+  "tag carries local.widthPct"
 );
 
-// Content-control tag carries the qaseeda name and round-trips through the parser
-const tagQ = AshaarWord.contentControlTag("x", { qaseeda: "Karbala" });
+// Content-control tag carries the profile name and round-trips through the parser
+const tagQ = AshaarWord.contentControlTag("x", { profile: "Karbala" });
+assert.equal(
+  AshaarWord.parseContentControlTag(tagQ).profile, "Karbala",
+  "tag carries and parses the profile name"
+);
 assert.equal(
   AshaarWord.parseContentControlTag(tagQ).qaseeda, "Karbala",
-  "tag carries and parses the qaseeda name"
+  "qaseeda alias mirrors the profile name"
 );
 const tagNoQ = "ashaar:" + encodeURIComponent(JSON.stringify({ k: "ashaar-poem", v: 1 }));
 assert.equal(
@@ -426,20 +426,24 @@ assert.equal(
 assert.equal(AshaarWord.parseContentControlTag(""), null, "empty tag => null");
 assert.equal(AshaarWord.parseContentControlTag("not-ashaar"), null, "non-ashaar tag => null");
 // Round-trips a real payload
-const tagFull = AshaarWord.contentControlTag("poem", { layoutMode: "balanced", tableWidthPct: 75, qaseeda: "Q1" });
+const tagFull = AshaarWord.contentControlTag("poem", { local: { layoutMode: "balanced", widthPct: 75 }, profile: "Q1" });
 const parsedFull = AshaarWord.parseContentControlTag(tagFull);
 assert.equal(parsedFull.k, "ashaar-poem", "parses kind");
-assert.equal(parsedFull.tableWidthPct, 75, "parses tableWidthPct");
-assert.equal(parsedFull.qaseeda, "Q1", "parses qaseeda");
+assert.equal(parsedFull.local.widthPct, 75, "parses local.widthPct");
+assert.equal(parsedFull.profile, "Q1", "parses profile");
 
-// setTagQaseeda rewrites only the qaseeda field, leaving other payload intact
-const tagBase = AshaarWord.contentControlTag("poem", { tableWidthPct: 60, qaseeda: "Old" });
-const tagSet = AshaarWord.setTagQaseeda(tagBase, "New");
+// setTagProfile rewrites only the profile field, leaving other payload intact
+const tagBase = AshaarWord.contentControlTag("poem", { local: { widthPct: 60 }, profile: "Old" });
+const tagSet = AshaarWord.setTagProfile(tagBase, "New");
 const parsedSet = AshaarWord.parseContentControlTag(tagSet);
-assert.equal(parsedSet.qaseeda, "New", "setTagQaseeda updates the qaseeda name");
-assert.equal(parsedSet.tableWidthPct, 60, "setTagQaseeda preserves other payload fields");
-assert.equal(AshaarWord.setTagQaseeda("not-ashaar", "X"), "not-ashaar", "non-ashaar tag returned unchanged");
-assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagQaseeda(tagBase, "")).qaseeda, "", "clearing the name yields empty string");
+assert.equal(parsedSet.profile, "New", "setTagProfile updates the profile name");
+assert.equal(parsedSet.local.widthPct, 60, "setTagProfile preserves other payload fields");
+assert.equal(AshaarWord.setTagProfile("not-ashaar", "X"), "not-ashaar", "non-ashaar tag returned unchanged");
+assert.equal(AshaarWord.parseContentControlTag(AshaarWord.setTagProfile(tagBase, "")).profile, "", "clearing the name yields empty string");
+
+// setTagQaseeda alias still works and writes `profile`
+const tagSetAlias = AshaarWord.setTagQaseeda(tagBase, "New");
+assert.equal(AshaarWord.parseContentControlTag(tagSetAlias).profile, "New", "setTagQaseeda alias updates profile");
 
 // ── coalesceRuns ────────────────────────────────────────────────────────────
 {
@@ -960,14 +964,14 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
 // ── tag round-trips the cells pattern; absent → null ─────────────────────────
 {
   const pat = [[["c", "g", "c"]], [["g", "c", "g"]]]; // two stanzas
-  const tag = AshaarWord.contentControlTag("poem", { tableWidthPct: 50 }, pat);
+  const tag = AshaarWord.contentControlTag("poem", { local: { widthPct: 50 } }, pat);
   const parsed = AshaarWord.parseContentControlTag(tag);
   assert.deepStrictEqual(parsed.cells, pat, "cells round-trip");
-  assert.equal(parsed.v, 2, "payload version bumped to 2");
+  assert.equal(parsed.v, 3, "payload version bumped to 3");
 }
 {
   // No 3rd arg → no cells (grid/template paths); parses to null.
-  const tag = AshaarWord.contentControlTag("grid", { tableWidthPct: 50 });
+  const tag = AshaarWord.contentControlTag("grid", { local: { widthPct: 50 } });
   assert.strictEqual(AshaarWord.parseContentControlTag(tag).cells, null, "absent cells → null");
 }
 
@@ -1036,3 +1040,106 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
 console.log("wrapOoxmlControl OK");
 
 console.log("word-html tests passed");
+
+// ── Tag payload v3 ───────────────────────────────────────────────────────────
+
+// Writer emits v3 with profile/local/profileCache.
+{
+  const tag = AshaarWord.contentControlTag("متن", {
+    profile: "Karbala",
+    local: { gap: 8, strength: 9 },
+    profileCache: { gap: 6 },
+    misraPattern: "paired",
+    misraCount: 4,
+  });
+  const p = AshaarWord.parseContentControlTag(tag);
+  assert.equal(p.v, 3);
+  assert.equal(p.profile, "Karbala");
+  assert.deepEqual(p.local, { gap: 8, strength: 9 });
+  assert.deepEqual(p.profileCache, { gap: 6 });
+  assert.equal(p.misraPattern, "paired");
+  assert.equal(p.misraCount, 4);
+  assert.equal(p.qaseeda, "Karbala", "deprecated alias mirrors profile");
+}
+
+// Writer defaults: no profile/local → empty string / empty object.
+{
+  const p = AshaarWord.parseContentControlTag(AshaarWord.contentControlTag("متن", {}));
+  assert.equal(p.profile, "");
+  assert.deepEqual(p.local, {});
+  assert.equal(p.profileCache, null);
+}
+
+// v2 read-time migration: stored preferences become local deltas (canonical
+// keys), qaseeda becomes profile, fontMode is dropped, render facts survive.
+{
+  const v2payload = {
+    k: "ashaar-poem", v: 2,
+    layoutMode: "equal", widthMode: "fixed", justifyMode: "spacing",
+    tatweelCount: 9, gapWidth: 8, misraPattern: "paired", misraCount: 4,
+    fontMode: "jameel", tableWidthPct: 80, qaseeda: "Karbala",
+    sourceHash: "abc123",
+    overrides: { "A2:3": { strength: 5 } },
+    widthPt: 350,
+    slotDecor: { "A#1": { symbol: "؎" } },
+  };
+  const v2tag = "ashaar:" + encodeURIComponent(JSON.stringify(v2payload));
+  const p = AshaarWord.parseContentControlTag(v2tag);
+  assert.equal(p.v, 3, "migrated shape");
+  assert.equal(p.profile, "Karbala");
+  assert.equal(p.local.layoutMode, "equal");
+  assert.equal(p.local.colWidthMode, "fixed", "v2 widthMode → colWidthMode");
+  assert.equal(p.local.justifyMode, "spacing");
+  assert.equal(p.local.strength, 9, "v2 tatweelCount → strength");
+  assert.equal(p.local.gap, 8, "v2 gapWidth → gap");
+  assert.equal(p.local.widthPct, 80, "v2 tableWidthPct → widthPct");
+  assert.equal("fontMode" in p.local, false, "fontMode dropped");
+  assert.equal(p.misraPattern, "paired");
+  assert.equal(p.misraCount, 4);
+  assert.equal(p.sourceHash, "abc123");
+  assert.deepEqual(p.overrides, { "A2:3": { strength: 5 } });
+  assert.equal(p.widthPt, 350);
+  assert.deepEqual(p.slotDecor, { "A#1": { symbol: "؎" } });
+}
+
+// Setters touch only their own key; unknown fields round-trip untouched.
+{
+  const base = AshaarWord.contentControlTag("متن", { profile: "K", local: { gap: 8 } });
+  // Simulate a future-version field.
+  const withFuture = (() => {
+    const raw = JSON.parse(decodeURIComponent(base.slice("ashaar:".length)));
+    raw.futureField = { keep: true };
+    return "ashaar:" + encodeURIComponent(JSON.stringify(raw));
+  })();
+
+  const t1 = AshaarWord.setTagProfile(withFuture, "Najaf");
+  const p1 = AshaarWord.parseContentControlTag(t1);
+  assert.equal(p1.profile, "Najaf");
+  assert.deepEqual(p1.local, { gap: 8 }, "local untouched");
+  assert.deepEqual(JSON.parse(decodeURIComponent(t1.slice("ashaar:".length))).futureField, { keep: true });
+
+  const t2 = AshaarWord.setTagLocal(t1, { strength: 9 });
+  const p2 = AshaarWord.parseContentControlTag(t2);
+  assert.deepEqual(p2.local, { strength: 9 }, "full replace");
+  assert.equal(p2.profile, "Najaf", "profile untouched");
+
+  const t3 = AshaarWord.setTagProfileCache(t2, { gap: 6, strength: 3 });
+  assert.deepEqual(AshaarWord.parseContentControlTag(t3).profileCache, { gap: 6, strength: 3 });
+  const t4 = AshaarWord.setTagProfileCache(t3, null);
+  assert.equal(AshaarWord.parseContentControlTag(t4).profileCache, null);
+
+  // setTagQaseeda alias still works and writes `profile`.
+  const t5 = AshaarWord.setTagQaseeda(t4, "Alias");
+  assert.equal(AshaarWord.parseContentControlTag(t5).profile, "Alias");
+}
+
+// Existing setters (override/slot-decor/bandh-width/run-fonts) still work on
+// migrated v2 tags — they parse → mutate → re-encode, so the write is v3.
+{
+  const v2tag = "ashaar:" + encodeURIComponent(JSON.stringify({ k: "ashaar-poem", v: 2, gapWidth: 8, qaseeda: "K" }));
+  const out = AshaarWord.setTagBandhWidth(v2tag, 300);
+  const p = AshaarWord.parseContentControlTag(out);
+  assert.equal(p.widthPt, 300);
+  assert.equal(p.v, 3, "any setter write upgrades to v3");
+  assert.equal(p.local.gap, 8, "migrated local survives the setter");
+}

@@ -33,11 +33,11 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
 
 // ── setTagOverride: add / replace / remove, round-trip, other fields intact ──
 {
-  const tag0 = AshaarWord.contentControlTag("poem", { qaseeda: "Q", tableWidthPct: 60 }, [[["c", "g", "c"]]]);
+  const tag0 = AshaarWord.contentControlTag("poem", { profile: "Q", local: { widthPct: 60 } }, [[["c", "g", "c"]]]);
   const tag1 = AshaarWord.setTagOverride(tag0, "0:A1", { strength: 9 });
   const p1 = AshaarWord.parseContentControlTag(tag1);
   assert.deepStrictEqual(p1.overrides, { "0:A1": { strength: 9 } }, "override added");
-  assert.equal(p1.qaseeda, "Q", "other payload fields intact");
+  assert.equal(p1.profile, "Q", "other payload fields intact");
   assert.deepStrictEqual(p1.cells, [[["c", "g", "c"]]], "cells intact");
 
   const tag2 = AshaarWord.setTagOverride(tag1, "0:A1", { strength: 5, widthPt: 300 });
@@ -69,12 +69,12 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
 
 // ── setTagSlotDecor: add / remove, round-trip, cells/overrides intact ────────
 {
-  const t0 = AshaarWord.contentControlTag("poem", { qaseeda: "Q" }, [[["c", "g", "c"]]]);
+  const t0 = AshaarWord.contentControlTag("poem", { profile: "Q" }, [[["c", "g", "c"]]]);
   const t1 = AshaarWord.setTagSlotDecor(t0, "0:A#1", { symbol: "؎", fill: "eeeeee" });
   const p1 = AshaarWord.parseContentControlTag(t1);
   assert.deepStrictEqual(p1.slotDecor, { "0:A#1": { symbol: "؎", fill: "eeeeee" } });
   assert.deepStrictEqual(p1.cells, [[["c", "g", "c"]]], "cells intact");
-  assert.equal(p1.qaseeda, "Q");
+  assert.equal(p1.profile, "Q");
   const t2 = AshaarWord.setTagSlotDecor(t1, "0:A#1", null);
   assert.deepStrictEqual(AshaarWord.parseContentControlTag(t2).slotDecor, {}, "removed");
   const t3 = AshaarWord.setTagSlotDecor(t1, "0:A#1", { symbol: "", fill: "", color: "" });
