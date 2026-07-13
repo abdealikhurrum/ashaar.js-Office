@@ -1648,6 +1648,15 @@
 
       // Remember the width we sized to, so a later justify-only apply (strength,
       // fill mode, per-cell override) skips the destructive rebuild.
+      // Fix round 2: write the scoped entry under the tag physically ON the
+      // block after healing (onlyBlockResolvedTags[0]) — that is what the next
+      // scoped delegation will read and key by. Writing under the pre-heal key
+      // left the scoped cache permanently cold (the tag churns every apply).
+      // If the empty-source skip spliced the entry out, the physical tag never
+      // changed, so the pre-heal sigKey is still the right one — keep it.
+      if (opts && opts.onlyBlockTag && onlyBlockResolvedTags && onlyBlockResolvedTags.length) {
+        sigKey = name + "|" + onlyBlockResolvedTags[0];
+      }
       if (sizeSig) _appliedSizeSig[sigKey] = sizeSig;
       summary = (opts && opts.onlyBlockTag)
         ? "Applied to this poem; justified " + changed + " cell(s)"

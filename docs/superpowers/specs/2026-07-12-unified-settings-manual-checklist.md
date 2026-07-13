@@ -48,6 +48,7 @@ there is a single checklist to work through, rather than four scattered ones.
       *Continue anyway* (as opposed to *Add font file…*) lets Apply proceed with approximate metrics
       instead of blocking (Task 9, item 3).
 - [ ] Scoped apply on one poem of a shared profile: siblings untouched (width may differ until Update — expected).
+- [ ] Second consecutive scoped apply (Justify on a profiled poem, no edits between) shows rebuild=no in the debug dump.
 
 ## Notes for whoever runs this
 
