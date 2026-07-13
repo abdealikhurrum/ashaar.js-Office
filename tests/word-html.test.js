@@ -1137,6 +1137,11 @@ console.log("word-html tests passed");
   assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { misraPattern: "single" })), sig, "pattern changes sig");
   assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { targetTwips: 9000 })), sig, "width changes sig");
   assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { sources: ["متن الف"] })), sig, "source changes sig");
+  // §9 threading (final review C2b): lineHeightPt/separatorPt must be sig
+  // inputs now that the rebuild emits both — otherwise a profile/local change
+  // to either would never trip needRebuild in applyProfileToQaseeda.
+  assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { lineHeightPt: 24 })), sig, "lineHeightPt changes sig");
+  assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { separatorPt: 6 })), sig, "separatorPt changes sig");
 }
 
 // ── §9 vertical rhythm emission ──────────────────────────────────────────────
@@ -1158,6 +1163,13 @@ console.log("word-html tests passed");
   // legitimately appear INSIDE a table (e.g. an empty sadr/ajuz gap-column
   // cell), so anchor on the table-boundary sequence rather than a bare scan.
   assert.strictEqual(xml.indexOf("</w:tbl><w:p/><w:tbl>") === -1, true, "no bare separator paragraphs remain between tables");
+
+  // Final review C2c: misraRunsXml is the pass-2 (justify) emitter used by
+  // applyProfileToQaseeda for profiled poems — opts.lineHeightPt must reach
+  // misraSpacingXml here too, or a rebuilt line height gets stripped the
+  // moment the justify pass re-emits the paragraph.
+  const runsXml = AshaarWord.misraRunsXml([{ text: "الف", csName: "Arial" }], "right", 12, { lineHeightPt: 24 });
+  assert.ok(runsXml.indexOf('w:line="480" w:lineRule="atLeast"') !== -1, "misraRunsXml threads lineHeightPt");
 }
 
 // ── §4 fix: tagIdentity — block identity stable across the runFonts heal ────

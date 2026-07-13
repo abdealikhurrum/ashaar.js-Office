@@ -1136,7 +1136,11 @@
   // slip through when the sig was width+source only).
   function applySizeSignature(args) {
     args = args || {};
-    var parts = [String(args.targetTwips || 0), String(args.gap != null ? args.gap : ""), String(args.misraPattern || "")];
+    // lineHeightPt/separatorPt (§9): the rebuild now emits both (final review
+    // C2), so both must be signature inputs — otherwise a profile/local
+    // change to either would never trip needRebuild.
+    var parts = [String(args.targetTwips || 0), String(args.gap != null ? args.gap : ""), String(args.misraPattern || ""),
+      String(args.lineHeightPt != null ? args.lineHeightPt : ""), String(args.separatorPt != null ? args.separatorPt : "")];
     (args.sources || []).forEach(function (s) {
       var h = 0; s = String(s || "");
       for (var i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;

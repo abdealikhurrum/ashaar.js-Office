@@ -1347,6 +1347,16 @@
             return AshaarProfiles.resolveSettings({ payload: b.payload, profileStore: sizeSigProfileStore, scope: { level: "poem" } }).values.gap;
           }).join(","),
           misraPattern: cap.blockInfos.map(function (b) { return b.payload.misraPattern || ""; }).join(","),
+          // §9 threading (final review C2b): lineHeightPt/separatorPt are now
+          // emitted by the rebuild (renderOpts above) — fold the resolved
+          // values in here too, or a profile/local change to either would
+          // never flip needRebuild and the rebuild would silently be skipped.
+          lineHeightPt: cap.blockInfos.map(function (b) {
+            return AshaarProfiles.resolveSettings({ payload: b.payload, profileStore: sizeSigProfileStore, scope: { level: "poem" } }).values.lineHeightPt;
+          }).join(","),
+          separatorPt: cap.blockInfos.map(function (b) {
+            return AshaarProfiles.resolveSettings({ payload: b.payload, profileStore: sizeSigProfileStore, scope: { level: "poem" } }).values.separatorPt;
+          }).join(","),
         });
         var needRebuild = _appliedSizeSig[sigKey] !== sizeSig;
         if (qDebug) { qMeta.targetTwips = targetTwips; qMeta.rebuild = needRebuild; qMeta.repName = cap.repName; }
@@ -1381,7 +1391,14 @@
             misraPattern: p.misraPattern || "paired",
             misraCount: Number(p.misraCount || 4),
             tatweelCount: 0,
-            justifyMode: "none"
+            justifyMode: "none",
+            // §9 threading (final review C2a): eff already carries the resolved
+            // vertical-rhythm values — without these the bare rebuild always
+            // fell back to renderForWordOoxml's defaults (auto line height,
+            // 1pt separator), so a profile/local lineHeightPt/separatorPt was
+            // never emitted for the flagship profiled-poem path.
+            lineHeightPt: eff.lineHeightPt,
+            separatorPt: eff.separatorPt
           };
           if (blk.repFont) renderOpts.fontCsName = blk.repFont;
           if (blk.repSize) renderOpts.fontSizePt = blk.repSize;
@@ -1414,6 +1431,12 @@
         blocks.forEach(function (cc) { cc.appearance = "BoundingBox"; });
         var cap = await captureQaseedaTables(context, blocks, profile);
         if (!cap.canvasCtx) { summary = "Canvas unavailable; cannot measure."; return; }
+        // §9 threading (final review C2c): resolved per-block lineHeightPt for
+        // the justify-pass emitters below — pass 1's rebuild emits it into the
+        // bare tables, but misraRunsXml (used by both the no-fill early return
+        // and emitContentCell) re-emits every misra paragraph from scratch and
+        // would silently drop it without this.
+        var qProfileStore = loadProfileStore();
 
         // Force-load every ORIGINAL per-run font (+ Kasheeda face), then repair
         // the rep baseline and rebuild natPx/qMatrix from the reconciled runs —
@@ -1447,7 +1470,7 @@
         // fillToTarget(cTargetPx, strict) elongates each segment by its own
         // mechanism toward the target (strict = never overshoot, for the
         // adaptive mode where every line must land AT the shared target).
-        function prepContentCell(c, info, key, colPx) {
+        function prepContentCell(c, info, key, colPx, lineHeightPt) {
           var repFallback = c.fontName || repName;
           var sizeFallback = c.fontSize || repSize;
           // Original per-word runs; fall back to a single run when capture missed
@@ -1512,7 +1535,7 @@
             var passOut = flattenSegs(segs.map(function (seg) {
               return [{ text: seg.text, csName: baseFaceOf(seg.name), sizePt: seg.size, color: seg.color, bold: seg.bold, italic: seg.italic }];
             }));
-            return { xml: AshaarWord.misraRunsXml(passOut, align, rep0Size, { indentTwips: indentTwips }) };
+            return { xml: AshaarWord.misraRunsXml(passOut, align, rep0Size, { indentTwips: indentTwips, lineHeightPt: lineHeightPt }) };
           }
 
           // Natural width in BASE faces + the inter-segment spaces. Stable on
@@ -1625,7 +1648,7 @@
           return {
             c: c, key: key, colPx: colPx, oc: oc, align: align, indentTwips: indentTwips,
             rep0Size: rep0Size, segs: segs, cNatural: cNatural, cOv: cOv, cRes: cRes,
-            cPhi: cPhi, cCapEm: cCapEm, fillToTarget: fillToTarget
+            cPhi: cPhi, cCapEm: cCapEm, fillToTarget: fillToTarget, lineHeightPt: lineHeightPt
           };
         }
 
@@ -1660,10 +1683,14 @@
             ov: p.cOv ? "OVERRIDE " + JSON.stringify(p.cOv) : "",
             rawWords: (p.oc && p.oc.rawWords) || "(no capture)"
           });
-          return AshaarWord.misraRunsXml(spread.runs, p.align, p.rep0Size, { indentTwips: p.indentTwips });
+          return AshaarWord.misraRunsXml(spread.runs, p.align, p.rep0Size, { indentTwips: p.indentTwips, lineHeightPt: p.lineHeightPt });
         }
 
         cap.blockInfos.forEach(function (blk, bIdx) {
+          // §9 threading (final review C2c): this block's resolved line
+          // height, so the justify-pass emitters below re-emit the same
+          // vertical rhythm pass 1's rebuild used (not "auto").
+          var blkEff = AshaarProfiles.resolveSettings({ payload: blk.payload, profileStore: qProfileStore, scope: { level: "poem" } }).values;
           // §4 transition-clear consumption gate: pending clears apply ONLY to
           // the block that recorded them. Override keys ("0:A1") repeat across
           // poems, so without this a retained map (render failed after a tag
@@ -1699,7 +1726,7 @@
               var colPx = cwtPx > 0
                 ? Math.max(1, (c.gridSpan || 1) * cwtPx - 2 * MARGIN_PX)
                 : Math.max(1, (c.cell.columnWidth || 0) - 2 * CELL_MARGIN_PT) * 96 / 72;
-              var p = prepContentCell(c, info, bIdx + ":" + tIdx + ":" + cIdx, colPx);
+              var p = prepContentCell(c, info, bIdx + ":" + tIdx + ":" + cIdx, colPx, blkEff.lineHeightPt);
               if (!p) return;
               // §4 fill/color: the raw override (unfiltered by resolveCellOverride,
               // which only carries strength/widthPt/capEm) — read straight off the
@@ -3822,7 +3849,11 @@
   // Reuses reRender()'s bare-rebuild + justifySelection() fill, both of which
   // now read options() → panelValues(), i.e. the resolved values.
   async function applyPoemScope(target, values, run) {
-    var structuralDirty = ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode"].some(function (k) {
+    // Reuse AshaarPanel.STRUCTURAL_KEYS (settings-panel.js) instead of a local
+    // duplicate — the duplicate previously omitted separatorPt, so a
+    // separator-only Apply silently routed to justify-only and no-opped
+    // (final review C1).
+    var structuralDirty = AshaarPanel.STRUCTURAL_KEYS.some(function (k) {
       return (k in _panel.pending.set) || _panel.pending.clear.indexOf(k) !== -1;
     });
     await withWordStrict(async function (context) {
