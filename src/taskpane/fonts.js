@@ -90,6 +90,23 @@
 
   // Thin wrapper: just the mechanism for a run's real font.
   function mechanismForFontName(name) { return descriptorForFontName(name).mechanism; }
+
+  // §7: justification artifacts (tatweel U+0640, hair/thin micro-spaces
+  // U+200A/U+2009, plain ASCII spaces) must never decide a word's font — such
+  // runs carry stale fonts after native font changes and would otherwise pull
+  // whole words down to a fallback face (observed: whole words falling back
+  // to Arial). isArtifactRun flags a run whose text is PURELY artifacts (incl.
+  // empty); dominantRunFont picks the first non-artifact run's font, falling
+  // back to the first run only when every run is an artifact.
+  var ARTIFACT_ONLY = /^[ـ   ]*$/;
+  function isArtifactRun(text) { return ARTIFACT_ONLY.test(String(text || "")); }
+  function dominantRunFont(runs) {
+    runs = runs || [];
+    for (var i = 0; i < runs.length; i++) {
+      if (!isArtifactRun(runs[i].text)) return runs[i].font || null;
+    }
+    return runs.length ? (runs[0].font || null) : null;
+  }
   function wordNameOf(id) { var d = get(id); return d && d.wordName ? d.wordName : null; }
   function kasheedaNameOf(id) { var d = get(id); return d && d.kasheedaName ? d.kasheedaName : null; }
   function cssFamilyOf(id) { var d = get(id); return d && d.css ? d.css : null; }
@@ -99,5 +116,6 @@
     descriptorForFontName: descriptorForFontName,
     normalizeLegacyFontName: normalizeLegacyFontName,
     mechanismForFontName: mechanismForFontName, wordNameOf: wordNameOf,
-    kasheedaNameOf: kasheedaNameOf, cssFamilyOf: cssFamilyOf, tatweelRulesOf: tatweelRulesOf };
+    kasheedaNameOf: kasheedaNameOf, cssFamilyOf: cssFamilyOf, tatweelRulesOf: tatweelRulesOf,
+    isArtifactRun: isArtifactRun, dominantRunFont: dominantRunFont };
 }));

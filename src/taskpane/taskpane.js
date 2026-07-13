@@ -722,7 +722,15 @@
             var mapped = tblMap ? tblMap[seq] : null;
             seq++;
             rowText.push(cell.body.text || "");
-            if (f && f.name && !repFont) { repFont = f.name; if (f.size) repSize = f.size; }
+            // §7: never let a justification-artifact-only cell (e.g. a blank
+            // spacing/gutter cell, or one reduced to stray tatweels) become the
+            // block's representative font — such cells' fonts are stale/
+            // meaningless. isArtifactRun (not stripJustification/base) is the
+            // right check here: it also flags plain-space-only cells, which
+            // stripJustification alone would not strip.
+            if (f && f.name && !repFont && !AshaarFonts.isArtifactRun(current)) {
+              repFont = f.name; if (f.size) repSize = f.size;
+            }
             var p0 = cell.body.paragraphs.items && cell.body.paragraphs.items[0];
             var alv = p0 && p0.alignment;
             cells.push({
@@ -749,14 +757,18 @@
       return { cc: cc, oldTag: cc.tag, payload: payload, source: source, repFont: repFont, repSize: repSize, tableInfos: tableInfos };
     });
 
-    // Representative font for the canvas baseline.
+    // Representative font for the canvas baseline. §7: skip artifact-only
+    // cells (blank spacing cells, stray-tatweel cells) — same rationale as
+    // the per-block repFont pick above.
     var repName = fallbackName, repSize = 16;
     for (var b0 = 0; b0 < blockInfos.length && repName === fallbackName; b0++) {
       var tis = blockInfos[b0].tableInfos;
       for (var t0 = 0; t0 < tis.length && repName === fallbackName; t0++) {
         var cs0 = tis[t0].cells;
         for (var c0 = 0; c0 < cs0.length; c0++) {
-          if (cs0[c0].fontName) { repName = cs0[c0].fontName; if (cs0[c0].fontSize) repSize = cs0[c0].fontSize; break; }
+          if (cs0[c0].fontName && !AshaarFonts.isArtifactRun(cs0[c0].current)) {
+            repName = cs0[c0].fontName; if (cs0[c0].fontSize) repSize = cs0[c0].fontSize; break;
+          }
         }
       }
     }
@@ -2142,10 +2154,16 @@
       }).filter(function (s) { return s.trim(); }).join("\n\n");
 
       // Representative existing font (first cell reporting one) to preserve.
+      // §7: skip a cell whose text is nothing but justification artifacts (a
+      // blank spacing cell, or a leftover-tatweel cell) — its font is stale/
+      // meaningless and must never pin the rebuilt poem's font.
       tables.items.forEach(function (tbl) {
         tbl.rows.items.forEach(function (row) {
           row.cells.items.forEach(function (cell) {
-            if (!existingFont && cell.body.font && cell.body.font.name) existingFont = cell.body.font.name;
+            if (!existingFont && cell.body.font && cell.body.font.name &&
+                !AshaarFonts.isArtifactRun(cell.body.text || "")) {
+              existingFont = cell.body.font.name;
+            }
           });
         });
       });
@@ -2423,11 +2441,16 @@
       });
       await context.sync();
 
-      // Representative font taken from the cells themselves (fall back to the pane).
+      // Representative font taken from the cells themselves (fall back to the
+      // pane). §7: skip a cell whose text is nothing but justification
+      // artifacts (blank spacing cell / stray tatweels) — never let its stale
+      // font become the representative for the whole selection.
       var repName = fallbackName, repSize = 16;
       for (var ci = 0; ci < allCells.length; ci++) {
         var rf = allCells[ci].body.font;
-        if (rf && rf.name) { repName = rf.name; if (rf.size) repSize = rf.size; break; }
+        if (rf && rf.name && !AshaarFonts.isArtifactRun(allCells[ci].body.text || "")) {
+          repName = rf.name; if (rf.size) repSize = rf.size; break;
+        }
       }
 
       // Content width = cell width minus the side margins Word reserves for text.
@@ -2675,7 +2698,16 @@
         // default) routes each cell to its font's correct mechanism instead of
         // shattering Jameel/Mehr with generic tatweels. The dropdown font is
         // only the fallback when a cell reports no resolvable font.
-        var cellFontName = (cell.body.font && cell.body.font.name) || repName;
+        // §7: read the font per WORD-RANGE and pick the first non-artifact
+        // one (dominantRunFont) instead of cell.body.font.name — a mixed cell
+        // (real word + a stale-font tatweel/space tail) reads null at the
+        // whole-cell level and would silently fall through to repName, which
+        // can itself be an unrelated cell's font; going straight to the word
+        // ranges finds the real word's font directly.
+        var cellWordFonts = (cell.__wordRanges.items || []).map(function (wr) {
+          return { text: wr.text, font: wr.font && wr.font.name };
+        });
+        var cellFontName = AshaarFonts.dominantRunFont(cellWordFonts) || repName;
         var cellDesc = AshaarFonts.descriptorForFontName(cellFontName);
         var cellMech = cellDesc.mechanism;
 

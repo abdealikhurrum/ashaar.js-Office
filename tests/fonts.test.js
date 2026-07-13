@@ -88,4 +88,17 @@ assert.deepStrictEqual(r.isolatedInto, ["ب","پ","ت","ٹ","ث","س","ش","ف",
 assert.deepStrictEqual(r.finalInto,    ["ب","پ","ت","ٹ","ث","ف","ک","گ"]);
 assert.strictEqual(AshaarFonts.tatweelRulesOf("gulzar"), null);
 
+// ── §7 artifact-safe font determination ──────────────────────────────────────
+assert.strictEqual(AshaarFonts.isArtifactRun("ــ"), true);
+assert.strictEqual(AshaarFonts.isArtifactRun("   "), true);
+assert.strictEqual(AshaarFonts.isArtifactRun("كلمة"), false);
+assert.strictEqual(AshaarFonts.isArtifactRun(""), true);
+// Word run in Jameel + tatweel run left in Arial (the observed regression):
+assert.strictEqual(AshaarFonts.dominantRunFont([
+  { text: "ــ", font: "Arial" },
+  { text: "كلمة", font: "Jameel Noori Nastaleeq" },
+]), "Jameel Noori Nastaleeq");
+assert.strictEqual(AshaarFonts.dominantRunFont([{ text: "ـ", font: "Arial" }]), "Arial", "all-artifact falls back to first");
+assert.strictEqual(AshaarFonts.dominantRunFont([]), null);
+
 console.log("fonts tests passed");
