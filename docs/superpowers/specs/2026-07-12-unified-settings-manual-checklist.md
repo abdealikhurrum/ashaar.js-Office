@@ -68,7 +68,7 @@ there is a single checklist to work through, rather than four scattered ones.
 - [ ] Line height (lineHeightPt) stops nastaliq clipping — set to ~1.8× font size on a clipping poem, Apply: lines no longer collide vertically.
 - [ ] Separator (separatorPt) sizing — set to 1pt, Apply: tables nearly touch, never merge; increase the setting: inter-poem gaps visibly widen.
 - [ ] Cost caption accuracy — refresh-cost caption correctly distinguishes rebuild (full re-calibration) from re-justify (same params, new text) based on the apply scope and context.
-- [ ] Debug metrics table — Debug toggle on; Apply: metrics table appears with phase timings (Probe, Calibrate, Justify); hit/miss recorded for calibration memos.
+- [ ] Debug metrics table — Debug toggle on; Apply: metrics table appears with phase timings (Probe, Calibrate, Justify); hit/miss recorded for calibration memos. NOTE (final review M3): probe/calibration hit/miss only appears on the NON-PROFILED justify path — `applyProfileToQaseeda` (the profiled-poem pipeline, which every panel Apply on a profile-linked block delegates to) never probes or calibrates, so run this item on a block with no profile assigned; on a profiled poem you will correctly see no hit/miss and should not chase it as a failure.
 - [ ] Second Apply idempotency speed — Apply once to a poem, then Apply again without edits: second Apply is visibly faster (cached calibration memo hit).
 
 ## Notes for whoever runs this
