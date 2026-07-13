@@ -22,6 +22,7 @@ hampers authors while they are still writing.
 5. Capture natively-applied Word formatting into the pane → overrides → profile.
 6. Every action's refresh cost is visible before it runs (poem rebuild vs re-justify).
 7. Font recognition is never corrupted by justification artifacts.
+8. Probe/calibration run once per font/poem, not on every Apply.
 
 ## Non-goals (explicitly deferred)
 
@@ -132,6 +133,26 @@ with justification artifacts removed or ignored. Concretely:
 - Node-testable: detection given artificial mixed runs (word-run in Jameel + tatweel-run
   in Arial) must resolve the word's font as Jameel.
 
+## 8. Probe & calibration caching
+
+**Problem (observed):** every Apply runs `AshaarTune.probeFont` (full pair-quality probe)
+and a 50-iteration `calibrate` hill-climb from scratch (`taskpane.js:2552-2581`). The
+autotune module was designed for bake-once reuse (`session.bake()` → recipe →
+`loadRecipe`); the add-in never adopted it.
+
+**Design (v1):**
+- `probeFont` memoized per font family: in-memory map + `localStorage`
+  (`ashaar:fontProbe:<family>`, stamped with an engine version — bust on vendor sync).
+  Font metrics are machine-scoped, so localStorage (not document settings) is correct.
+- `calibrate` memoized in-memory per (family, size, container-width bucket, texts hash):
+  repeat applies of an unchanged poem skip the hill-climb. No persistence in v1 (texts
+  change often enough that localStorage would mostly miss; the in-session hit rate is
+  what kills the per-Apply cost).
+- Cache bypass when the fonts strip registers/replaces a font (measurement basis changed).
+
+**Deferred:** pre-baked recipes for bundled fonts (Jameel/Mehr/Noto) shipped as JSON via
+`bake()`/`loadRecipe`, eliminating first-apply calibration on fresh machines.
+
 ## Interfaces & storage summary
 
 | Change | Where |
@@ -140,6 +161,8 @@ with justification artifacts removed or ignored. Concretely:
 | `overrides[key].fill/color` | tag v3 payload (additive; parse guarantees unchanged) |
 | Apply-target toggle | pane state only (not persisted) |
 | Refresh-cost caption | pane state only (computed per refresh) |
+| Probe cache | in-memory + localStorage `ashaar:fontProbe:<family>` (versioned) |
+| Calibration memo | in-memory only |
 | Capture | read-only Office.js loads → pending buffer |
 | Strip-before-detect | render/justify pipelines + font-reader filter |
 
