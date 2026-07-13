@@ -98,7 +98,10 @@
   // to Arial). isArtifactRun flags a run whose text is PURELY artifacts (incl.
   // empty); dominantRunFont picks the first non-artifact run's font, falling
   // back to the first run only when every run is an artifact.
-  var ARTIFACT_ONLY = /^[ـ   ]*$/;
+  // Explicit escapes (tatweel U+0640, hair U+200A, thin U+2009, ASCII space):
+  // a literal-character class was silently corrupted in transcription once
+  // (invisible spaces flattened to ASCII), leaving the guard inert.
+  var ARTIFACT_ONLY = /^[\u0640\u200A\u2009 ]*$/;
   function isArtifactRun(text) { return ARTIFACT_ONLY.test(String(text || "")); }
   function dominantRunFont(runs) {
     runs = runs || [];

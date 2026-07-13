@@ -90,7 +90,21 @@ assert.strictEqual(AshaarFonts.tatweelRulesOf("gulzar"), null);
 
 // ── §7 artifact-safe font determination ──────────────────────────────────────
 assert.strictEqual(AshaarFonts.isArtifactRun("ــ"), true);
-assert.strictEqual(AshaarFonts.isArtifactRun("   "), true);
+assert.strictEqual(AshaarFonts.isArtifactRun("   "), true); // plain ASCII spaces
+// Hair/thin micro-spaces built from ESCAPES (never literals: a literal-char
+// test string was once flattened to ASCII in transcription, and the suite
+// stayed green while validating nothing).
+const HAIR = "\u200A", THIN = "\u2009";
+assert.strictEqual(AshaarFonts.isArtifactRun(HAIR + HAIR), true, "hair spaces are artifacts");
+assert.strictEqual(AshaarFonts.isArtifactRun(THIN + " " + HAIR), true, "mixed artifact spaces");
+assert.strictEqual(AshaarFonts.isArtifactRun("\u0640 \u0640"), true, "tatweels + spaces");
+assert.strictEqual(AshaarFonts.isArtifactRun("\u0640" + HAIR), true, "tatweel + hair space");
+// Byte-level guard on the regex source itself: the escape TEXT must be
+// present in fonts.js (rendered invisibles would not survive review).
+const artifactSrc = require("fs").readFileSync(require.resolve("../src/taskpane/fonts.js"), "utf8");
+["\\u0640", "\\u200A", "\\u2009"].forEach(function (esc) {
+  assert.ok(artifactSrc.indexOf(esc) >= 0, "fonts.js must spell " + esc + " as an escape");
+});
 assert.strictEqual(AshaarFonts.isArtifactRun("كلمة"), false);
 assert.strictEqual(AshaarFonts.isArtifactRun(""), true);
 // Word run in Jameel + tatweel run left in Arial (the observed regression):
