@@ -31,7 +31,6 @@
       symbolColor: "",
       debugColors: { tatweel: "", space: "" },
       spacingDecor: {},                            // { "<slot>": { symbol, fill, color } }
-      font: "",
       fontCorrections: {},                         // { <fontName>: factor }
       derived: { colWidthVector: null, calibrationRecipe: null },
     };
@@ -46,7 +45,7 @@
     var out = {};
     var b = base || {};
     var p = partial || {};
-    var keys = ["name", "gap", "misraSymbol", "symbolColor", "font"];
+    var keys = ["name", "gap", "misraSymbol", "symbolColor"];
     keys.forEach(function (k) { out[k] = (k in p) ? p[k] : b[k]; });
     var nested = ["width", "justify", "debugColors", "fontCorrections", "derived", "spacingDecor"];
     nested.forEach(function (k) {
@@ -119,6 +118,109 @@
     return (mode === "cell-fit" || mode === "adaptive") ? mode : "natural-fit";
   }
 
+  // ── Canonical settings (unified panel) ────────────────────────────────────
+  // One flat shape shared by the resolver, the panel, and tag `local` maps.
+  // Layering: defaults → profile → block local → bandh widthPt → cell override.
+
+  function defaultSettings() {
+    return {
+      justifyMode: "kashida",     // "kashida" | "css" | "spacing" | "none"
+      fillMode: "natural-fit",    // "natural-fit" | "cell-fit" | "adaptive"
+      strength: 6,                // 1..10
+      gap: 4,                     // middle-gap grid columns, 0..20
+      widthMode: "auto-fit",      // "auto-fit" | "fixed"
+      widthPct: 50,               // 25..100 (only meaningful when fixed)
+      misraWidthPt: null,         // explicit fill target; null = computed
+      layoutMode: "balanced",     // "balanced"|"equal"|"compact"|"stacked"|"auto"
+      colWidthMode: "optimized",  // "optimized" | "fixed" (column-width strategy)
+      capEm: 0.28,                // residual spacing cap (cell scope)
+      fontCorrections: {},
+      debugColors: { tatweel: "", space: "" },
+    };
+  }
+
+  // Keys a profile owns. layoutMode/colWidthMode/capEm are block/cell-level
+  // preferences with no profile layer.
+  function settingsFromProfile(profile) {
+    var p = normalizeProfile(profile || {});
+    var out = {
+      justifyMode: p.justify.mode,
+      fillMode: normalizeFillMode(p.justify.fillMode),
+      strength: normalizeStrength(p.justify.strength),
+      gap: Number(p.gap),
+      widthMode: p.width.mode === "fixed" ? "fixed" : "auto-fit",
+      widthPct: Number(p.width.pct),
+    };
+    if (p.justify.widthPt != null) out.misraWidthPt = p.justify.widthPt;
+    if (p.fontCorrections && Object.keys(p.fontCorrections).length) out.fontCorrections = p.fontCorrections;
+    if (p.debugColors && (p.debugColors.tatweel || p.debugColors.space)) out.debugColors = p.debugColors;
+    return out;
+  }
+
+  // Inverse of settingsFromProfile: canonical values → profile-schema object.
+  function profileFromSettings(name, values) {
+    var v = values || {};
+    var p = defaultProfile(name);
+    if (v.justifyMode != null) p.justify.mode = v.justifyMode;
+    if (v.fillMode != null) p.justify.fillMode = normalizeFillMode(v.fillMode);
+    if (v.strength != null) p.justify.strength = normalizeStrength(v.strength);
+    if (v.misraWidthPt !== undefined) p.justify.widthPt = v.misraWidthPt;
+    if (v.gap != null) p.gap = Number(v.gap);
+    if (v.widthMode != null) p.width.mode = v.widthMode === "fixed" ? "fixed" : "auto-fit";
+    if (v.widthPct != null) p.width.pct = Number(v.widthPct);
+    if (v.fontCorrections) p.fontCorrections = v.fontCorrections;
+    if (v.debugColors) p.debugColors = v.debugColors;
+    return p;
+  }
+
+  // Resolve the effective settings for a target.
+  //   payload:      parsed v3 tag payload (or null for a plain selection)
+  //   profileStore: { name: profile } (localStorage contents)
+  //   scope:        { level: "poem"|"bandh"|"cell"|"gap", key?: "A2:3" }
+  // Returns { values, source, profileName, profileMissing, usedCache }.
+  function resolveSettings(args) {
+    args = args || {};
+    var payload = args.payload || null;
+    var store = args.profileStore || {};
+    var scope = args.scope || { level: "poem" };
+    var values = defaultSettings();
+    var source = {};
+    Object.keys(values).forEach(function (k) { source[k] = "default"; });
+
+    var profileName = (payload && typeof payload.profile === "string") ? payload.profile : "";
+    var prof = profileName ? store[profileName] : null;
+    var profileMissing = !!(profileName && !prof);
+    var usedCache = false;
+    var layer = null;
+    var defs = defaultSettings();
+    if (prof) layer = settingsFromProfile(prof);
+    else if (profileMissing && payload && isObj(payload.profileCache)) { layer = payload.profileCache; usedCache = true; }
+    if (layer) {
+      Object.keys(layer).forEach(function (k) {
+        if (k in values && layer[k] !== defs[k]) { values[k] = layer[k]; source[k] = "profile"; }
+      });
+    }
+
+    var local = (payload && isObj(payload.local)) ? payload.local : {};
+    Object.keys(local).forEach(function (k) {
+      if (k in values) { values[k] = local[k]; source[k] = "local"; }
+    });
+
+    if (scope.level === "bandh" || scope.level === "cell") {
+      if (payload && typeof payload.widthPt === "number" && payload.widthPt > 0) {
+        values.misraWidthPt = payload.widthPt; source.misraWidthPt = "bandh";
+      }
+    }
+    if (scope.level === "cell" && scope.key && payload && isObj(payload.overrides) && isObj(payload.overrides[scope.key])) {
+      var ov = payload.overrides[scope.key];
+      if (ov.strength != null) { values.strength = ov.strength; source.strength = "cell"; }
+      if (ov.widthPt != null) { values.misraWidthPt = ov.widthPt; source.misraWidthPt = "cell"; }
+      if (ov.capEm != null) { values.capEm = ov.capEm; source.capEm = "cell"; }
+    }
+
+    return { values: values, source: source, profileName: profileName, profileMissing: profileMissing, usedCache: usedCache };
+  }
+
   return {
     defaultProfile: defaultProfile,
     normalizeProfile: normalizeProfile,
@@ -129,5 +231,9 @@
     strengthToTargetFill: strengthToTargetFill,
     normalizeStrength: normalizeStrength,
     normalizeFillMode: normalizeFillMode,
+    defaultSettings: defaultSettings,
+    settingsFromProfile: settingsFromProfile,
+    profileFromSettings: profileFromSettings,
+    resolveSettings: resolveSettings,
   };
 }));

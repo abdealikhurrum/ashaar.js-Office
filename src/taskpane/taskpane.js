@@ -794,7 +794,7 @@
   // so it matches how the block was/will be rendered. Returns everything both the
   // rebuild and justify passes need.
   async function captureQaseedaTables(context, blocks, profile) {
-    var fallbackName = profile.font || "Times New Roman";
+    var fallbackName = "Times New Roman";
 
     var section = context.document.sections.getFirst();
     section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
