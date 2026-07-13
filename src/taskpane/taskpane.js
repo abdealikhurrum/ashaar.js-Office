@@ -519,17 +519,26 @@
   // re-inserts the control (fresh id), while both consumers already resolve
   // blocks by tag. A consumer applies a clear ONLY when its block's identity
   // matches; retry-after-failure retention still works because the retried
-  // Apply writes the same payload → same identity.
+  // Apply writes the same payload → same identity. Accepted limitation:
+  // retained clears silently no-op if the user's follow-up after a failed
+  // render mutates a non-runFonts tag field first (Assign writes profile;
+  // poem-scope Apply writes local/profileCache) — identity differs, the
+  // clear is skipped, and the stale color persists until manually
+  // re-cleared. Safe direction (skip, not corruption).
   var _pendingColorClears = { blockId: "", keys: {} };
 
-  // §4 (fix round 2): the _activeOvKey the decor inputs were last seeded for.
-  // Word fires DocumentSelectionChanged constantly (see the pendingProfile
-  // note in _panel) — an unconditional reseed on every reflection would wipe
-  // the user's checked-but-not-yet-Applied fill/color state mid-edit. Reseed
-  // only when the active cell actually CHANGES (null→key, key→key, key→null
-  // all update the tracker, so returning to a cell reseeds); the Apply
+  // §4 (fix rounds 2+3): the composite "block tag|override key" the decor
+  // inputs were last seeded for. Word fires DocumentSelectionChanged
+  // constantly (see the pendingProfile note in _panel) — an unconditional
+  // reseed on every reflection would wipe the user's checked-but-not-yet-
+  // Applied fill/color state mid-edit. But the override key ALONE can't be
+  // the tracker: "0:A1" exists in every poem, so clicking poem A's 0:A1 then
+  // poem B's 0:A1 would skip the reseed and leak A's decor into an Apply on
+  // B. The composite includes cc.tag, so a block change (or any tag rewrite
+  // — changed tag can mean changed overrides) reseeds, while a spurious
+  // same-cell reflection carries an unchanged tag and is skipped. The Apply
   // success tail nulls the tracker to force a reseed from the fresh tag.
-  var _lastSeededOvKey = null;
+  var _lastSeededDecorKey = null;
 
   // ── Unified settings panel state ──────────────────────────────────────────
   var _panel = {
@@ -638,11 +647,16 @@
         var isBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
         var payload = isBlock ? AshaarWord.parseContentControlTag(cc.tag) : null;
         await reflectActiveCell(context, sel, cc, isBlock, payload);
-        // Guarded reseed: only when the active cell CHANGED since the last
-        // seed — spurious same-cell reflections must not wipe mid-edit state.
-        if (_activeOvKey !== _lastSeededOvKey) {
+        // Guarded reseed: only when the composite (block tag + cell key)
+        // CHANGED since the last seed — spurious same-cell reflections carry
+        // an unchanged tag and must not wipe mid-edit state, while the same
+        // OVERRIDE KEY in a different poem (keys repeat across poems) or a
+        // rewritten tag on the same cell MUST reseed. Never read cc.tag
+        // unless isBlock (null-object proxy throws — same rule as below).
+        var seedKey = (isBlock ? cc.tag : "") + "|" + _activeOvKey;
+        if (seedKey !== _lastSeededDecorKey) {
           if (_activeOvKey) seedCellDecorInputs(payload);
-          _lastSeededOvKey = _activeOvKey;
+          _lastSeededDecorKey = seedKey;
         }
         _panel.target = isBlock
           ? { kind: "block", cc: cc, payload: payload, tag: cc.tag,
@@ -668,7 +682,7 @@
   // system (same as the gap-decor inputs), so they are raw shared DOM state —
   // never re-rendered by renderPanel. Seed all four from the ACTIVE cell's
   // persisted override whenever the active cell CHANGES (guard in
-  // reflectActiveContext via _lastSeededOvKey); otherwise a checked box left
+  // reflectActiveContext via _lastSeededDecorKey); otherwise a checked box left
   // over from cell A would leak A's colors into an Apply on cell B, and an
   // unchecked box would silently DELETE B's persisted fill/color
   // (setTagOverride replaces the whole per-key override object). Called only
@@ -3669,7 +3683,7 @@
       // retry).
       _panel.pending = { set: {}, clear: [] };
       _pendingColorClears = { blockId: "", keys: {} };  // one-shot: consumed above
-      _lastSeededOvKey = null;  // force the decor inputs to reseed from the fresh tag
+      _lastSeededDecorKey = null;  // force the decor inputs to reseed from the fresh tag
       _lastBlockTag = null;   // force reflection to re-read the updated tag
       await reflectActiveContext();
       if (run) run.phase("reflect");
