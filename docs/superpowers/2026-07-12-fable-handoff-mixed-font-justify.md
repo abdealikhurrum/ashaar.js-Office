@@ -40,6 +40,18 @@ Jameel fills by swapping individual **fasls** (sub-word segments) from the base 
 
 So the base-face normalization added this session **doesn't fire** because the font name it's handed is `""`, not a Kasheeda name. `baseFaceOf("")` can't recover "Jameel".
 
+> **PROBE RESULT (2026-07-12, live Word, debug dump):** the ascii assumption is **false**.
+> With `ascii=hAnsi=base` on every run (fix A implemented + verified stored via `getOoxml`),
+> `Font.name` still tracked the **cs** face per word: unswapped word → base name, fully-swapped
+> word → Kasheeda name, partially-swapped word → `""`. So Office.js `Font.name` reads the
+> COMPLEX-SCRIPT font for Arabic runs, and `""` when cs is mixed within the range. Fix (A) is
+> dead — mixed cs within a word IS the swap mechanism. Also observed: the CELL-level read
+> resolves through the paragraph-mark theme run to the theme default (**"Aptos"**), which
+> inflated `natPx` → target 6642→8674tw → destructive rebuild pinned to Aptos (the shattering).
+> **Fix (B) implemented instead:** per-word fonts persisted in the tag (`payload.runFonts`,
+> `packRunWords`/`reconcileRunWords`/`setTagRunFonts` in word-html.js), healed on capture, and
+> `natPx`/`qMatrix`/`repFont` recomputed from the reconciled runs in both passes.
+
 ### Candidate fixes (for evaluation — pick after confirming in Word)
 
 - **(A) Make `font.name` read back a single family.** In the font-swap emit, set `w:ascii`/`w:hAnsi` to the **base** face for *every* fasl (both base and Kasheeda runs), and only `w:cs` to the actual (base/Kasheeda) face. Arabic renders via `cs` (the run is `w:rtl`), so Kasheeda still shows; but `Font.name` (=ascii) reads back **base uniformly** → cell + every word report "Jameel Noori Nastaleeq" → measurements normalize → idempotent. Requires `misraRunsXml` to accept a separate `asciiName` per run. **Depends on the assumption `Font.name == ascii for rtl runs` — verify.**

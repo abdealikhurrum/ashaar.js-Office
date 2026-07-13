@@ -15,7 +15,7 @@
 - Pure logic node-tested; Office.js glue in `taskpane.js` is manual-verify (Task 6).
 - Reuse existing helpers (`capMicroSpaces`, `selectSwapRuns`, `justifyRuns`, per-cell `cellDesc`/`cellMech`, the hybrid residual code).
 - `φ = (clamp(s,1,10) − 1) / 9`. Fill target = the column edge (`colPx`).
-- All 0–24 strength consumers move to a **1–10** domain; stored profiles remap `round(1 + old/24·9)` clamped to [1,10].
+- All 0–24 strength consumers move to a **1–10** domain; stored profile strengths are just clamped to [1,10] on load (profiles are not yet in real use, so no proportional legacy remap).
 - `npm test` green after every task.
 
 ---
@@ -125,24 +125,18 @@ git commit -m "feat(strength): rescale css/insert strength helpers to 1-10 domai
 
 **Interfaces:**
 - `strengthToTargetFill(s)` domain → 1–10 (kept for any non-engine caller; the engine path uses φ, Task 4/5).
-- Produces `AshaarProfiles.normalizeStrength(s) → int in [1,10]`: pass-through for 1–10; remap a legacy 0–24 value via `round(1 + s/24·9)`. Applied when a stored profile is loaded.
+- Produces `AshaarProfiles.normalizeStrength(s) → int in [1,10]`: a plain clamp to [1,10] that sanitises whatever a profile carries. (Profiles are not yet in real use, so **no** proportional legacy 0–24 remap — out-of-range values just clamp.)
 
 - [ ] **Step 1: Failing test** (append to `tests/profiles.test.js`):
 ```js
 // strength domain is now 1–10
 assert.ok(Math.abs(AshaarProfiles.strengthToTargetFill(1) - 0.90) < 1e-9);
 assert.ok(Math.abs(AshaarProfiles.strengthToTargetFill(10) - 1.0) < 1e-9);
-// legacy 0–24 values remap into 1–10
-assert.strictEqual(AshaarProfiles.normalizeStrength(6), 6);   // already in-range → unchanged
-assert.strictEqual(AshaarProfiles.normalizeStrength(0), 1);
-assert.strictEqual(AshaarProfiles.normalizeStrength(24), 10);
-assert.strictEqual(AshaarProfiles.normalizeStrength(12), 6);  // round(1+12/24*9)=round(5.5)=6
-```
-Wait — `normalizeStrength(6)` is ambiguous (valid in both ranges). Decision: values `≤10` are treated as already-1–10 (no remap); only `>10` are remapped from the legacy 0–24 scale. Encode that:
-```js
-assert.strictEqual(AshaarProfiles.normalizeStrength(6), 6);    // ≤10 → unchanged
-assert.strictEqual(AshaarProfiles.normalizeStrength(24), 10);  // >10 → legacy remap
-assert.strictEqual(AshaarProfiles.normalizeStrength(18), 8);   // round(1+18/24*9)=round(7.75)=8
+// normalizeStrength is a plain clamp to [1,10] (no legacy remap)
+assert.strictEqual(AshaarProfiles.normalizeStrength(6), 6);   // in-range → unchanged
+assert.strictEqual(AshaarProfiles.normalizeStrength(0), 1);   // clamps low
+assert.strictEqual(AshaarProfiles.normalizeStrength(24), 10); // clamps high
+assert.strictEqual(AshaarProfiles.normalizeStrength(undefined), 1);
 ```
 - [ ] **Step 2: Run to verify it fails** — `node tests/profiles.test.js`; Expected: FAIL.
 - [ ] **Step 3: Implement** (edit `strengthToTargetFill`; add `normalizeStrength` + export):
@@ -151,19 +145,18 @@ function strengthToTargetFill(strength) {
   var s = Math.max(1, Math.min(10, Number(strength) || 1));
   return 0.90 + ((s - 1) / 9) * 0.10;
 }
-// Legacy 0–24 strengths (values >10) remap into the 1–10 scale; 1–10 pass through.
+// Sanitise a profile's stored strength to the 1–10 domain. Profiles are not yet
+// in real use, so this is a plain clamp — no proportional legacy 0–24 remap.
 function normalizeStrength(strength) {
-  var s = Number(strength) || 1;
-  if (s > 10) s = Math.round(1 + (s / 24) * 9);
-  return Math.max(1, Math.min(10, s));
+  return Math.max(1, Math.min(10, Number(strength) || 1));
 }
 ```
-- [ ] **Step 4: Apply the remap on profile load** — wherever a profile's `justify.strength` is read into the panel/opts (`profileToPanel` / `getProfile` consumers, `taskpane.js`), pass it through `AshaarProfiles.normalizeStrength(...)`. Add a one-line coercion at the read site so stored profiles surface a 1–10 value. (Manual-verify in Task 6.)
+- [ ] **Step 4: Apply the clamp on profile load** — wherever a profile's `justify.strength` is read into the panel/opts (`profileToPanel` / `getProfile` consumers, `taskpane.js`), pass it through `AshaarProfiles.normalizeStrength(...)`. Add a one-line coercion at the read site so stored profiles surface a valid 1–10 value. (Manual-verify in Task 6.)
 - [ ] **Step 5: Run to verify it passes** — `node tests/profiles.test.js`; Expected: PASS. Then `npm test`; Expected: green.
 - [ ] **Step 6: Commit**
 ```bash
 git add src/taskpane/profiles.js tests/profiles.test.js src/taskpane/taskpane.js
-git commit -m "feat(strength): profile targetFill 1-10 domain + legacy strength remap"
+git commit -m "feat(strength): profile targetFill 1-10 domain + normalizeStrength clamp"
 ```
 
 ---
@@ -215,7 +208,7 @@ git commit -m "feat(strength): elongation targets natural+phi*gap per cell (poet
 **Files:** Modify `src/taskpane/taskpane.js` (`applyProfileToQaseeda`).
 
 - [ ] **Step 1:** Compute `elongShare = AshaarWord.strengthToElongationShare(profile.justify.strength)` and set the per-cell justify to target `natural + φ·gap` (mirror Task 4), instead of using `strengthToTargetFill` as the fill lever. Keep `targetFill = 1.0` (edge) for the residual. Route the profile's cells through the same φ-target logic as the free-form path (extract a shared helper if it reduces duplication).
-- [ ] **Step 2:** Read `profile.justify.strength` through `AshaarProfiles.normalizeStrength(...)` so legacy profiles behave.
+- [ ] **Step 2:** Read `profile.justify.strength` through `AshaarProfiles.normalizeStrength(...)` (a plain [1,10] clamp) so any out-of-range stored value behaves.
 - [ ] **Step 3: Syntax + suite** — `node --check`; `npm test`; green.
 - [ ] **Step 4: Commit**
 ```bash
@@ -240,3 +233,4 @@ git commit -m "feat(strength): qaseeda profile path uses phi elongation share"
 - Spec coverage: §1 φ helper → T1; §2 sliders → T1; §3 φ-target → T4; §4 fixed targetFill → T4 Step 2; §5 helper rescales → T2; §6 profiles → T3/T5; §7 wording → out of build (noted). Testing § → T1–T3 node, T6 manual.
 - Type consistency: `strengthToElongationShare`, `normalizeStrength`, `sliderToFill`, `strengthToKashidaLevel`, `kashidaExpansionFraction` signatures unchanged across tasks; φ formula identical in T1/T4/T5.
 - Open (plan-decided): slider default **7**; `sliderToFill` rescaled (not folded) to keep the insert path working — insert-path fill-vs-φ unification is a noted future cleanup, not in scope.
+- Simplified (profiles not yet in real use): `normalizeStrength` is a plain [1,10] clamp, not a proportional legacy 0–24 remap. This removes the old draft's `normalizeStrength(12)` rounding ambiguity; Task 3/5 still keep `strengthToTargetFill` on the 1–10 domain so new profiles behave.
