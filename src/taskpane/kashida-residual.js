@@ -50,5 +50,51 @@
     return out;
   }
 
-  return { HAIR_SPACE: HAIR_SPACE, capMicroSpaces: capMicroSpaces, injectSpaceRuns: injectSpaceRuns };
+  // 96 px/inch vs 1440 twips/inch → 1px = 15 twips.
+  var PX_TO_TWIPS = 15;
+
+  // Close `residualPx` with per-gap CHARACTER SPACING (rPr w:spacing twips on a
+  // dedicated single-space run per word gap) instead of injected glyphs. Gaps
+  // come out pixel-exact and even (±1 twip), and the text round-trips as the
+  // clean source — nothing to strip on re-capture. Same typographic cap as
+  // capMicroSpaces: at most capEm*sizePx per gap; accept-short beyond it.
+  // Splits each run's text at spaces (word runs + space runs, style props
+  // copied); pre-existing standalone " " runs count as gaps too. When nothing
+  // applies (no positive residual / no gaps) returns flat copies unsplit.
+  // Returns { runs, appliedPx, gaps }.
+  function spreadResidualSpacing(runs, residualPx, sizePx, capEm) {
+    if (capEm == null) capEm = 0.28;
+    function copyRun(r, text) {
+      var c = {}; for (var k in r) { if (r.hasOwnProperty(k)) c[k] = r[k]; }
+      if (text != null) c.text = text;
+      return c;
+    }
+    var flat = (runs || []).map(function (r) { return copyRun(r); });
+    var gaps = flat.reduce(function (a, r) {
+      return a + (String(r.text || "").split(" ").length - 1);
+    }, 0);
+    if (!(residualPx > 0) || !(gaps > 0)) return { runs: flat, appliedPx: 0, gaps: gaps };
+
+    var perGapPx = Math.min(residualPx / gaps, (Number(capEm) || 0) * (Number(sizePx) || 0));
+    var totalTwips = Math.max(0, Math.round(perGapPx * gaps * PX_TO_TWIPS));
+    var base = Math.floor(totalTwips / gaps), rem = totalTwips % gaps;
+
+    var out = [], gi = 0;
+    (runs || []).forEach(function (r) {
+      var parts = String(r.text || "").split(" ");
+      parts.forEach(function (word, pi) {
+        if (pi > 0) {
+          var sp = copyRun(r, " ");
+          var tw = base + (gi < rem ? 1 : 0);
+          if (tw > 0) sp.spacingTwips = tw;
+          gi++;
+          out.push(sp);
+        }
+        if (word) out.push(copyRun(r, word));
+      });
+    });
+    return { runs: out, appliedPx: totalTwips / PX_TO_TWIPS, gaps: gaps };
+  }
+
+  return { HAIR_SPACE: HAIR_SPACE, capMicroSpaces: capMicroSpaces, injectSpaceRuns: injectSpaceRuns, spreadResidualSpacing: spreadResidualSpacing };
 }));

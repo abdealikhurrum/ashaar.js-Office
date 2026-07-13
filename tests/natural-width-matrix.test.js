@@ -174,4 +174,21 @@ console.log("uniformSlotPx OK");
 });
 console.log("no-wrap invariant OK");
 
+// ── adaptiveSharedTarget: largest feasible shared T, descending scan ─────────
+{
+  // Feasibility with a hole (discrete kashida steps are not bisectable):
+  // feasible at ≤120 and at 130, infeasible between → must find 130, not 120.
+  const holey = (T) => T <= 120 || T === 130;
+  assert.strictEqual(AshaarMatrix.adaptiveSharedTarget(151, 100, holey), 130, "finds isolated feasible T");
+  // Everything feasible → the box.
+  assert.strictEqual(AshaarMatrix.adaptiveSharedTarget(151, 100, () => true), 151);
+  // Nothing above lo feasible → lo (lines sit at the longest natural).
+  assert.strictEqual(AshaarMatrix.adaptiveSharedTarget(151, 128, () => false), 128);
+  // Fractional bounds: scan integers within [ceil(lo), floor(hi)].
+  assert.strictEqual(AshaarMatrix.adaptiveSharedTarget(150.9, 100.2, (T) => T <= 140), 140);
+  // Inverted/empty range degrades to lo.
+  assert.strictEqual(AshaarMatrix.adaptiveSharedTarget(100, 120, () => true), 120);
+}
+console.log("adaptiveSharedTarget OK");
+
 console.log("natural-width-matrix.test.js OK");

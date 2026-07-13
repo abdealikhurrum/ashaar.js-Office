@@ -737,7 +737,154 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   // paragraph indent (stacked-layout ajuz offset)
   assert.match(AshaarWord.misraRunsXml([{ text: "y", csName: "A" }], "right", 16, { indentTwips: 240 }), /<w:ind w:left="240"\/>/, "paragraph indent emitted");
   assert.ok(AshaarWord.misraRunsXml([{ text: "y", csName: "A" }], "right", 16).indexOf("w:ind") === -1, "no indent when unset");
+  // Residual gap spacing: a space run carrying spacingTwips emits rPr
+  // <w:spacing w:val> (character spacing — pixel-exact even gaps, no injected
+  // glyphs); shdFill tints the run for the debug view (w:shd accepts hex,
+  // unlike w:highlight's named enum).
+  const spaced = AshaarWord.misraRunsXml(
+    [{ text: "اب", csName: "A" }, { text: " ", csName: "A", spacingTwips: 23, shdFill: "00FFFF" }, { text: "جد", csName: "A" }],
+    "right", 16
+  );
+  assert.match(spaced, /<w:spacing w:val="23"\/>/, "character spacing twips emitted");
+  assert.match(spaced, /<w:shd w:val="clear" w:fill="00FFFF"\/>/, "debug shading emitted");
+  const unspaced = AshaarWord.misraRunsXml([{ text: "اب جد", csName: "A" }], "right", 16);
+  assert.ok(unspaced.indexOf("<w:spacing w:val=") === -1, "no run spacing when unset");
+  assert.ok(unspaced.indexOf("w:shd") === -1, "no shading when unset");
+  assert.ok(AshaarWord.misraRunsXml([{ text: " ", csName: "A", spacingTwips: 0 }], "right", 16).indexOf("<w:spacing w:val=") === -1,
+    "zero spacing not emitted");
+  // Bold/italic per run — both the Latin and complex-script variants, so the
+  // style survives on rtl runs (Word styles Arabic via bCs/iCs).
+  const biXml = AshaarWord.misraRunsXml([{ text: "x", csName: "A", bold: true, italic: true }], "right", 16);
+  assert.match(biXml, /<w:b\/><w:bCs\/>/, "bold emitted with bCs");
+  assert.match(biXml, /<w:i\/><w:iCs\/>/, "italic emitted with iCs");
+  const plainXml = AshaarWord.misraRunsXml([{ text: "x", csName: "A", bold: false }], "right", 16);
+  assert.ok(plainXml.indexOf("<w:b/>") === -1 && plainXml.indexOf("<w:i/>") === -1, "no b/i when unset");
   console.log("word-html misraRunsXml tests passed");
+}
+
+// ── misraRunsXml: per-run asciiName — uniform Font.name read-back (idempotency)
+// A font-swap word holds runs in BOTH Jameel faces. If ascii differs across the
+// word, Office.js Font.name reads "" and the next apply misclassifies the word
+// as generic (U+0640 shatter) and drifts the target. asciiName pins ascii+hAnsi
+// to the BASE face on every run while cs keeps the actual (base/Kasheeda) face —
+// Arabic renders via cs on rtl runs, so Kasheeda still shows, but Font.name
+// reads back one family for the whole word.
+{
+  const xml = AshaarWord.misraRunsXml(
+    [{ text: "كہہ", csName: "Jameel Noori Nastaleeq Kasheeda", asciiName: "Jameel Noori Nastaleeq" },
+     { text: "تھے", csName: "Jameel Noori Nastaleeq", asciiName: "Jameel Noori Nastaleeq" }],
+    "right", 16
+  );
+  assert.ok(xml.indexOf('w:cs="Jameel Noori Nastaleeq Kasheeda"') !== -1, "cs keeps the swapped (Kasheeda) face");
+  assert.ok(xml.indexOf('w:ascii="Jameel Noori Nastaleeq Kasheeda"') === -1, "ascii never names the Kasheeda face");
+  assert.ok(xml.indexOf('w:hAnsi="Jameel Noori Nastaleeq Kasheeda"') === -1, "hAnsi never names the Kasheeda face");
+  assert.match(xml, /w:ascii="Jameel Noori Nastaleeq" w:hAnsi="Jameel Noori Nastaleeq" w:cs="Jameel Noori Nastaleeq Kasheeda"/,
+    "swapped run: ascii+hAnsi base, cs Kasheeda");
+  // Without asciiName the old behavior holds (ascii = cs) — single-face runs.
+  const plain = AshaarWord.misraRunsXml([{ text: "x", csName: "Amiri" }], "right", 16);
+  assert.match(plain, /w:ascii="Amiri" w:hAnsi="Amiri" w:cs="Amiri"/, "no asciiName -> ascii falls back to cs face");
+  console.log("word-html misraRunsXml asciiName tests passed");
+}
+
+// ── packRunWords / reconcileRunWords / setTagRunFonts: per-word fonts in the tag
+// Office.js Font.name reads the CS face for Arabic runs and "" when a word's
+// fasls carry mixed cs (base+Kasheeda) — proven in Word 2026-07-12. So the
+// document read is structurally lossy for font-swap; the content-control tag is
+// the source of truth. pack → store on apply; reconcile → heal "" reads on the
+// next capture (a clean read wins — the user may have re-fonted a word by hand).
+{
+  const J = "Jameel Noori Nastaleeq", JK = "Jameel Noori Nastaleeq Kasheeda";
+  const words = [
+    { text: "على", name: J, size: 16 }, { text: "قدر", name: J, size: 16 },
+    { text: "أهل", name: "Amiri", size: 16 }, { text: "العزم", name: "Amiri", size: 16 }
+  ];
+  assert.deepStrictEqual(AshaarWord.packRunWords(words),
+    [[2, J, 16], [2, "Amiri", 16]], "consecutive same name+size words pack with counts");
+  assert.deepStrictEqual(AshaarWord.packRunWords([]), [], "empty words pack empty");
+
+  // reconcile: "" (mixed-cs read) heals from the tag; clean reads win over the tag.
+  const packed = [[4, J, 16]];
+  const read = [
+    { text: "على", raw: J, name: J, size: 16 },            // unswapped — clean base read
+    { text: "قدر", raw: "", name: "Aptos", size: 16 },      // partially swapped — mixed cs
+    { text: "أهل", raw: JK, name: JK, size: 16 },           // fully swapped — clean Kasheeda read
+    { text: "العزم", raw: "Amiri", name: "Amiri", size: 16 } // user re-fonted by hand — keep
+  ];
+  const rec = AshaarWord.reconcileRunWords(read, packed);
+  assert.strictEqual(rec[0].name, J, "clean base read kept");
+  assert.strictEqual(rec[1].name, J, "mixed-cs ('') read healed from the tag");
+  assert.strictEqual(rec[1].size, 16, "healed word keeps tag size");
+  assert.strictEqual(rec[2].name, JK, "clean Kasheeda read kept (maps to family later)");
+  assert.strictEqual(rec[3].name, "Amiri", "user's manual re-font wins over the tag");
+
+  // Validation: word-count mismatch (user edited text) or missing pack → null.
+  assert.strictEqual(AshaarWord.reconcileRunWords(read, [[3, J, 16]]), null, "count mismatch -> null");
+  assert.strictEqual(AshaarWord.reconcileRunWords(read, null), null, "no pack -> null");
+  assert.strictEqual(AshaarWord.reconcileRunWords(read, []), null, "empty pack -> null");
+
+  // ── Style persistence: bold/italic/color ride the pack too ────────────────
+  // Pack: style splits a group; entries stay 3-tuples when styleless, else
+  // append flags (bold=1|italic=2) and, when set, the color.
+  const styled = [
+    { text: "على", name: J, size: 16 },
+    { text: "قدر", name: J, size: 16, bold: true },
+    { text: "أهل", name: J, size: 16, bold: true },
+    { text: "العزم", name: J, size: 16, italic: true, color: "A7352A" }
+  ];
+  assert.deepStrictEqual(AshaarWord.packRunWords(styled),
+    [[1, J, 16], [2, J, 16, 1], [1, J, 16, 2, "A7352A"]],
+    "style splits groups; flags/color appended only when present");
+
+  // Per-field healing: each field heals from the tag ONLY when its document
+  // read is ambiguous (Office.js returns null for mixed formatting in a range).
+  const stylePack = [[1, J, 16, 1], [1, J, 16, 1], [1, J, 16, 0, "A7352A"], [1, J, 16]];
+  const styleRead = [
+    // mixed bold (user bolded half the word) → bold heals from tag, name kept
+    { text: "على", raw: J, name: J, rawSize: 16, size: 16, bold: null, italic: false, rawColor: "", color: undefined },
+    // clean unbold (user unbolded the WHOLE word) → doc wins over tag's bold
+    { text: "قدر", raw: J, name: J, rawSize: 16, size: 16, bold: false, italic: false, rawColor: "", color: undefined },
+    // mixed color read (null) → color heals from tag
+    { text: "أهل", raw: J, name: J, rawSize: 16, size: 16, bold: false, italic: false, rawColor: null, color: undefined },
+    // mixed size read (null) on a clean-name word → size heals from tag
+    { text: "العزم", raw: J, name: J, rawSize: null, size: 0, bold: false, italic: false, rawColor: "", color: undefined }
+  ];
+  const srec = AshaarWord.reconcileRunWords(styleRead, stylePack);
+  assert.strictEqual(srec[0].bold, true, "mixed-bold read healed from tag");
+  assert.strictEqual(srec[1].bold, false, "clean whole-word unbold wins over tag");
+  assert.strictEqual(srec[2].color, "A7352A", "mixed-color read healed from tag");
+  assert.strictEqual(srec[2].bold, false, "styleless tag flag heals to not-bold");
+  assert.strictEqual(srec[3].size, 16, "unreadable size healed from tag");
+  assert.strictEqual(srec[0].name, J, "per-field heal never clobbers a clean name");
+  // Explicit no-color read (rawColor "") is a real state, not ambiguity.
+  assert.strictEqual(srec[1].color, undefined, "cleared color sticks (no heal)");
+  // Legacy 3-tuple packs (pre-style tags) still heal name+size; style defaults off.
+  const lrec = AshaarWord.reconcileRunWords(
+    [{ text: "على", raw: "", name: "Aptos", size: 16, bold: null }], [[1, J, 16]]);
+  assert.strictEqual(lrec[0].name, J, "legacy pack heals mixed name");
+  assert.strictEqual(lrec[0].bold, false, "legacy pack: ambiguous bold defaults off");
+
+  // Tag round-trip.
+  const tag0 = "ashaar:" + encodeURIComponent(JSON.stringify({ qaseeda: "q1" }));
+  const tag1 = AshaarWord.setTagRunFonts(tag0, { "0:0": [[2, J, 16]] });
+  const payload = AshaarWord.parseContentControlTag(tag1);
+  assert.deepStrictEqual(payload.runFonts, { "0:0": [[2, J, 16]] }, "runFonts survive the tag round-trip");
+  assert.strictEqual(payload.qaseeda, "q1", "other payload fields preserved");
+  assert.strictEqual(AshaarWord.parseContentControlTag(tag0).runFonts, null, "absent runFonts normalize to null");
+  assert.strictEqual(AshaarWord.setTagRunFonts("not-ashaar", {}), "not-ashaar", "non-ashaar tag unchanged");
+  console.log("word-html runFonts tag persistence tests passed");
+}
+
+// ── setTagBandhWidth: bandh-level misra width on the block tag ────────────────
+{
+  const tag0 = "ashaar:" + encodeURIComponent(JSON.stringify({ qaseeda: "q1" }));
+  const tag1 = AshaarWord.setTagBandhWidth(tag0, 120);
+  assert.strictEqual(AshaarWord.parseContentControlTag(tag1).widthPt, 120, "bandh width stored");
+  assert.strictEqual(AshaarWord.parseContentControlTag(tag1).qaseeda, "q1", "other fields preserved");
+  const tag2 = AshaarWord.setTagBandhWidth(tag1, null);
+  assert.strictEqual(AshaarWord.parseContentControlTag(tag2).widthPt, null, "null clears the width");
+  assert.strictEqual(AshaarWord.parseContentControlTag(tag0).widthPt, null, "absent widthPt normalizes to null");
+  assert.strictEqual(AshaarWord.setTagBandhWidth("not-ashaar", 100), "not-ashaar", "non-ashaar tag unchanged");
+  console.log("word-html setTagBandhWidth tests passed");
 }
 
 // ── coalesceRuns: split on color as well as font/size/style ──────────────────

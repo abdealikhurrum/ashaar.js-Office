@@ -18,8 +18,10 @@
   }
 
   // Merge a cell override onto the block's base justify settings. Absent fields
-  // inherit. fillMode always comes from base. widthPt/capEm are null when unset
-  // (the caller then uses the matrix target / the 0.28em default).
+  // inherit. fillMode always comes from base. widthPt inherits base.widthPt
+  // (the bandh- or qaseeda-level misra width) when the cell doesn't set one;
+  // null when unset everywhere (the caller then uses the matrix target).
+  // capEm is null when unset (the caller applies its own default).
   function resolveCellOverride(base, override) {
     base = base || {};
     override = override || {};
@@ -27,7 +29,8 @@
     return {
       strength: s,
       fillMode: base.fillMode,
-      widthPt: (override.widthPt != null) ? override.widthPt : null,
+      widthPt: (override.widthPt != null) ? override.widthPt
+        : (base.widthPt != null) ? base.widthPt : null,
       capEm: (override.capEm != null) ? override.capEm : null
     };
   }

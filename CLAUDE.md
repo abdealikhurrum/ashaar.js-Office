@@ -48,7 +48,7 @@ npm run update:ashaar
 - Live preview in taskpane via Ashaar.js native HTML rendering
 
 **Word Interaction Layer**
-- `src/taskpane/word-html.js` — `AshaarWord` class: converts parsed poetry into HTML tables inserted via `Word.run()`. Core function is `insertNativeLayoutTables()` which creates Word tables with content control tags.
+- `src/taskpane/word-html.js` — `AshaarWord` class: helpers that build the OOXML/HTML table structures for parsed poetry. The orchestrating `insertNativeLayoutTables()` lives in `taskpane.js`, which calls these helpers and inserts the tables via `Word.run()` with content control tags.
 - `src/taskpane/word-tabstop.js` — `AshaarTabStop` class: generates OOXML paragraphs with tab stops as an alternative to tables. `poemToOoxml()` builds OOXML XML strings from parsed poem structure.
 
 **Vendor Layer** (`src/vendor/`)
@@ -113,9 +113,12 @@ Click inside an Ashaar Poem content control → "Justify Selected Text"
 All library files (`word-html.js`, `word-tabstop.js`) use UMD (Universal Module Definition) for compatibility with both Node.js (tests) and the browser (Word WebView):
 ```js
 (function (root, factory) {
-  if (typeof module !== 'undefined') module.exports = factory();
-  else root.AshaarWord = factory();
-}(this, function () { ... }));
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = factory(require("../vendor/ashaar-justify"));
+  } else {
+    root.AshaarWord = factory(root.AshaarJustify);
+  }
+}(typeof globalThis !== "undefined" ? globalThis : this, function (AshaarJustify) { ... }));
 ```
 
 ### Submodule Workflow

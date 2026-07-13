@@ -58,6 +58,20 @@
     return natural + (Number(phi) || 0) * Math.max(0, (Number(colPx) || 0) - natural);
   }
 
+  // Adaptive-harmony shared fill target: the largest integer T in [lo, hi]
+  // that `feasible(T)` accepts — i.e. every misra can REACH T with its own
+  // kashida plus the capped spacing budget. Kashida gains are discrete (a
+  // Jameel fasl swap is all-or-nothing), so feasibility is NOT monotone in T
+  // and a binary search would skip isolated feasible points; a descending
+  // 1px scan is exact and cheap (range is a cell width, ≤ a few hundred px).
+  // Returns ceil(lo) when nothing above it is feasible (lines then sit at the
+  // longest natural width and spacing does what it can).
+  function adaptiveSharedTarget(hi, lo, feasible) {
+    hi = Math.floor(Number(hi) || 0); lo = Math.ceil(Number(lo) || 0);
+    for (var T = hi; T > lo; T--) { if (feasible(T)) return T; }
+    return lo;
+  }
+
   // Compute the shared per-grid-column width vector (px) for a set of same-shape
   // bandhs plus each bandh's per-position fill target.
   //   auto-fit: each position width = longest natural × (1 + headroom); total capped at pagePx.
@@ -165,6 +179,7 @@
     buildMatrix: buildMatrix,
     naturalFitTarget: naturalFitTarget,
     cellFitBudget: cellFitBudget,
+    adaptiveSharedTarget: adaptiveSharedTarget,
     computeTargetGrid: computeTargetGrid,
     uniformSlotPx: uniformSlotPx,
   };

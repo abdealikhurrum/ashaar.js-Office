@@ -927,6 +927,8 @@
       payload.cells = payload.cells || null;
       payload.overrides = (payload.overrides && typeof payload.overrides === "object") ? payload.overrides : {};
       payload.slotDecor = (payload.slotDecor && typeof payload.slotDecor === "object") ? payload.slotDecor : {};
+      payload.runFonts = (payload.runFonts && typeof payload.runFonts === "object") ? payload.runFonts : null;
+      payload.widthPt = (typeof payload.widthPt === "number" && payload.widthPt > 0) ? payload.widthPt : null;
       return payload;
     } catch (e) {
       return null;
@@ -977,6 +979,97 @@
     }
     if (clean.symbol || clean.fill || clean.color) sd[key] = clean; else delete sd[key];
     payload.slotDecor = sd;
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // ── Per-word font persistence (content-control tag) ──────────────────────
+  // Office.js Font.name reads the COMPLEX-SCRIPT face for Arabic runs and ""
+  // when a word's runs carry mixed cs faces — which is exactly what the Jameel
+  // font-swap mechanism produces (some fasls base, some Kasheeda). Re-reading
+  // fonts from a justified cell is therefore structurally lossy. The tag holds
+  // the authoritative per-word fonts: packRunWords stores them at apply time,
+  // reconcileRunWords heals ambiguous ("") reads on the next capture.
+
+  // Compact per-cell encoding: consecutive same-styled words collapse to
+  // [wordCount, name, sizePt] — with flags (bold=1|italic=2) appended when any
+  // style is set, and the hex color after that when present. Word-aligned,
+  // order = document order. Styleless entries stay 3-tuples, so pre-style tags
+  // and new tags share one format.
+  function packRunWords(words) {
+    var out = [];
+    (words || []).forEach(function (w) {
+      var flags = (w.bold ? 1 : 0) | (w.italic ? 2 : 0);
+      var color = w.color || 0;
+      var prev = out[out.length - 1];
+      if (prev && prev[1] === w.name && prev[2] === w.size &&
+          (prev[3] || 0) === flags && (prev[4] || 0) === color) prev[0]++;
+      else {
+        var e = [1, w.name, w.size];
+        if (flags || color) { e.push(flags); if (color) e.push(color); }
+        out.push(e);
+      }
+    });
+    return out;
+  }
+
+  // Merge a cell's captured words with its tag entry, PER FIELD: each field
+  // heals from the tag only when its document read is ambiguous (Office.js
+  // returns null for any property that is mixed within the range):
+  //   name  — raw ""/null (mixed cs faces, e.g. a partially-swapped word);
+  //           a real raw name wins (user re-font, or a fully-swapped word
+  //           cleanly reading the Kasheeda face — same family).
+  //   size  — rawSize null/0 (mixed sizes within the word).
+  //   bold/italic — null read (word partially bolded / italicised).
+  //   color — rawColor null (mixed); rawColor "" means EXPLICITLY uncolored —
+  //           a real state (user cleared it), never healed.
+  // Whole-word user changes therefore stick; sub-word ambiguity heals to the
+  // last locked state instead of silently coercing to defaults. Returns a NEW
+  // words array (bold/italic coerced to booleans), or null when the pack is
+  // absent or its word count no longer matches (text was edited — the tag
+  // entry is stale, caller keeps the document reads).
+  function reconcileRunWords(words, packed) {
+    if (!packed || !packed.length || !words || !words.length) return null;
+    var total = packed.reduce(function (a, p) { return a + (p[0] || 0); }, 0);
+    if (total !== words.length) return null;
+    var perWord = [];
+    packed.forEach(function (p) {
+      for (var k = 0; k < p[0]; k++) {
+        perWord.push({ name: p[1], size: p[2], flags: p[3] || 0, color: p[4] || undefined });
+      }
+    });
+    return words.map(function (w, i) {
+      var t = perWord[i];
+      var out = {};
+      for (var key in w) if (w.hasOwnProperty(key)) out[key] = w[key];
+      if (!w.raw) out.name = t.name || w.name;
+      if (!(w.rawSize > 0) && t.size) out.size = t.size;
+      if (w.bold == null) out.bold = !!(t.flags & 1);
+      if (w.italic == null) out.italic = !!(t.flags & 2);
+      if (w.rawColor === null && t.color) out.color = t.color;
+      out.bold = !!out.bold;
+      out.italic = !!out.italic;
+      return out;
+    });
+  }
+
+  // Return a copy of an "ashaar:" tag with the BANDH-level misra width (pt) set
+  // or removed (null/0 deletes). Sits between the qaseeda profile's
+  // justify.widthPt and per-cell overrides: cell > bandh > qaseeda > computed.
+  function setTagBandhWidth(tag, widthPt) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    if (typeof widthPt === "number" && widthPt > 0) payload.widthPt = widthPt;
+    else delete payload.widthPt;
+    return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
+  }
+
+  // Return a copy of an "ashaar:" tag with its per-cell runFonts map replaced
+  // ({"table:cell": packRunWords(...)}). Non-ashaar tags returned unchanged.
+  function setTagRunFonts(tag, runFonts) {
+    var payload = parseContentControlTag(tag);
+    if (!payload) return tag;
+    if (runFonts && typeof runFonts === "object" && Object.keys(runFonts).length) payload.runFonts = runFonts;
+    else delete payload.runFonts;
     return "ashaar:" + encodeURIComponent(JSON.stringify(payload));
   }
 
@@ -1319,12 +1412,31 @@
       // would be the document default (not this run's) and the cell would flatten
       // to one font — breaking idempotency. Naming all three makes the per-word
       // font survive a capture → write → capture round-trip.
+      //
+      // asciiName (when given) decouples the read-back name from the rendered
+      // face: Arabic renders via cs on these rtl runs, but Font.name reads ascii,
+      // and a word whose runs carry DIFFERENT ascii fonts reads back "" (mixed).
+      // A font-swap word (some fasls base, some Kasheeda) must therefore pin
+      // ascii+hAnsi to the BASE face on every run — one family per word — or the
+      // next apply misclassifies it as generic and the round-trip diverges.
+      var asc = r.asciiName || r.csName;
       var cs = r.csName
-        ? '<w:rFonts w:ascii="' + r.csName + '" w:hAnsi="' + r.csName + '" w:cs="' + r.csName + '"/>'
+        ? '<w:rFonts w:ascii="' + asc + '" w:hAnsi="' + asc + '" w:cs="' + r.csName + '"/>'
         : "";
       var col = "";
       if (r.color && /^#?[0-9a-fA-F]{6}$/.test(r.color)) col = '<w:color w:val="' + r.color.replace(/^#/, "") + '"/>';
-      return "<w:r><w:rPr><w:rtl/>" + col + cs + szXml + "</w:rPr>" +
+      // Bold/italic need BOTH variants: Word styles rtl/Arabic runs via the
+      // complex-script bCs/iCs, and b/i keeps any Latin content consistent.
+      var bi = (r.bold ? "<w:b/><w:bCs/>" : "") + (r.italic ? "<w:i/><w:iCs/>" : "");
+      // Residual gap spacing: rPr w:spacing is CHARACTER spacing (twips added
+      // to each glyph's advance) — on a single-space run it widens just that
+      // gap, pixel-exact, with no injected characters to strip on re-capture.
+      var spc = (r.spacingTwips > 0) ? '<w:spacing w:val="' + Math.round(r.spacingTwips) + '"/>' : "";
+      // Debug tint for spacing runs: w:shd takes a hex fill (w:highlight is a
+      // named-enum and can't carry the profile's color-picker value).
+      var shd = (r.shdFill && /^#?[0-9a-fA-F]{6}$/.test(r.shdFill))
+        ? '<w:shd w:val="clear" w:fill="' + r.shdFill.replace(/^#/, "").toUpperCase() + '"/>' : "";
+      return "<w:r><w:rPr><w:rtl/>" + bi + col + spc + shd + cs + szXml + "</w:rPr>" +
         '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
     }).join("");
     var ind = opts.indentTwips ? '<w:ind w:left="' + Math.round(opts.indentTwips) + '"/>' : "";
@@ -1713,6 +1825,10 @@
     setTagQaseeda: setTagQaseeda,
     setTagOverride: setTagOverride,
     setTagSlotDecor: setTagSlotDecor,
+    packRunWords: packRunWords,
+    reconcileRunWords: reconcileRunWords,
+    setTagRunFonts: setTagRunFonts,
+    setTagBandhWidth: setTagBandhWidth,
     justifyPlainTextBlock: justifyPlainTextBlock,
     coalesceRuns: coalesceRuns,
     distributeMicroSpaces: distributeMicroSpaces,

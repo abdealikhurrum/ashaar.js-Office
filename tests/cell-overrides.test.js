@@ -82,4 +82,15 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
   assert.strictEqual(AshaarWord.setTagSlotDecor("nope", "0:A#1", { symbol: "x" }), "nope");
 }
 
+// ── resolveCellOverride: widthPt inherits base (bandh/qaseeda misra width) ───
+{
+  const base = { strength: 6, fillMode: "natural-fit", widthPt: 120 };
+  assert.strictEqual(AshaarOverrides.resolveCellOverride(base, null).widthPt, 120,
+    "no cell override → inherits base widthPt");
+  assert.strictEqual(AshaarOverrides.resolveCellOverride(base, { widthPt: 90 }).widthPt, 90,
+    "cell widthPt wins over base");
+  assert.strictEqual(AshaarOverrides.resolveCellOverride({ strength: 6, fillMode: "natural-fit" }, null).widthPt, null,
+    "unset everywhere → null (computed target)");
+}
+
 console.log("cell-overrides.test.js OK");

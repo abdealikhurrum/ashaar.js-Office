@@ -258,7 +258,14 @@
           <label>Strength <input id="cell-ov-strength" type="number" min="1" max="10" placeholder="inherit"></label>
           <label>Target width (pt) <input id="cell-ov-width" type="number" min="1" placeholder="inherit"></label>
           <label>Cap lift (em) <input id="cell-ov-cap" type="number" min="0" step="0.01" placeholder="0.28"></label>
+          <button id="cell-ov-apply" type="button">Save &amp; Apply</button>
           <button id="cell-ov-clear" type="button" class="button--secondary">Clear cell override</button>
+        </div>
+        <div id="bandh-override" class="cell-override" hidden>
+          <div class="cell-override-head">Bandh (this block)</div>
+          <label>Misra width (pt) <input id="bandh-ov-width" type="number" min="1" placeholder="inherit qaseeda"></label>
+          <button id="bandh-ov-apply" type="button">Save &amp; Apply</button>
+          <button id="bandh-ov-clear" type="button" class="button--secondary">Clear</button>
         </div>
         <div id="slot-decor" class="cell-override" hidden>
           <div class="cell-override-head">Gap <span id="slot-decor-label"></span></div>
@@ -312,7 +319,12 @@
                 <select id="qaseeda-fill-mode">
                   <option value="natural-fit" selected>Natural-fit (harmony)</option>
                   <option value="cell-fit">Cell-fit (precise)</option>
+                  <option value="adaptive">Adaptive (equal reach, small gaps)</option>
                 </select>
+              </div>
+              <div class="field">
+                <label for="qaseeda-misra-width">Misra width (pt)</label>
+                <input id="qaseeda-misra-width" type="number" min="1" placeholder="auto (harmony)">
               </div>
               <div class="field">
                 <label for="qaseeda-corr-font">Per-font width correction</label>

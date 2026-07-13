@@ -21,7 +21,11 @@
     return {
       name: typeof name === "string" ? name : "",
       width: { mode: "auto-fit", pct: 50 },        // "auto-fit" | "fixed"
-      justify: { mode: "kashida", strength: 6, fillMode: "natural-fit" },   // "kashida" | "spacing" | "css" | "none"
+      // mode: "kashida" | "spacing" | "css" | "none". widthPt: explicit misra
+      // fill-target width for every content cell (null = computed harmony /
+      // cell-fit target); overridable per bandh (tag payload.widthPt) and per
+      // cell — precedence cell > bandh > qaseeda > computed.
+      justify: { mode: "kashida", strength: 6, fillMode: "natural-fit", widthPt: null },
       gap: 4,
       misraSymbol: "",
       symbolColor: "",
@@ -106,9 +110,13 @@
 
   // Sanitise a profile's stored fill mode. Cell-fit = fill to the true cell edge
   // (Word distribute residual); Natural-fit = fill to the per-position matrix
-  // width (capped micro-space residual). Anything else defaults to natural-fit.
+  // width (capped micro-space residual); Adaptive = one shared target every
+  // misra can REACH with its own kashida plus at most ~0.25em/gap of spacing —
+  // equal line widths and small gaps, at the cost of stopping short of the cell
+  // edge when the font can't stretch (see the Jameel-harakat ceiling).
+  // Anything else defaults to natural-fit.
   function normalizeFillMode(mode) {
-    return mode === "cell-fit" ? "cell-fit" : "natural-fit";
+    return (mode === "cell-fit" || mode === "adaptive") ? mode : "natural-fit";
   }
 
   return {
