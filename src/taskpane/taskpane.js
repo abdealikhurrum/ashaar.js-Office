@@ -699,6 +699,48 @@
     document.getElementById("sp-cell-color").value = hasColor ? ov.color : "#a7352a";
   }
 
+  // §5: read the cursor cell's native formatting into the pane as pending
+  // values. Never writes. Normalizes Word's no-color/automatic quirks:
+  // shadingColor of "#FFFFFF"/""/null ⇒ no fill; font.color of "" /
+  // "Automatic" / "#000000"-as-auto ⇒ inherit (empty). Uses the same
+  // sel.parentTableCellOrNullObject lookup as reflectActiveCell (line 710)
+  // — the proven pattern for "which table cell is the cursor in" in this
+  // codebase.
+  async function captureCellFormatting() {
+    if (typeof Word === "undefined") { setMessage("Open this task pane inside Word to capture."); return; }
+    try {
+      await Word.run(async function (context) {
+        var sel = context.document.getSelection();
+        var tcell = sel.parentTableCellOrNullObject;
+        tcell.load("shadingColor,body/text");
+        tcell.body.font.load("color");
+        await context.sync();
+        if (tcell.isNullObject) { setMessage("Click inside a table cell first."); return; }
+        var fill = tcell.shadingColor;
+        if (!fill || /^#?F{6}$/i.test(String(fill).replace("#", "")) || String(fill).toLowerCase() === "auto") fill = "";
+        var color = tcell.body.font.color;
+        if (!color || String(color).toLowerCase() === "automatic" || String(color).toLowerCase() === "auto") color = "";
+        var isGap = _panel.scopeLevel === "gap";
+        var fillEl = document.getElementById(isGap ? "sp-gap-fill" : "sp-cell-fill");
+        var fillOn = document.getElementById(isGap ? "sp-gap-fill-on" : "sp-cell-fill-on");
+        var colorEl = document.getElementById(isGap ? "sp-gap-color" : "sp-cell-color");
+        if (fill) { fillEl.value = fill; }
+        fillOn.checked = !!fill;
+        if (color) colorEl.value = color;
+        if (isGap) {
+          var sym = (tcell.body.text || "").trim();
+          document.getElementById("sp-gap-symbol").value = sym;
+        } else {
+          var colorOn = document.getElementById("sp-cell-color-on");
+          colorOn.checked = !!color;
+        }
+        setMessage("Captured — Apply to persist" + (_panel.scopeLevel === "cell" ? " (choose Apply-to target first)." : "."));
+      });
+    } catch (e) {
+      setMessage("Capture failed: " + (e && e.message ? e.message : e));
+    }
+  }
+
   // Detect the content/spacing cell at the cursor. Resolves (tableIndex, label)
   // via the SP1 cells map and sets _activeOvKey/_activeDecorKey/_activeSlot for
   // the settings panel (chip enablement, scope key) — no DOM writes here; the
@@ -4094,6 +4136,10 @@
     document.getElementById("sp-profile-restore").addEventListener("click", restoreProfileFromPoem);
     var gapDefaultBtn = document.getElementById("sp-gap-default");
     if (gapDefaultBtn) gapDefaultBtn.addEventListener("click", saveGapDefaultToProfile);
+    var cellCaptureBtn = document.getElementById("sp-cell-capture");
+    if (cellCaptureBtn) cellCaptureBtn.addEventListener("click", captureCellFormatting);
+    var gapCaptureBtn = document.getElementById("sp-gap-capture");
+    if (gapCaptureBtn) gapCaptureBtn.addEventListener("click", captureCellFormatting);
     document.getElementById("adopt-replace-selection").addEventListener("click", function () { insertPoem(true); });
 
     // Custom fonts: register any stored fonts before measurement, wire the UI.
