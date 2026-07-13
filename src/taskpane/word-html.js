@@ -1364,6 +1364,25 @@
       "</w:tc>";
   }
 
+  // Shared paragraph spacing for every misra paragraph. lineHeightPt (pt) emits
+  // a minimum line box (atLeast) so tall nastaliq ink grows the line instead of
+  // clipping — NEVER lineRule="exact". Also shields against host-doc Normal
+  // styles with exact spacing.
+  function misraSpacingXml(opts) {
+    var pt = opts && Number(opts.lineHeightPt) > 0 ? Number(opts.lineHeightPt) : 0;
+    return pt > 0
+      ? '<w:spacing w:after="80" w:line="' + Math.round(pt * 20) + '" w:lineRule="atLeast"/>'
+      : '<w:spacing w:after="80"/>';
+  }
+
+  // Inter-table separator: keeps adjacent tables from merging (the paragraph is
+  // load-bearing) at a settable height. exact + tiny font ⇒ ~pt tall.
+  function separatorParaXml(pt) {
+    var p = Number(pt) > 0 ? Number(pt) : 1;
+    return '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="' + Math.round(p * 20) +
+      '" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr></w:p>';
+  }
+
   // indTwips: optional right-indent in twips (used by stacked layout to offset ajuz from sadr)
   function misraParaXml(text, align, isRefrain, opts, indTwips) {
     opts = opts || {};
@@ -1401,7 +1420,7 @@
     // empty line after the break is ~2pt high instead of full paragraph height.
     var paraMark = trailingBreak ? "<w:rPr><w:sz w:val=\"4\"/><w:szCs w:val=\"4\"/></w:rPr>" : "";
     return "<w:p>" +
-      "<w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + paraMark + "</w:pPr>" +
+      "<w:pPr><w:bidi/>" + misraSpacingXml(opts) + "<w:jc w:val=\"" + jc + "\"/>" + ind + paraMark + "</w:pPr>" +
       "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(text) + "</w:t></w:r>" +
       trailingBreak +
       "</w:p>";
@@ -1424,7 +1443,7 @@
       var rpr = "<w:rPr><w:rtl/>" + (cs ? '<w:rFonts w:cs="' + cs + '"/>' : "") + szXml + "</w:rPr>";
       return "<w:r>" + rpr + '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
     }).join("");
-    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/></w:pPr>" + body + "</w:p>";
+    return "<w:p><w:pPr><w:bidi/>" + misraSpacingXml(opts) + "<w:jc w:val=\"" + jc + "\"/></w:pPr>" + body + "</w:p>";
   }
 
   // Cell-fit residual is Word Distributed justification: emit the (tatweel'd)
@@ -1432,7 +1451,7 @@
   // inter-word gaps to the true cell edge. Each run keeps its own cs font (+
   // size); NO micro-spaces are injected (that is the Natural-fit residual).
   // runs: [{text, csName, sizePt?}].
-  function misraDistributeXml(runs, sizePtFallback) {
+  function misraDistributeXml(runs, sizePtFallback, opts) {
     var body = (runs || []).map(function (r) {
       var sz = r.sizePt || sizePtFallback;
       var szXml = sz ? '<w:sz w:val="' + Math.round(sz * 2) + '"/><w:szCs w:val="' + Math.round(sz * 2) + '"/>' : "";
@@ -1440,7 +1459,7 @@
       return "<w:r><w:rPr><w:rtl/>" + cs + szXml + "</w:rPr>" +
         '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
     }).join("");
-    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"distribute\"/></w:pPr>" + body + "</w:p>";
+    return "<w:p><w:pPr><w:bidi/>" + misraSpacingXml(opts) + "<w:jc w:val=\"distribute\"/></w:pPr>" + body + "</w:p>";
   }
 
   // Natural-fit residual for a font-swap / discrete-tatweel / mixed-font misra:
@@ -1491,7 +1510,7 @@
         '<w:t xml:space="preserve">' + escapeXml(r.text) + "</w:t></w:r>";
     }).join("");
     var ind = opts.indentTwips ? '<w:ind w:left="' + Math.round(opts.indentTwips) + '"/>' : "";
-    return "<w:p><w:pPr><w:bidi/><w:spacing w:after=\"80\"/><w:jc w:val=\"" + jc + "\"/>" + ind + "</w:pPr>" + body + "</w:p>";
+    return "<w:p><w:pPr><w:bidi/>" + misraSpacingXml(opts) + "<w:jc w:val=\"" + jc + "\"/>" + ind + "</w:pPr>" + body + "</w:p>";
   }
 
   function baytRowsOoxml(bayt, si, opts) {
@@ -1818,7 +1837,7 @@
         tables.push(stanzaTableOoxml(stanza, opts, twips));
       });
     });
-    return tables.join("<w:p/>");
+    return tables.join(separatorParaXml(opts.separatorPt));
   }
 
   function wrapOoxml(bodyContent) {
@@ -1907,6 +1926,8 @@
     generateBareGrid12Ooxml: generateBareGrid12Ooxml,
     templateToOoxml: templateToOoxml,
     layoutTableToOoxml: layoutTableToOoxml,
-    misraParaXml: misraParaXml
+    misraParaXml: misraParaXml,
+    misraSpacingXml: misraSpacingXml,
+    separatorParaXml: separatorParaXml
   };
 }));

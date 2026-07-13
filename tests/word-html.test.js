@@ -1138,3 +1138,24 @@ console.log("word-html tests passed");
   assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { targetTwips: 9000 })), sig, "width changes sig");
   assert.notEqual(AshaarWord.applySizeSignature(Object.assign({}, base, { sources: ["متن الف"] })), sig, "source changes sig");
 }
+
+// ── §9 vertical rhythm emission ──────────────────────────────────────────────
+{
+  assert.strictEqual(AshaarWord.misraSpacingXml({}), '<w:spacing w:after="80"/>', "auto when unset");
+  assert.strictEqual(AshaarWord.misraSpacingXml({ lineHeightPt: 24 }),
+    '<w:spacing w:after="80" w:line="480" w:lineRule="atLeast"/>', "atLeast, pt*20, never exact");
+
+  const sep = AshaarWord.separatorParaXml(1);
+  assert.ok(sep.indexOf('w:line="20"') !== -1 && sep.indexOf('w:lineRule="exact"') !== -1, "1pt exact");
+  assert.ok(sep.indexOf('w:sz w:val="2"') !== -1, "1pt paragraph-mark font");
+  assert.ok(sep.indexOf('w:before="0"') !== -1 && sep.indexOf('w:after="0"') !== -1, "no added spacing");
+
+  // Emission goes through the shared helper in every misra paragraph.
+  const xml = AshaarWord.renderForWordOoxml("الف \\ ب\n\nج \\ د", { lineHeightPt: 24, separatorPt: 2 }, Ashaar, 9360);
+  assert.ok(xml.indexOf('w:line="480" w:lineRule="atLeast"') !== -1, "misra paragraphs carry line height");
+  assert.ok(xml.indexOf('w:line="40" w:lineRule="exact"') !== -1, "tables joined by 2pt separator");
+  // The old bare join was "</w:tbl><w:p/><w:tbl>"; a stray "<w:p/>" can still
+  // legitimately appear INSIDE a table (e.g. an empty sadr/ajuz gap-column
+  // cell), so anchor on the table-boundary sequence rather than a bare scan.
+  assert.strictEqual(xml.indexOf("</w:tbl><w:p/><w:tbl>") === -1, true, "no bare separator paragraphs remain between tables");
+}
