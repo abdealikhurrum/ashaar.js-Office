@@ -1111,12 +1111,23 @@
     // always exits before pass 2 runs anyway — see the two early summary
     // returns below).
     var onlyBlockResolvedTags = null;
+    // Rebuild-skip cache key (fix round 1): a scoped sig (ONE block's sources)
+    // is structurally different from a profile-wide sig (ALL blocks' sources),
+    // so sharing the plain profile-name key would poison the cache — an
+    // alternating scoped/unscoped sequence on the same profile would flap
+    // needRebuild=true forever. Scoped applies get their own entry, keyed by
+    // the delegation tag (unique per block; in-memory map only).
+    var sigKey = (opts && opts.onlyBlockTag) ? name + "|" + opts.onlyBlockTag : name;
 
     try {
       // ── Pass 1: SIZE — rebuild each block at one shared target width ───────────
       await Word.run(async function (context) {
         var blocks = await gatherQaseedaBlocks(context, name);
         if (opts && opts.onlyBlockTag) {
+          // True block-scope (user decision 2026-07-13): a scoped apply computes
+          // width from THIS block alone — sibling poems on the same profile keep
+          // their width until the next profile-wide Assign/Update re-harmonizes.
+          // Accepted trade-off for per-apply cost.
           blocks = blocks.filter(function (b) { return b.tag === opts.onlyBlockTag; });
         }
         if (!blocks.length) {
@@ -1197,7 +1208,7 @@
           }).join(","),
           misraPattern: cap.blockInfos.map(function (b) { return b.payload.misraPattern || ""; }).join(","),
         });
-        var needRebuild = _appliedSizeSig[name] !== sizeSig;
+        var needRebuild = _appliedSizeSig[sigKey] !== sizeSig;
         if (qDebug) { qMeta.targetTwips = targetTwips; qMeta.rebuild = needRebuild; qMeta.repName = cap.repName; }
         if (!needRebuild) {
           // No rebuild → the controls survive; persist the healed runFonts on them.
@@ -1210,7 +1221,17 @@
         // font/size; the pattern is unchanged, so the old tag stays valid.
         for (var bi = cap.blockInfos.length - 1; bi >= 0; bi--) {
           var blk = cap.blockInfos[bi];
-          if (!blk.source.trim()) continue;
+          if (!blk.source.trim()) {
+            // Skipped rebuild = skipped re-tag: this block's physical tag stays
+            // pre-apply, so its healed oldTag would never match in pass 2 —
+            // drop it from the filter set (fix round 1: the set must never
+            // contain a tag pass 2 can't see).
+            if (onlyBlockResolvedTags) {
+              var obrIdx = onlyBlockResolvedTags.indexOf(blk.oldTag);
+              if (obrIdx !== -1) onlyBlockResolvedTags.splice(obrIdx, 1);
+            }
+            continue;
+          }
           var p = blk.payload;
           var eff = AshaarProfiles.resolveSettings({ payload: p, profileStore: sizeSigProfileStore, scope: { level: "poem" } }).values;
           var renderOpts = {
@@ -1627,7 +1648,7 @@
 
       // Remember the width we sized to, so a later justify-only apply (strength,
       // fill mode, per-cell override) skips the destructive rebuild.
-      if (sizeSig) _appliedSizeSig[name] = sizeSig;
+      if (sizeSig) _appliedSizeSig[sigKey] = sizeSig;
       summary = (opts && opts.onlyBlockTag)
         ? "Applied to this poem; justified " + changed + " cell(s)"
           + (coloured ? "; coloured " + coloured + " artifact(s)" : "") + "."

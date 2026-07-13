@@ -47,6 +47,7 @@ there is a single checklist to work through, rather than four scattered ones.
 - [ ] **Font gate: "Continue anyway"** — when the unmeasurable-font prompt appears, clicking
       *Continue anyway* (as opposed to *Add font file…*) lets Apply proceed with approximate metrics
       instead of blocking (Task 9, item 3).
+- [ ] Scoped apply on one poem of a shared profile: siblings untouched (width may differ until Update — expected).
 
 ## Notes for whoever runs this
 
