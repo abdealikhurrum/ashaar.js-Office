@@ -63,10 +63,30 @@
   var debugMode = document.getElementById("debug-mode");
   var debugOutput = document.getElementById("debug-output");
 
+  // §8 probe/calibration memoization (tune-cache.js). Probes are keyed by
+  // font+engine build and persisted to localStorage (machine-scoped font
+  // metrics); calibration sessions are keyed by font+size+container-bucket+
+  // texts-hash and kept in-memory only (poem text churns too much to persist
+  // usefully). Busted wholesale when the fonts strip registers/replaces a font.
+  var _tuneCache = (typeof AshaarTuneCache !== "undefined")
+    ? AshaarTuneCache.makeCache(typeof localStorage !== "undefined" ? localStorage : null)
+    : null;
+  // Engine-build id for probe cache-busting. NOT read from
+  // src/vendor/ASHAAR_UPSTREAM_VERSION at runtime (that file is a build-time
+  // stamp written by scripts/sync-ashaar-vendor.mjs; it's never loaded into
+  // the browser, and this vanilla/no-build-step add-in has no existing
+  // fetch()/XHR path to read a sibling asset). Mirrors that file's `commit=`
+  // field by hand — bump this string whenever `npm run update:ashaar` moves
+  // the pointer, until sync-ashaar-vendor.mjs is taught to stamp this value
+  // into a loadable JS file instead.
+  var ASHAAR_UPSTREAM_VERSION = "caf103f1"; // src/vendor/ASHAAR_UPSTREAM_VERSION: commit=caf103f1c8...
+
   // Format collected per-cell justification metrics into the Debug panel.
-  function renderDebug(diags) {
+  // `meta` (optional) surfaces session-level probe/calibrate cache hit|miss.
+  function renderDebug(diags, meta) {
     if (!debugOutput) return;
     if (!diags.length) { debugOutput.textContent = "(no kashida cells measured)"; return; }
+    var metaLine = meta ? ("probe=" + meta.probe + " calib=" + meta.calib + "\n") : "";
     var head = "cell  font        res  col(in)   nat  target  final  fill  tw/cap  text";
     var rows = diags.map(function (d) {
       return [
@@ -82,7 +102,7 @@
         "  " + d.text
       ].join(" ");
     });
-    debugOutput.textContent = head + "\n" + rows.join("\n");
+    debugOutput.textContent = metaLine + head + "\n" + rows.join("\n");
   }
 
   // Whether the WebView can actually render `name` vs silently falling back.
@@ -1724,6 +1744,10 @@
       setFontUploadStatus("Loaded “" + family + "”" +
         (res.persisted ? " — saved for future sessions." : " — this session only (storage unavailable)."), "ok");
       fontUpload.value = "";
+      // Newly registered/replaced font changes the measurement basis for any
+      // probe/calibration already cached under this family name — bust so the
+      // next Apply re-probes/re-calibrates against the real, now-loaded font.
+      if (_tuneCache) _tuneCache.bustAll();
       await refreshFontList();
     } catch (e) {
       setFontUploadStatus("Couldn’t load that file — is it a valid .ttf/.otf/.woff?", "warn");
@@ -2300,6 +2324,7 @@
     var CELL_MARGIN_PT = 5.76; // Word default cell side margin (0.08") reserved for text
     var debug = !!(debugMode && debugMode.checked);
     var diags = [];
+    var probeCacheStatus = "skip", calibCacheStatus = "skip"; // §8 debug visibility
 
     setMessage("Justifying…");
 
@@ -2587,10 +2612,23 @@
       }
 
       // Probe + calibrate using the real font/size and content widths.
+      // §8: both memoized via _tuneCache — probe by (font, engine build),
+      // persisted; calibrate by (font, size, container bucket, texts hash),
+      // in-memory only. On a cache MISS this runs exactly the pre-existing
+      // probeFont/calibrate calls and stores the result; behavior is
+      // unchanged from before caching existed.
       var fontProfile = null;
       if (canvasCtx && typeof AshaarTune !== "undefined") {
-        try { fontProfile = await AshaarTune.probeFont({ fontFamily: repName, fontSize: 64 }); }
-        catch (e) { /* degrade gracefully */ }
+        var pk = _tuneCache ? AshaarTuneCache.probeKey(repName, ASHAAR_UPSTREAM_VERSION) : null;
+        fontProfile = pk ? _tuneCache.getProbe(pk) : null;
+        if (fontProfile) {
+          probeCacheStatus = "hit";
+        } else {
+          probeCacheStatus = "miss";
+          try { fontProfile = await AshaarTune.probeFont({ fontFamily: repName, fontSize: 64 }); }
+          catch (e) { /* degrade gracefully */ }
+          if (fontProfile && pk) _tuneCache.putProbe(pk, fontProfile);
+        }
       }
       if (fontProfile) opts._fontProfile = fontProfile;
 
@@ -2606,14 +2644,24 @@
         });
         var avgPx = n ? totalPx / n : 300;
         if (lineTexts.length) {
-          try {
-            var session = await AshaarTune.calibrate({
-              texts: lineTexts, fontFamily: repName, fontSize: repSize,
-              containerWidth: avgPx, mode: "poetry", fontProfile: fontProfile, iterations: 50
-            });
-            calibParams = Object.assign({}, session.params);
+          var ck = _tuneCache ? AshaarTuneCache.calibKey(repName, repSize, avgPx, lineTexts) : null;
+          var cached = ck ? _tuneCache.getCalib(ck) : null;
+          if (cached) {
+            calibCacheStatus = "hit";
+            calibParams = Object.assign({}, cached);
             if (fontProfile) calibParams.fontQualityBoost = calibParams.fontQualityBoost || 1.8;
-          } catch (e) { /* keep defaults */ }
+          } else {
+            calibCacheStatus = "miss";
+            try {
+              var session = await AshaarTune.calibrate({
+                texts: lineTexts, fontFamily: repName, fontSize: repSize,
+                containerWidth: avgPx, mode: "poetry", fontProfile: fontProfile, iterations: 50
+              });
+              calibParams = Object.assign({}, session.params);
+              if (fontProfile) calibParams.fontQualityBoost = calibParams.fontQualityBoost || 1.8;
+              if (ck) _tuneCache.putCalib(ck, calibParams);
+            } catch (e) { /* keep defaults */ }
+          }
         }
       }
 
@@ -2984,7 +3032,7 @@
       }
 
       setMessage("Justified " + changed + " cell(s) across " + tables.items.length + " table(s).");
-      if (debug) renderDebug(diags);
+      if (debug) renderDebug(diags, { probe: probeCacheStatus, calib: calibCacheStatus });
     });
     // Re-assert the cancel message AFTER withWord's unconditional "Done.".
     if (plainGateCancelled) setMessage("Add the font, then Apply again.");
