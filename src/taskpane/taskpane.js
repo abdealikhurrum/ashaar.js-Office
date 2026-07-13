@@ -2146,6 +2146,8 @@
     var source = "";
     var existingFont = "";
     var ccPayload = null;   // the block's OWN persisted tag payload (v3)
+    var debug = !!(debugMode && debugMode.checked);
+    var run = debug ? AshaarMetrics.startRun("re-render") : null;
 
     await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -2199,6 +2201,7 @@
       await context.sync();
     });
 
+    if (run) run.phase("capture");
     if (!source.trim()) return; // a friendly message was already shown
 
     // Font pin: an explicitly-chosen dropdown font wins (so a mode that needs a
@@ -2219,9 +2222,15 @@
       rebuildOverride.profileCache = ccPayload.profileCache;
     }
     await insertPoem(true, rebuildOverride);
+    if (run) run.phase("rebuild");
     // Step 2: fill in place with the correct per-cell mechanism for the chosen
     // mode (skipped when the pane mode is "none").
     if (opts.justifyMode && opts.justifyMode !== "none") await justifySelection();
+    if (run) run.phase("justify");
+    if (run) {
+      run.end();
+      debugOutput.textContent += "\n" + JSON.stringify(run.report());
+    }
     setMessage("Re-rendered (font & size preserved).");
   }
 
@@ -3342,6 +3351,8 @@
   async function applyPanel() {
     var target = _panel.target;
     var values = panelValues();
+    var debug = !!(debugMode && debugMode.checked);
+    var run = debug ? AshaarMetrics.startRun("apply " + _panel.scopeLevel) : null;
     try {
       if (!target || target.kind !== "block") {
         // Plain selection: one-shot justify with panel values; nothing persisted.
@@ -3359,16 +3370,19 @@
       var gateFaces = await collectBlockFaceNames();
       var gateResult = await ensureFacesMeasurable(gateFaces);
       if (gateResult === "cancel") { setMessage("Add the font, then Apply again."); return; }
+      if (run) run.phase("face gate");
       if (_panel.scopeLevel === "poem") {
-        await applyPoemScope(target, values);
+        await applyPoemScope(target, values, run);
       } else if (_panel.scopeLevel === "bandh") {
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);           // helper below
           cc.tag = AshaarWord.setTagBandhWidth(cc.tag, values.misraWidthPt || 0);
           await context.sync();
         });
+        if (run) run.phase("tag write");
         tagWritten();
         await reapplyBlock();                            // re-justify in place
+        if (run) run.phase("pipeline");
       } else if (_panel.scopeLevel === "cell") {
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
@@ -3377,8 +3391,10 @@
           });
           await context.sync();
         });
+        if (run) run.phase("tag write");
         tagWritten();
         await reapplyBlock();
+        if (run) run.phase("pipeline");
       } else if (_panel.scopeLevel === "gap") {
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
@@ -3389,8 +3405,10 @@
           });
           await context.sync();
         });
+        if (run) run.phase("tag write");
         tagWritten();
         await reapplyBlock();
+        if (run) run.phase("pipeline");
       }
       // Success tail — must run AFTER the pipelines: they consume pending via
       // options() → panelValues() (resolved old tag + pending overlay), so the
@@ -3400,6 +3418,11 @@
       _panel.pending = { set: {}, clear: [] };
       _lastBlockTag = null;   // force reflection to re-read the updated tag
       await reflectActiveContext();
+      if (run) run.phase("reflect");
+      if (run) {
+        run.end();
+        debugOutput.textContent += "\n" + JSON.stringify(run.report());
+      }
       // No blanket "Applied." here: the render/justify pipeline above sets the
       // FINAL message ("Done." / its own error), and overwriting it would mask
       // pipeline errors. Recorded limitation (final-review item): a render-
@@ -3407,6 +3430,10 @@
       // applyPanel — the tag state is already persisted at that point.
     } catch (e) {
       // Keep pending for retry (spec: apply failure keeps edits).
+      if (run) {
+        run.end();
+        debugOutput.textContent += "\n" + JSON.stringify(run.report());
+      }
       setMessage("Apply failed: " + (e && e.message ? e.message : e));
     }
   }
@@ -3443,7 +3470,7 @@
   // Poem scope: persist local deltas, then rebuild-if-structural + justify.
   // Reuses reRender()'s bare-rebuild + justifySelection() fill, both of which
   // now read options() → panelValues(), i.e. the resolved values.
-  async function applyPoemScope(target, values) {
+  async function applyPoemScope(target, values, run) {
     var structuralDirty = ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode"].some(function (k) {
       return (k in _panel.pending.set) || _panel.pending.clear.indexOf(k) !== -1;
     });
@@ -3458,9 +3485,11 @@
       cc.tag = tag;
       await context.sync();
     });
+    if (run) run.phase("tag write");
     tagWritten();
     if (structuralDirty) await reRender();     // bare rebuild + in-place justify
     else await justifySelection();             // justify only — no destructive rebuild
+    if (run) run.phase("pipeline");
   }
 
   // Re-justify the block in place (non-structural scopes).
