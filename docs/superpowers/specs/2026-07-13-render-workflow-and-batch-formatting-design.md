@@ -114,6 +114,14 @@ Rendered as a small caption under the footer (updates on every `refreshPanel`), 
 same text in each button's tooltip. With `justifyMode:"none"` resolved, labels say
 "…unjustified" so the manual draft workflow is self-explanatory.
 
+**Measured, not just labeled — debug metrics:** with the existing debug toggle on
+(`#debug-mode` → `renderDebug`), every Apply/Re-render appends a phase-timing breakdown
+to the debug output: face gate, tag write, capture (loads+syncs), probe (hit/miss),
+calibrate (hit/miss + iterations), justify/render, reflect — each in ms, plus sync
+count per phase where cheap to count. Phase boundaries are wrapped once in the Apply
+router, not sprinkled through the pipelines. This is how §8's cache hit rates and any
+remaining slowness get diagnosed with evidence instead of guesses.
+
 ## 7. Strip before font determination
 
 **Problem (observed):** after a native font change to nastaliq, justification artifacts
@@ -179,7 +187,8 @@ Canonical settings keys are unchanged; no new resolver layers. Tag writes stay b
 
 - Node: override fill/color round-trip through tag parse/setters; batch key enumeration
   from cell maps; strip-before-detect on synthetic mixed runs; refresh-cost label
-  computation (pending × scope → label) as a pure function.
+  computation (pending × scope → label) as a pure function; probe/calibrate cache
+  key + versioning logic as pure functions; timing-phase aggregation shape.
 - Browser (Playwright + mocked Office settings): toggle/capture/pending flows.
 - Word (manual checklist addendum): cascade descope (sibling poems untouched), Re-render
   after native text+font edits, batch apply to whole poem, capture→apply→update round
