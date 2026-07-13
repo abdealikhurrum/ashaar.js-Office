@@ -57,6 +57,15 @@
           <button id="sp-profile-restore" type="button" hidden>Restore profile from this poem</button>
         </div>
 
+        <!-- Inline Save-as name entry: window.prompt is disallowed in Office
+             add-in webviews (modal interactions blocked by the runtime). -->
+        <div id="sp-saveas-row" class="sp-profile-row" hidden>
+          <label for="sp-saveas-name">Name</label>
+          <input id="sp-saveas-name" type="text" class="template-name-input" placeholder="New profile name">
+          <button id="sp-saveas-ok" type="button">Save</button>
+          <button id="sp-saveas-cancel" type="button" class="button--secondary">Cancel</button>
+        </div>
+
         <div id="sp-body-poem" class="sp-body">
           <div class="field"><label for="sp-justify-mode">Justification <span class="sp-src" data-key="justifyMode"></span></label>
             <select id="sp-justify-mode" data-key="justifyMode">

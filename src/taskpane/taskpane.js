@@ -3376,9 +3376,12 @@
   }
 
   // Save as…: panel's resolved+pending values → new profile; block assigned;
-  // local cleared (the tweaks just became the profile).
-  async function saveAsProfile() {
-    var name = (prompt("Save current settings as profile:") || "").trim();
+  // local cleared (the tweaks just became the profile). The name comes from
+  // the inline #sp-saveas-row — window.prompt is disallowed in Office add-in
+  // webviews (modal interactions blocked by the runtime), so a prompt() here
+  // silently returns null inside Word.
+  async function saveAsProfile(name) {
+    name = (name || "").trim();
     if (!name) return;
     var values = panelValues();
     // The store write stays first and unconditional — the profile exists even
@@ -3420,6 +3423,7 @@
     // message cannot overwrite a pipeline failure here.
     _panel.pending = { set: {}, clear: [] };
     _lastBlockTag = null; await reflectActiveContext();
+    refreshPanel();   // reflect early-returns outside Word; repaint (dropdown) either way
     setMessage("Profile \"" + name + "\" saved.");
   }
 
@@ -3628,7 +3632,26 @@
     document.getElementById("sp-revert").addEventListener("click", revertToProfile);
     document.getElementById("sp-apply").addEventListener("click", applyPanel);
     document.getElementById("sp-profile-assign").addEventListener("click", assignProfile);
-    document.getElementById("sp-profile-saveas").addEventListener("click", saveAsProfile);
+    // Save as… uses an inline name row (window.prompt is disallowed in Office
+    // add-in webviews; it silently returns null inside Word).
+    var saveasRow = document.getElementById("sp-saveas-row");
+    var saveasName = document.getElementById("sp-saveas-name");
+    function hideSaveasRow() { saveasRow.hidden = true; saveasName.value = ""; }
+    document.getElementById("sp-profile-saveas").addEventListener("click", function () {
+      saveasRow.hidden = false;
+      saveasName.focus();
+    });
+    document.getElementById("sp-saveas-ok").addEventListener("click", function () {
+      var name = saveasName.value.trim();
+      if (!name) { saveasName.focus(); return; }
+      hideSaveasRow();
+      saveAsProfile(name);
+    });
+    document.getElementById("sp-saveas-cancel").addEventListener("click", hideSaveasRow);
+    saveasName.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); document.getElementById("sp-saveas-ok").click(); }
+      if (ev.key === "Escape") hideSaveasRow();
+    });
     document.getElementById("sp-profile-update").addEventListener("click", updateProfile);
     document.getElementById("sp-profile-restore").addEventListener("click", restoreProfileFromPoem);
     var gapDefaultBtn = document.getElementById("sp-gap-default");
