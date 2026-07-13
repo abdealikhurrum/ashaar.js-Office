@@ -585,6 +585,8 @@
     document.getElementById("sp-profile-update").textContent = "Update \"" + st.profileRow.name + "\"";
     document.getElementById("sp-profile-restore").hidden = !st.profileRow.restoreVisible;
     document.getElementById("sp-revert").textContent = st.footer.revertLabel;
+    document.getElementById("sp-cost").textContent = st.footer.costLabel;
+    document.getElementById("sp-apply").title = st.footer.costLabel;
   }
 
   // Reflect the Ashaar block (and the cell, Task 4) at the cursor in the pane.

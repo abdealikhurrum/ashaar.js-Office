@@ -130,4 +130,23 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
   assert.ok(AshaarPanel.SCOPE_FIELDS.poem.indexOf("separatorPt") !== -1);
 }
 
+// ── §6 refresh-cost labels ───────────────────────────────────────────────────
+{
+  const resolved = resolveSettings({ payload: { profile: "", local: {} }, profileStore: {}, scope: { level: "poem" } });
+  const t = { kind: "block", scope: { level: "poem" }, cellEnabled: false, gapEnabled: false };
+  const structural = AshaarPanel.panelStateFor({ resolved, pending: { set: { gap: 8 }, clear: [] }, target: t });
+  assert.strictEqual(structural.footer.costLabel, "Apply — rebuilds poem tables");
+  const light = AshaarPanel.panelStateFor({ resolved, pending: { set: { strength: 9 }, clear: [] }, target: t });
+  assert.strictEqual(light.footer.costLabel, "Apply — re-justifies poem");
+  const cellT = { kind: "block", scope: { level: "cell", key: "A2:3" }, cellEnabled: true, gapEnabled: false, cellLabel: "A2:3" };
+  const cellResolved = resolveSettings({ payload: { profile: "", local: {} }, profileStore: {}, scope: { level: "cell", key: "A2:3" } });
+  assert.strictEqual(AshaarPanel.panelStateFor({ resolved: cellResolved, pending: { set: {}, clear: [] }, target: cellT }).footer.costLabel,
+    "Apply — re-justifies poem");
+  // justifyMode none → unjustified suffix
+  const noneResolved = resolveSettings({ payload: { profile: "", local: { justifyMode: "none" } }, profileStore: {}, scope: { level: "poem" } });
+  assert.strictEqual(AshaarPanel.panelStateFor({ resolved: noneResolved, pending: { set: { gap: 8 }, clear: [] }, target: t }).footer.costLabel,
+    "Apply — rebuilds poem tables (unjustified: Justification is None)");
+  assert.deepStrictEqual(AshaarPanel.STRUCTURAL_KEYS, ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode", "separatorPt"]);
+}
+
 console.log("settings-panel tests passed");

@@ -24,6 +24,10 @@
 
   var LEVELS = ["poem", "bandh", "cell", "gap"];
 
+  // Structural keys — changes to these require a rebuild (not just re-justify).
+  // Separator changes require rebuild because it lives between tables.
+  var STRUCTURAL_KEYS = ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode", "separatorPt"];
+
   function scopeTitle(target, resolved) {
     if (target.kind !== "block") return "Selection";
     var name = resolved.profileName
@@ -36,6 +40,14 @@
     if (lvl === "cell") return head + " › Cell " + (target.cellLabel || target.scope.key || "");
     if (lvl === "gap") return head + " › Gap " + (target.gapLabel || target.scope.key || "");
     return head;
+  }
+
+  function costLabelFor(pending, level, justifyMode) {
+    var dirtyKeys = Object.keys(pending.set).concat(pending.clear);
+    var structural = level === "poem" && dirtyKeys.some(function (k) { return STRUCTURAL_KEYS.indexOf(k) !== -1; });
+    var label = structural ? "Apply — rebuilds poem tables" : "Apply — re-justifies poem";
+    if (justifyMode === "none") label += " (unjustified: Justification is None)";
+    return label;
   }
 
   function panelStateFor(args) {
@@ -75,6 +87,7 @@
       footer: {
         applyEnabled: true,
         revertLabel: resolved.profileName ? "Revert to profile" : "Reset to defaults",
+        costLabel: costLabelFor(pending, level, resolved.values.justifyMode),
       },
     };
   }
@@ -123,6 +136,7 @@
 
   return {
     SCOPE_FIELDS: SCOPE_FIELDS,
+    STRUCTURAL_KEYS: STRUCTURAL_KEYS,
     panelStateFor: panelStateFor,
     mergePending: mergePending,
     pendingToLocal: pendingToLocal,
