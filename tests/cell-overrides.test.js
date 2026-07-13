@@ -123,4 +123,44 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
   assert.deepStrictEqual(AshaarOverrides.colorClearKeys(old, null, null), []);
 }
 
+// ── mergeFanOutOverride: fan-out onto sibling keys preserves untouched fields
+// (final review I2 — a bandh/poem-target Apply must not wipe unrelated
+// per-cell strength/color when only e.g. fill was edited) ──────────────────
+{
+  const existing = { strength: 9, widthPt: 120, color: "#112233" };
+  const incoming = { strength: null, widthPt: null, capEm: null, fill: "#F5F0E0", color: null };
+  // Only "fill" touched → strength/widthPt/color survive from existing;
+  // capEm stays null (never set anywhere); fill comes from incoming.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutOverride(existing, incoming, { fill: true }),
+    { strength: 9, widthPt: 120, capEm: null, fill: "#F5F0E0", color: "#112233" },
+    "untouched fields survive on a non-current key"
+  );
+
+  // A ⟲-cleared field (touched=true, incoming=null) clears even though the
+  // sibling key had its own value — the clear is spec-mandated to fan out.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutOverride(existing, incoming, { strength: true }),
+    { strength: null, widthPt: 120, capEm: null, fill: null, color: "#112233" },
+    "⟲-cleared field clears on every targeted key, even untouched ones' own value"
+  );
+
+  // Nothing touched → the key is untouched by this Apply entirely; every
+  // field falls back to its own existing value.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutOverride(existing, incoming, {}),
+    { strength: 9, widthPt: 120, capEm: null, fill: null, color: "#112233" },
+    "no touched fields → sibling key is untouched"
+  );
+
+  // A key with no prior override at all: untouched fields stay null (no
+  // existing value to fall back to); touched fields still land.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutOverride(null, { strength: 8, widthPt: null, capEm: null, fill: null, color: null },
+      { strength: true }),
+    { strength: 8, widthPt: null, capEm: null, fill: null, color: null },
+    "no existing override → untouched fields stay null, touched field lands"
+  );
+}
+
 console.log("cell-overrides.test.js OK");

@@ -540,6 +540,14 @@
   // success tail nulls the tracker to force a reseed from the fresh tag.
   var _lastSeededDecorKey = null;
 
+  // Final review I2: snapshot of what seedCellDecorInputs last put in the
+  // fill/color controls, so applyPanel's cell branch can tell whether the
+  // user actually TOUCHED fill/color this Apply (vs. the seeded value simply
+  // sitting there) — untouched fields must not fan out onto sibling keys.
+  // Reset to "nothing seeded" defaults whenever seedCellDecorInputs runs, so
+  // an empty/no-override cell reads as untouched until the user edits it.
+  var _seededCellDecor = { fillOn: false, fill: null, colorOn: false, color: null };
+
   // ── Unified settings panel state ──────────────────────────────────────────
   var _panel = {
     pending: { set: {}, clear: [] },
@@ -709,6 +717,14 @@
     document.getElementById("sp-cell-fill").value = hasFill ? ov.fill : "#f5f0e0";
     document.getElementById("sp-cell-color-on").checked = hasColor;
     document.getElementById("sp-cell-color").value = hasColor ? ov.color : "#a7352a";
+    // Final review I2: remember exactly what was just seeded, so applyPanel
+    // can diff the CURRENT control state against it to decide whether the
+    // user touched fill/color this Apply (fan-out must not overwrite sibling
+    // keys' fill/color just because the seeded value is still sitting there).
+    _seededCellDecor = {
+      fillOn: hasFill, fill: hasFill ? ov.fill : null,
+      colorOn: hasColor, color: hasColor ? ov.color : null
+    };
   }
 
   // §5: read the cursor cell's native formatting into the pane as pending
@@ -3716,25 +3732,60 @@
         await reapplyBlock();                            // re-justify in place
         if (run) run.phase("pipeline");
       } else if (_panel.scopeLevel === "cell") {
+        var cellFillOnEl = document.getElementById("sp-cell-fill-on");
+        var cellFillEl = document.getElementById("sp-cell-fill");
+        var cellColorOnEl = document.getElementById("sp-cell-color-on");
+        var cellColorEl = document.getElementById("sp-cell-color");
+        var override = {
+          strength: dirtyOrNull("strength"), widthPt: dirtyOrNull("misraWidthPt"), capEm: dirtyOrNull("capEm"),
+          fill: cellFillOnEl.checked ? cellFillEl.value : null,
+          color: cellColorOnEl.checked ? cellColorEl.value : null,
+        };
+        // Final review I2: which fields the user actually TOUCHED this
+        // Apply — only these fan out onto sibling keys; every other key
+        // must keep its own existing value (a bandh/poem-target Apply must
+        // not delete unrelated per-cell formatting on siblings). Numeric
+        // fields: dirty in the pending buffer — a ⟲-clear counts as touched
+        // too (its incoming value is already null via dirtyOrNull, and that
+        // null must still clear on every targeted key per spec). fill/color
+        // have no pending-buffer entry (raw shared DOM state, per
+        // seedCellDecorInputs) — touched is "control state differs from
+        // what was last seeded" for the ACTIVE (current) cell.
+        var touched = {
+          strength: ("strength" in _panel.pending.set) || _panel.pending.clear.indexOf("strength") !== -1,
+          widthPt: ("misraWidthPt" in _panel.pending.set) || _panel.pending.clear.indexOf("misraWidthPt") !== -1,
+          capEm: ("capEm" in _panel.pending.set) || _panel.pending.clear.indexOf("capEm") !== -1,
+          fill: cellFillOnEl.checked !== _seededCellDecor.fillOn ||
+            (cellFillOnEl.checked && cellFillEl.value !== _seededCellDecor.fill),
+          color: cellColorOnEl.checked !== _seededCellDecor.colorOn ||
+            (cellColorOnEl.checked && cellColorEl.value !== _seededCellDecor.color)
+        };
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
-          var override = {
-            strength: dirtyOrNull("strength"), widthPt: dirtyOrNull("misraWidthPt"), capEm: dirtyOrNull("capEm"),
-            fill: document.getElementById("sp-cell-fill-on").checked ? document.getElementById("sp-cell-fill").value : null,
-            color: document.getElementById("sp-cell-color-on").checked ? document.getElementById("sp-cell-color").value : null,
-          };
           var keys = cellTargetKeys(cc.tag, "content", target.cellLabel, "sp-cell-target");
-          // §4 transition-clear: diff old-vs-new color for EVERY fan-out key
-          // BEFORE the tag write replaces the overrides — keys losing their
-          // color are recorded for the render pass below to reset to black.
           var oldPayload = AshaarWord.parseContentControlTag(cc.tag) || {};
-          var clearKeys = AshaarOverrides.colorClearKeys(oldPayload.overrides, keys, override);
-          // Setters compose: feed each returned tag into the next call. ⟲-cleared
-          // fields are already null via dirtyOrNull — an all-null override deletes
-          // that key's entry (setTagOverride), so nulls must fan out to every
-          // targeted key too, not just the current one.
+          // The current key still fully replaces (the pane is the full
+          // truth for the seeded/reflected cell); every OTHER fanned-out key
+          // merges the touched fields onto ITS OWN existing override —
+          // AshaarOverrides.mergeFanOutOverride (cell-overrides.js) is the
+          // pure composition, pinned by tests/cell-overrides.test.js.
+          var mergedByKey = {};
+          keys.forEach(function (k) {
+            if (k === target.cellLabel) { mergedByKey[k] = override; return; }
+            var existing = (oldPayload.overrides && oldPayload.overrides[k]) || null;
+            mergedByKey[k] = AshaarOverrides.mergeFanOutOverride(existing, override, touched);
+          });
+          // §4 transition-clear: diff old-vs-new color for EVERY fan-out key,
+          // using THAT key's own merged result (untouched keys' merged color
+          // equals their existing color, so they never appear here) — BEFORE
+          // the tag write replaces the overrides. Keys losing their color
+          // are recorded for the render pass below to reset to black.
+          var clearKeys = [];
+          keys.forEach(function (k) {
+            clearKeys = clearKeys.concat(AshaarOverrides.colorClearKeys(oldPayload.overrides, [k], mergedByKey[k]));
+          });
           var newTag = cc.tag;
-          keys.forEach(function (k) { newTag = AshaarWord.setTagOverride(newTag, k, override); });
+          keys.forEach(function (k) { newTag = AshaarWord.setTagOverride(newTag, k, mergedByKey[k]); });
           cc.tag = newTag;
           await context.sync();
           // Record only after the write committed — a strict-throw above must
@@ -3777,6 +3828,14 @@
       // retry).
       _panel.pending = { set: {}, clear: [] };
       _pendingColorClears = { blockId: "", keys: {} };  // one-shot: consumed above
+      // Task 10 m2 (upgraded by final review — compounds with I2): a stale
+      // "This bandh"/"Whole poem" selection left over from a fan-out Apply
+      // would silently fan out the NEXT, unrelated edit too. Reset both
+      // Apply-to selects to "this" every successful Apply.
+      var spCellTargetEl = document.getElementById("sp-cell-target");
+      if (spCellTargetEl) spCellTargetEl.value = "this";
+      var spGapTargetEl = document.getElementById("sp-gap-target");
+      if (spGapTargetEl) spGapTargetEl.value = "this";
       _lastSeededDecorKey = null;  // force the decor inputs to reseed from the fresh tag
       _lastBlockTag = null;   // force reflection to re-read the updated tag
       await reflectActiveContext();

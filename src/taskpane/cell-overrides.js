@@ -61,10 +61,39 @@
     });
   }
 
+  // Final review I2: fan-out merge for a bandh/poem-target cell-scope Apply.
+  // The pane's `incoming` override is derived from the CURRENT cell's state,
+  // so writing it verbatim onto every fanned-out sibling key would delete
+  // fields the user never touched this Apply (e.g. "apply fill to whole
+  // poem" wiping every cell's strength/color). Per field: if the user
+  // touched it this Apply (`touched[field]` true — dirty in the pending
+  // buffer, INCLUDING a ⟲-clear, whose incoming value is null and must still
+  // clear on every targeted key), use `incoming`; otherwise keep the key's
+  // OWN existing value (still null if it never had one). The current key
+  // bypasses this (full replace — the pane is the full truth for it); see
+  // applyPanel.
+  function mergeFanOutOverride(existing, incoming, touched) {
+    existing = existing || {};
+    incoming = incoming || {};
+    touched = touched || {};
+    function pick(field) {
+      return touched[field] ? (incoming[field] != null ? incoming[field] : null)
+        : (existing[field] != null ? existing[field] : null);
+    }
+    return {
+      strength: pick("strength"),
+      widthPt: pick("widthPt"),
+      capEm: pick("capEm"),
+      fill: pick("fill"),
+      color: pick("color")
+    };
+  }
+
   return {
     overrideKey: overrideKey,
     resolveCellOverride: resolveCellOverride,
     resolveSlotDecor: resolveSlotDecor,
-    colorClearKeys: colorClearKeys
+    colorClearKeys: colorClearKeys,
+    mergeFanOutOverride: mergeFanOutOverride
   };
 }));
