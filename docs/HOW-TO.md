@@ -1,6 +1,6 @@
 # Ashaar for Word — Quick How-To
 
-A short guide to the everyday workflow. For full detail see [USER_GUIDE.md](USER_GUIDE.md).
+A short guide to the everyday workflow. Deeper walkthroughs (adopting tables, grid layouts, Nastaliq fonts, bandh modes, decor): [HOW-TO-WORKFLOWS.md](HOW-TO-WORKFLOWS.md). Full reference: [USER_GUIDE.md](USER_GUIDE.md).
 
 ## 1. Enter a poem
 
