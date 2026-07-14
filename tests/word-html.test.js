@@ -1049,6 +1049,26 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   const id2 = AshaarWord.wrapOoxmlControl(body, "Ashaar Poem", tag).match(/<w:id w:val="(\d+)"/)[1];
   assert.equal(id1, id2, "same tag → stable id");
 }
+
+// ── wrapOoxmlControl: a MULTI-STANZA poem's tables + separators all land
+// inside a SINGLE sdtContent (the whole-poem control that fresh-insert paths
+// now rely on instead of a post-hoc insertContentControl(), which Mac Word
+// clamps to the first row/table when it touches a table boundary) ───────────
+{
+  const multiBody = AshaarWord.renderForWordOoxml(
+    "الف \\ ب\n\nج \\ د", { layoutMode: "balanced" }, require("../src/vendor/ashaar"), 9360);
+  const tblCount = (multiBody.match(/<w:tbl>/g) || []).length;
+  assert.ok(tblCount >= 2, "fixture actually renders more than one table");
+  const multiPkg = AshaarWord.wrapOoxmlControl(multiBody, "Ashaar Poem", "ashaar:multi");
+  const insideMulti = multiPkg.slice(multiPkg.indexOf("<w:sdtContent>"), multiPkg.indexOf("</w:sdtContent>"));
+  const insideTblCount = (insideMulti.match(/<w:tbl>/g) || []).length;
+  assert.equal(insideTblCount, tblCount, "every table of the multi-stanza poem is inside sdtContent");
+  // the separator between stanzas must also stay inside the control, not leak
+  // out between </w:sdtContent> boundaries
+  assert.ok(multiPkg.indexOf("</w:tbl>") < multiPkg.indexOf("</w:sdtContent>"),
+    "last table closes before sdtContent closes");
+  assert.equal((multiPkg.match(/<w:sdtContent>/g) || []).length, 1, "single sdtContent wraps the whole poem");
+}
 console.log("wrapOoxmlControl OK");
 
 console.log("word-html tests passed");

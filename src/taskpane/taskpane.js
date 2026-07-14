@@ -2146,6 +2146,29 @@
     }
   }
 
+  // After embedding the SDT directly in the OOXML (AshaarWord.wrapOoxmlControl)
+  // there is no insertContentControl() return value to configure — unlike the
+  // insertContentControl() path, which hands back the control it just made.
+  // Locate the freshly inserted control by title+tag instead: the tag is
+  // content/options-derived (AshaarWord.contentControlTag), so it uniquely
+  // identifies the control we just created (same "find by tag" idiom
+  // gatherQaseedaBlocks uses to re-locate blocks after a rebuild). Used to
+  // restore the visible bounding-box outline the insertContentControl() path
+  // used to set explicitly.
+  async function styleInsertedPoemControl(context, tag) {
+    var ccs = context.document.contentControls;
+    ccs.load("items/title,items/tag");
+    await context.sync();
+    var items = ccs.items;
+    for (var i = items.length - 1; i >= 0; i--) {
+      if (items[i].title === "Ashaar Poem" && items[i].tag === tag) {
+        items[i].appearance = "BoundingBox";
+        return items[i];
+      }
+    }
+    return null;
+  }
+
   async function insertPoem(replaceSelection, optsOverride) {
     // Final review I3: propagate withWord's success flag so reRender (which
     // delegates its rebuild step to this function) can gate its own message.
@@ -2219,7 +2242,6 @@
       }
       if (!ooxmlBody) { setMessage("No content generated."); return; }
 
-      var ooxml = AshaarWord.wrapOoxml(ooxmlBody);
       var newTag = AshaarWord.contentControlTag(source, opts, AshaarWord.poemCellPatterns(source, opts, Ashaar));
       var selection = context.document.getSelection();
 
@@ -2272,12 +2294,18 @@
         }
       }
 
-      var inserted = selection.insertOoxml(ooxml,
+      // Fresh insert / manual "Replace Selection" over plain text: embed the
+      // SDT directly in the OOXML (wrapOoxmlControl) instead of wrapping the
+      // insertOoxml-returned range with insertContentControl() — on Mac Word
+      // a control applied post-hoc to a range that starts inside/touches a
+      // table boundary clamps to the FIRST ROW only (the row-1-only bug fixed
+      // above for Re-render/rebuild). newTag is embedded as the control's
+      // w:tag, so title/tag no longer need setting afterward.
+      var inserted = selection.insertOoxml(
+        AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", newTag),
         replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
-      var control = inserted.insertContentControl();
-      control.title = "Ashaar Poem";
-      control.tag = newTag;
-      control.appearance = "BoundingBox";
+      await context.sync();
+      await styleInsertedPoemControl(context, newTag);
       await context.sync();
     });
   }
@@ -2303,11 +2331,15 @@
         var twGs = scaledTextWidth(twG, opts.tableWidthPct);
         for (var bi = 0; bi < countG; bi++) bodyG.push(AshaarWord.templateToOoxml(tmplG, twGs, opts));
         var selG = context.document.getSelection();
-        var insG = selG.insertOoxml(AshaarWord.wrapOoxml(bodyG.join("<w:p/>")), Word.InsertLocation.end);
-        var ccG = insG.insertContentControl();
-        ccG.title = "Ashaar Poem";
-        ccG.tag = AshaarWord.contentControlTag("grid", opts);
-        ccG.appearance = "BoundingBox";
+        var tagG = AshaarWord.contentControlTag("grid", opts);
+        // Embed the SDT in the OOXML (wrapOoxmlControl) — insertContentControl()
+        // on the insertOoxml-returned range clamps to the first row on Mac Word
+        // when the range touches a table boundary (see insertPoem above).
+        var insG = selG.insertOoxml(
+          AshaarWord.wrapOoxmlControl(bodyG.join("<w:p/>"), "Ashaar Poem", tagG),
+          Word.InsertLocation.end);
+        await context.sync();
+        await styleInsertedPoemControl(context, tagG);
         await context.sync();
         return;
       }
@@ -2334,15 +2366,25 @@
             : AshaarWord.layoutTableToOoxml(t, scaled, opts);
         }).join("<w:p/>");
         var selection = context.document.getSelection();
-        var inserted = selection.insertOoxml(AshaarWord.wrapOoxml(ooxmlBody), Word.InsertLocation.end);
-        var control = inserted.insertContentControl();
-        control.title = "Ashaar Poem";
-        control.tag = AshaarWord.contentControlTag("template", opts);
-        control.appearance = "BoundingBox";
+        var tagS = AshaarWord.contentControlTag("template", opts);
+        // Embed the SDT in the OOXML (wrapOoxmlControl) — see insertPoem above
+        // for why insertContentControl() on the insertOoxml return range is
+        // unreliable (first-row clamp on Mac Word when tables are involved).
+        var inserted = selection.insertOoxml(
+          AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", tagS),
+          Word.InsertLocation.end);
+        await context.sync();
+        await styleInsertedPoemControl(context, tagS);
         await context.sync();
         return;
       }
 
+      // HTML fallback (no span-table/plain-layout tables generated): this
+      // still goes through insertHtml + a post-hoc insertContentControl(), so
+      // it carries the SAME first-row-clamp risk as the OOXML paths above on
+      // Mac Word when the inserted HTML renders as a table that touches a
+      // boundary. Left as-is because wrapOoxmlControl only wraps OOXML bodies
+      // (w:sdt), not HTML — converting this path to OOXML is out of scope here.
       var html = AshaarWord.renderTemplateForWord(opts);
       var selection = context.document.getSelection();
       var inserted = selection.insertHtml(html, Word.InsertLocation.end);
@@ -3647,13 +3689,16 @@
       var textWidthTwips = pl && pl.width
         ? Math.round((pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) * 20)
         : 9360;
-      var ooxml = AshaarWord.wrapOoxml(AshaarWord.generateBareGrid12Ooxml(scaledTextWidth(textWidthTwips, opts.tableWidthPct)));
+      var bodyBG = AshaarWord.generateBareGrid12Ooxml(scaledTextWidth(textWidthTwips, opts.tableWidthPct));
+      var tagBG = AshaarWord.contentControlTag("grid12", opts);
       var selection = context.document.getSelection();
-      var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
-      var control = inserted.insertContentControl();
-      control.title = "Ashaar Poem";
-      control.tag = AshaarWord.contentControlTag("grid12", opts);
-      control.appearance = "BoundingBox";
+      // Embed the SDT in the OOXML (wrapOoxmlControl) — see insertPoem for why
+      // a post-hoc insertContentControl() clamps to the first row on Mac Word.
+      var inserted = selection.insertOoxml(
+        AshaarWord.wrapOoxmlControl(bodyBG, "Ashaar Poem", tagBG),
+        Word.InsertLocation.end);
+      await context.sync();
+      await styleInsertedPoemControl(context, tagBG);
       await context.sync();
       setMessage("12-column grid inserted. Merge cells in Word, then Capture as a template.");
     });
@@ -3739,13 +3784,16 @@
         : 9360;
 
       var opts = options();
-      var ooxml = AshaarWord.wrapOoxml(AshaarWord.templateToOoxml(tmpl, scaledTextWidth(textWidthTwips, opts.tableWidthPct), opts));
+      var bodyAT = AshaarWord.templateToOoxml(tmpl, scaledTextWidth(textWidthTwips, opts.tableWidthPct), opts);
+      var tagAT = AshaarWord.contentControlTag("template:" + tmpl.name, opts);
       var selection = context.document.getSelection();
-      var inserted = selection.insertOoxml(ooxml, Word.InsertLocation.end);
-      var control = inserted.insertContentControl();
-      control.title = "Ashaar Poem";
-      control.tag = AshaarWord.contentControlTag("template:" + tmpl.name, opts);
-      control.appearance = "BoundingBox";
+      // Embed the SDT in the OOXML (wrapOoxmlControl) — see insertPoem for why
+      // a post-hoc insertContentControl() clamps to the first row on Mac Word.
+      var inserted = selection.insertOoxml(
+        AshaarWord.wrapOoxmlControl(bodyAT, "Ashaar Poem", tagAT),
+        Word.InsertLocation.end);
+      await context.sync();
+      await styleInsertedPoemControl(context, tagAT);
       await context.sync();
       setMessage("Template \"" + tmpl.name + "\" inserted.");
     });
