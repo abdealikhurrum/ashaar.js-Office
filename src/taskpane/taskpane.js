@@ -2108,14 +2108,29 @@
         await context.sync();
         tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
         await context.sync();
-        tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
+        // Collapsed from 2 round trips to 1: "items/body/font/name" chains the
+        // SAME two patterns already proven elsewhere in this file — a
+        // collection's `.load("items/<scalar>")` (e.g. row.cells.load(
+        // "items/columnWidth") a few hundred lines below) populates a
+        // collection's items AND a scalar property per item in one sync; and
+        // `cell.body.font.name` (used throughout justifySelectionInner) is
+        // itself a proven two-hop single-valued-nav-property chain to that
+        // scalar. Composing them lets ONE cells-collection load populate both
+        // cells.items and each cell's font name, cutting this function from 4
+        // syncs to 3. A further cut to 2 (folding rows.load into the tables
+        // load, or cells.load into the rows load) would require expanding a
+        // NESTED COLLECTION — not a scalar — through a parent collection's
+        // select path in a single call; there's no precedent for that in this
+        // codebase or in the Word JS API docs (collection-to-collection
+        // expansion needs its own object reference + its own load(), which
+        // only exists after the parent collection's items are synced), so it
+        // was deliberately not attempted rather than guessed at.
+        tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items/body/font/name"); }); });
         await context.sync();
         var cells = [];
         tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) {
-          cell.body.font.load("name");
           cells.push(cell);
         }); }); });
-        await context.sync();
         cells.forEach(function (cell) { if (cell.body.font && cell.body.font.name) names[cell.body.font.name] = true; });
       });
     } catch (e) { /* transient selection — gate degrades to no known faces */ }
