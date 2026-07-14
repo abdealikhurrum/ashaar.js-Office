@@ -272,6 +272,12 @@ button:hover {
   background: var(--accent-strong);
 }
 
+button:disabled,
+button:disabled:hover {
+  opacity: 0.45;
+  cursor: default;
+}
+
 #load-selection {
   min-height: 30px;
   border-color: var(--line);
