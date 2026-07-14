@@ -24,7 +24,12 @@
   var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   function rowLetter(r) { return LETTERS.charAt(r) || ("R" + (r + 1)); }
 
-  // pattern → flat ordered cell-map (emission order preserved).
+  // pattern → flat ordered cell-map (emission order preserved). `ordinal` is
+  // the cell's 1-based number among its OWN kind within its row (the same n
+  // that the label/slot embeds) carried as plain data — columnGroupKey keys
+  // on it directly instead of parsing the label string, which breaks for
+  // rows ≥ 26 where rowLetter falls back to "R27"/"R28"… and any
+  // strip-the-letters parse would leak the row digits into the ordinal.
   function buildBandhCellMap(pattern) {
     var out = [];
     var idx = 0;
@@ -34,10 +39,10 @@
       (row || []).forEach(function (tok) {
         if (tok === "c") {
           contentN++;
-          out.push({ index: idx++, row: r, kind: "content", label: letter + contentN, slot: null });
+          out.push({ index: idx++, row: r, kind: "content", label: letter + contentN, slot: null, ordinal: contentN });
         } else {
           spacingN++;
-          out.push({ index: idx++, row: r, kind: "spacing", label: null, slot: letter + "#" + spacingN });
+          out.push({ index: idx++, row: r, kind: "spacing", label: null, slot: letter + "#" + spacingN, ordinal: spacingN });
         }
       });
     });
@@ -66,24 +71,24 @@
   // Harmony-pooling key: which cells across DIFFERENT ROWS of a mapped
   // (bandh-cell-map) table balance to one width. The label/slot alone (A1,
   // B1, C1…) can't be used directly — the row letter makes every row its own
-  // pool, which was the bug (see natural-width-matrix.js positionKey). Simply
-  // stripping the row letter isn't safe either: a marsiya bandh can stack
-  // rows of DIFFERENT shape (3 content cells, then a solo, then a flanked
-  // pair) where the ordinal "1" recurs in every row but refers to physically
-  // different cells that must never share a width. So the group key is the
-  // ordinal (content/spacing number within its row, i.e. the label/slot with
-  // its row letter stripped) PLUS the row's own token-shape ("c"/"g" pattern
-  // joined) — two cells only pool when both the ordinal AND the row shape
-  // match, which holds exactly when the rows are structurally identical
-  // (a couplet's rows repeated down a single table) and never holds across
-  // rows of a different content layout. `kind` is folded in too so a content
-  // ordinal and a spacing ordinal can never collide.
+  // pool, which was the bug (see natural-width-matrix.js positionKey). Nor
+  // can the row letter simply be stripped: a marsiya bandh can stack rows of
+  // DIFFERENT shape (3 content cells, then a solo, then a flanked pair)
+  // where ordinal 1 recurs in every row but refers to physically different
+  // cells that must never share a width. So the group key is the entry's
+  // `ordinal` (its 1-based number among its kind within its row, carried as
+  // DATA by buildBandhCellMap — never parsed back out of the label, which
+  // breaks for rows ≥ 26 where rowLetter falls back to "R27"…) PLUS the
+  // row's own token-shape ("c"/"g" pattern joined) — two cells only pool
+  // when both the ordinal AND the row shape match, which holds exactly when
+  // the rows are structurally identical (a couplet's rows repeated down a
+  // single table) and never holds across rows of a different content layout.
+  // `kind` is folded in too so a content ordinal and a spacing ordinal can
+  // never collide.
   function columnGroupKey(pattern, entry) {
     entry = entry || {};
     var rowShape = (pattern && pattern[entry.row]) ? pattern[entry.row].join("") : "";
-    var raw = entry.kind === "content" ? entry.label : entry.slot;
-    var ordinal = String(raw || "").replace(/^[A-Za-z]+#?/, "");
-    return entry.kind + ":" + rowShape + ":" + ordinal;
+    return entry.kind + ":" + rowShape + ":" + (Number(entry.ordinal) || 0);
   }
 
   // Fan one Apply out to the keys it targets. `map` is the current table's cell

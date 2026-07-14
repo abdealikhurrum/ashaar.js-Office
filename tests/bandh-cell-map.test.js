@@ -204,5 +204,49 @@ assert.strictEqual(AshaarCellMap.alignPatternToTable(null, [["c"]]), false);
     "content and spacing ordinals never collide"
   );
 }
+{
+  // Rows past 26: rowLetter falls back to "R27", "R28"… — the pooling key
+  // must NOT round-trip through the label string (a leading-letters strip
+  // would leak "27" into the ordinal: "R27" + "1" → ordinal "271"). A long
+  // qasida with 28 baits as rows of ONE table must pool row 0 with row 27.
+  const row = ["c", "g", "c"];
+  const pattern = [];
+  for (let r = 0; r < 28; r++) pattern.push(row.slice());
+  const map = AshaarCellMap.buildBandhCellMap(pattern);
+  const r0 = map.filter((e) => e.row === 0);
+  const r27 = map.filter((e) => e.row === 27);
+  // Sanity: row 27 labels/slots use the fallback letter scheme.
+  assert.strictEqual(r27[0].label, "R281", "row 27 content label uses R-fallback");
+  assert.strictEqual(r27[1].slot, "R28#1", "row 27 spacing slot uses R-fallback");
+  // Content: first misra of row 0 pools with first misra of row 27…
+  assert.strictEqual(
+    AshaarCellMap.columnGroupKey(pattern, r0[0]),
+    AshaarCellMap.columnGroupKey(pattern, r27[0]),
+    "row 0 and row 27 first-content cells share a key"
+  );
+  // …and second with second, but never first with second.
+  assert.strictEqual(
+    AshaarCellMap.columnGroupKey(pattern, r0[2]),
+    AshaarCellMap.columnGroupKey(pattern, r27[2]),
+    "row 0 and row 27 second-content cells share a key"
+  );
+  assert.notStrictEqual(
+    AshaarCellMap.columnGroupKey(pattern, r0[0]),
+    AshaarCellMap.columnGroupKey(pattern, r27[2]),
+    "first and second misra never pool, even across the letter boundary"
+  );
+  // Spacing: row 0's gap pools with row 27's gap.
+  assert.strictEqual(
+    AshaarCellMap.columnGroupKey(pattern, r0[1]),
+    AshaarCellMap.columnGroupKey(pattern, r27[1]),
+    "row 0 and row 27 spacing slots share a key"
+  );
+  // Content/spacing still never collide past the letter boundary.
+  assert.notStrictEqual(
+    AshaarCellMap.columnGroupKey(pattern, r27[0]),
+    AshaarCellMap.columnGroupKey(pattern, r27[1]),
+    "content and spacing never collide in R-fallback rows"
+  );
+}
 
 console.log("bandh-cell-map.test.js OK");
