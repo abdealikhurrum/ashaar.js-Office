@@ -1669,6 +1669,27 @@
     return pats;
   }
 
+  // Gap-corruption fix, Part C: deep-compare two per-table pattern lists
+  // (poemCellPatterns output / payload.cells). The size-rebuild path uses this
+  // to VERIFY its "pattern unchanged" assumption before reusing the old tag —
+  // a mismatch (e.g. a gap symbol captured as an extra misra) means the tag
+  // must be re-minted or tag and table desync. Non-arrays never match.
+  function cellPatternsEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (var t = 0; t < a.length; t++) {
+      var ta = a[t], tb = b[t];
+      if (!Array.isArray(ta) || !Array.isArray(tb) || ta.length !== tb.length) return false;
+      for (var r = 0; r < ta.length; r++) {
+        var ra = ta[r], rb = tb[r];
+        if (!Array.isArray(ra) || !Array.isArray(rb) || ra.length !== rb.length) return false;
+        for (var c = 0; c < ra.length; c++) {
+          if (ra[c] !== rb[c]) return false;
+        }
+      }
+    }
+    return true;
+  }
+
   // The grid SPANS + content/gap KIND a bayt contributes, per row — mirrors
   // baytRowsOoxml's branches (solo → pad/content/pad; K-misra row → content+gap;
   // stacked → one solo row per misra) but emits geometry instead of OOXML. The
@@ -1952,6 +1973,7 @@
     renderForWordOoxml: renderForWordOoxml,
     stanzaCellPattern: stanzaCellPattern,
     poemCellPatterns: poemCellPatterns,
+    cellPatternsEqual: cellPatternsEqual,
     stanzaCellGeometry: stanzaCellGeometry,
     poemCellGeometry: poemCellGeometry,
     runsToMisraXml: runsToMisraXml,

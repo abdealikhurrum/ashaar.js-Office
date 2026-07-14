@@ -949,6 +949,30 @@ assert.equal(AshaarWord.kashidaExpansionFraction(999), 0.15); // clamp
   });
 }
 
+// ── cellPatternsEqual: the "pattern unchanged" assumption becomes a check ────
+// (gap-corruption fix, Part C): the size-rebuild path used to reuse the old tag
+// unconditionally. It must first compare the persisted per-table patterns with
+// the patterns the reconstructed source would mint — a symbol captured as a
+// misra (3 content cells vs 2) MUST read as a mismatch so the tag is re-minted.
+{
+  const Ashaar2 = require("../src/vendor/ashaar");
+  const stored = AshaarWord.poemCellPatterns("م١ \\ م٢", { layoutMode: "balanced" }, Ashaar2);
+  const same = AshaarWord.poemCellPatterns("م١ \\ م٢", { layoutMode: "balanced" }, Ashaar2);
+  const corrupt = AshaarWord.poemCellPatterns("م١ \\ ٭ \\ م٢", { layoutMode: "balanced" }, Ashaar2);
+  assert.strictEqual(AshaarWord.cellPatternsEqual(stored, same), true, "identical shape → match (tag kept)");
+  assert.strictEqual(AshaarWord.cellPatternsEqual(stored, corrupt), false, "symbol-as-misra row (3 vs 2 content) → mismatch");
+  assert.deepStrictEqual(stored, [[["c", "g", "c"]]], "sanity: clean couplet pattern");
+  assert.deepStrictEqual(corrupt, [[["c", "g", "c", "g", "c"]]], "sanity: corrupt 3-misra pattern");
+  // Structural literals: table count / row count / token differences all mismatch.
+  assert.strictEqual(AshaarWord.cellPatternsEqual([[["c", "g", "c"]]], [[["c", "g", "c"]], [["g", "c", "g"]]]), false, "table count differs");
+  assert.strictEqual(AshaarWord.cellPatternsEqual([[["c", "g", "c"]]], [[["c", "g", "c"], ["g", "c", "g"]]]), false, "row count differs");
+  assert.strictEqual(AshaarWord.cellPatternsEqual([[["c", "g", "c"]]], [[["g", "c", "g"]]]), false, "token differs");
+  // Non-arrays never match (caller guards on payload.cells being present).
+  assert.strictEqual(AshaarWord.cellPatternsEqual(null, [[["c"]]]), false, "null a → false");
+  assert.strictEqual(AshaarWord.cellPatternsEqual([[["c"]]], null), false, "null b → false");
+  console.log("word-html cellPatternsEqual tests passed");
+}
+
 // ── tag round-trips the cells pattern; absent → null ─────────────────────────
 {
   const pat = [[["c", "g", "c"]], [["g", "c", "g"]]]; // two stanzas

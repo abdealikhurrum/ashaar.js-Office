@@ -1455,12 +1455,39 @@
           if (blk.repSize) renderOpts.fontSizePt = blk.repSize;
           var ooxmlBody = AshaarWord.renderForWordOoxml(blk.source, renderOpts, Ashaar, targetTwips);
           if (!ooxmlBody) continue;
+          // Gap-corruption fix, Part C: the old tag is only valid for the
+          // rebuilt table if the pattern really is unchanged — VERIFY instead
+          // of assuming. Mint the patterns the reconstructed source produces
+          // (baytCellPatternRows depends only on layoutMode) and compare with
+          // the persisted payload.cells; on drift, re-mint the tag from the
+          // rebuilt source (as insertPoem does) so tag and table can never
+          // desync, carrying every persisted layer (profile/local/cache,
+          // overrides, slotDecor, widthPt, healed runFonts). Absent stored
+          // patterns (pre-pattern tags) keep the old tag as before.
+          var tagForRebuild = blk.oldTag;
+          var newPats = null;
+          try { newPats = AshaarWord.poemCellPatterns(blk.source, { layoutMode: eff.layoutMode }, Ashaar); } catch (ePat) { newPats = null; }
+          if (p.cells && newPats && !AshaarWord.cellPatternsEqual(p.cells, newPats)) {
+            tagForRebuild = AshaarWord.contentControlTag(blk.source, {
+              profile: p.profile, local: p.local, profileCache: p.profileCache,
+              overrides: p.overrides, slotDecor: p.slotDecor, widthPt: p.widthPt,
+              misraPattern: p.misraPattern || "paired", misraCount: Number(p.misraCount || 4)
+            }, newPats);
+            tagForRebuild = AshaarWord.setTagRunFonts(tagForRebuild, capRuns.blockPacks[bi]);
+            // Pass 2 filters blocks by the tag pass 1 persisted — swap the
+            // stale entry for the re-minted tag or pass 2 would skip this block.
+            if (onlyBlockResolvedTags) {
+              var driftIdx = onlyBlockResolvedTags.indexOf(blk.oldTag);
+              if (driftIdx !== -1) onlyBlockResolvedTags[driftIdx] = tagForRebuild;
+            }
+            if (qDebug) qMeta.patternDrift = (qMeta.patternDrift || 0) + 1;
+          }
           // Embed the content control IN the OOXML (block-level w:sdt spanning all
           // tables) so insertOoxml creates a control over the WHOLE poem. Wrapping
           // the insertOoxml-returned range with insertContentControl() instead only
           // caught row 1 on Mac Word. insertOoxml("Replace") on a whole control
           // throws, so insert just after the old control, then delete the old.
-          var ooxml = AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", blk.oldTag);
+          var ooxml = AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", tagForRebuild);
           var afterRange = blk.cc.getRange("After");
           afterRange.insertOoxml(ooxml, Word.InsertLocation.start);
           blk.cc.delete(false);
@@ -1924,6 +1951,7 @@
     }
     if (qDebug && debugOutput) {
       var qHead = "dbg=v5(gap-spacing)  target=" + (qMeta.targetTwips || 0) + "tw  rebuild=" + (qMeta.rebuild ? "YES" : "no")
+        + (qMeta.patternDrift ? "  PATTERN-DRIFT=" + qMeta.patternDrift : "")
         + "  repName=" + (qMeta.repName || "?") + "  writeFails=" + (qMeta.writeFails || 0)
         + (qMeta.adaptT != null ? "  adaptT=" + qMeta.adaptT + "px" : "")
         // Registry beacon: proves WHICH bundle the WebView is actually running
