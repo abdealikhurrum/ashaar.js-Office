@@ -917,13 +917,18 @@
     try {
       blockTables.forEach(function (t) { t.load(QDEEP); });
       await context.sync();
-      // Probe one populated cell — PropertyNotLoaded routes to the fallback.
+      // Probe one populated cell, touching EVERY leaf the capture later reads
+      // — PropertyNotLoaded routes to the fallback.
       for (var qbi = 0; qbi < blockTables.length; qbi++) {
         var qbt = blockTables[qbi];
         if (qbt.items.length && qbt.items[0].rows.items.length &&
             qbt.items[0].rows.items[0].cells.items.length) {
           var qProbe = qbt.items[0].rows.items[0].cells.items[0];
-          void qProbe.body.text; void qProbe.body.font.name; void qProbe.body.paragraphs.items;
+          void qProbe.body.text; void qProbe.body.font.name; void qProbe.body.font.size;
+          if (qProbe.body.paragraphs.items.length) {
+            void qProbe.body.paragraphs.items[0].alignment;
+            void qProbe.body.paragraphs.items[0].leftIndent;
+          }
           break;
         }
       }
@@ -2958,7 +2963,9 @@
     var debug = !!(debugMode && debugMode.checked);
     var diags = [];
     var probeCacheStatus = "skip", calibCacheStatus = "skip"; // §8 debug visibility
-    var syncCount = 0; // debug-mode-only: counts context.sync() calls made inside this pipeline
+    var syncCount = 0; // debug-mode-only: counts COMMITTED context.sync() calls made inside
+    // this pipeline — a rejected fast-path sync (throws → fallback) is a real round-trip
+    // but stays uncounted (intentional: the counter mirrors the committed-path budget).
 
     setMessage("Justifying…");
 
@@ -3047,14 +3054,22 @@
           sectionPre.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
         }
         await context.sync(); if (debug) syncCount++;
-        // Probe the deepest loaded properties — a host that accepted the load
-        // but didn't populate the tree throws PropertyNotLoaded here, which
-        // routes to the fallback exactly like a sync rejection would.
+        // Probe EVERY leaf the pipeline later reads — a host that accepted the
+        // load but didn't populate a branch throws PropertyNotLoaded here,
+        // which routes to the fallback exactly like a sync rejection would.
         if (tables.items.length && tables.items[0].rows.items.length &&
             tables.items[0].rows.items[0].cells.items.length) {
           var probeCell = tables.items[0].rows.items[0].cells.items[0];
           void probeCell.columnWidth; void probeCell.body.text;
-          void probeCell.body.font.name; void probeCell.body.paragraphs.items;
+          void probeCell.body.font.name; void probeCell.body.font.size;
+          if (probeCell.body.paragraphs.items.length) { void probeCell.body.paragraphs.items[0].alignment; }
+          // The columns branch is the one Desktop-only API in the path — if it
+          // alone came back unpopulated, the resize branches would read
+          // cols.items unguarded later and hard-fail the whole Apply. Probe it
+          // here so that mode lands on colsPreloaded=false instead.
+          if (wantsResizePreload && tables.items[0].columns.items.length) {
+            void tables.items[0].columns.items[0].width;
+          }
         }
         fastTableLoad = true;
         colsPreloaded = wantsResizePreload;
