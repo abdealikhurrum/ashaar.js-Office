@@ -4255,8 +4255,14 @@
         // This branch returns before the block path's tail below, which is
         // where run.end() normally fires — without this, a plain-selection
         // Apply's metrics run was started (line above) and never closed.
+        // "panel refresh", not "justify": justifySelection (threaded `run`
+        // above) emits its own sub-phases ending in "write", so this marker
+        // labels only the tail after the pipeline returned — pending clear +
+        // refreshPanel + withWord's wrap-up. The old "justify" name collided
+        // with the pipeline's real "justify" sub-phase and showed up in dumps
+        // as a trailing duplicate (same de-collision as reRender's "finalize").
         if (run) {
-          run.phase("justify");
+          run.phase("panel refresh");
           run.end();
           debugOutput.textContent += "\n" + JSON.stringify(run.report());
         }
