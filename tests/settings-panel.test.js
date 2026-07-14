@@ -149,4 +149,53 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
   assert.deepStrictEqual(AshaarPanel.STRUCTURAL_KEYS, ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode", "separatorPt"]);
 }
 
+// ── resettable: committed cell/bandh overrides keep the reset dot, not just
+// local deltas or in-pane pending edits ──────────────────────────────────────
+{
+  assert.deepStrictEqual(AshaarPanel.RESETTABLE_SOURCES, ["local", "cell", "bandh"]);
+
+  // "cell" source (committed override) → resettable even though not dirty.
+  const cellResolved = resolveSettings({
+    payload: { profile: "", local: {}, overrides: { "0:A1": { strength: 9 } } },
+    profileStore: {},
+    scope: { level: "cell", key: "0:A1" },
+  });
+  const cellT = { kind: "block", scope: { level: "cell", key: "0:A1" }, cellEnabled: true, gapEnabled: false, cellLabel: "A1" };
+  const cellSt = AshaarPanel.panelStateFor({ resolved: cellResolved, pending: { set: {}, clear: [] }, target: cellT });
+  const strengthC = cellSt.controls.find((c) => c.key === "strength");
+  assert.equal(strengthC.source, "cell");
+  assert.equal(strengthC.dirty, false, "committed, not a pending edit");
+  assert.equal(strengthC.resettable, true, "committed cell override still offers a reset");
+
+  // "bandh" source (committed width) → resettable.
+  const bandhResolved = resolveSettings({
+    payload: { profile: "", local: {}, widthPt: 300 },
+    profileStore: {},
+    scope: { level: "bandh" },
+  });
+  const bandhT = { kind: "block", scope: { level: "bandh" }, cellEnabled: false, gapEnabled: false };
+  const bandhSt = AshaarPanel.panelStateFor({ resolved: bandhResolved, pending: { set: {}, clear: [] }, target: bandhT });
+  const widthB = bandhSt.controls.find((c) => c.key === "misraWidthPt");
+  assert.equal(widthB.source, "bandh");
+  assert.equal(widthB.resettable, true, "committed bandh width still offers a reset");
+
+  // "default" and "profile" sources → NOT resettable when not dirty.
+  const store = { K: profileFromSettings("K", Object.assign(defaultSettings(), { strength: 9 })) };
+  const profResolved = resolveSettings({ payload: { profile: "K", local: {} }, profileStore: store, scope: { level: "poem" } });
+  const poemT = { kind: "block", scope: { level: "poem" }, cellEnabled: false, gapEnabled: false };
+  const profSt = AshaarPanel.panelStateFor({ resolved: profResolved, pending: { set: {}, clear: [] }, target: poemT });
+  const strengthP = profSt.controls.find((c) => c.key === "strength");
+  assert.equal(strengthP.source, "profile");
+  assert.equal(strengthP.resettable, false, "profile-sourced value has nothing local to reset");
+  const gapP = profSt.controls.find((c) => c.key === "gap");
+  assert.equal(gapP.source, "default");
+  assert.equal(gapP.resettable, false, "default value has nothing to reset");
+
+  // A dirty pending edit is resettable regardless of its underlying source.
+  const dirtySt = AshaarPanel.panelStateFor({ resolved: profResolved, pending: { set: { gap: 8 }, clear: [] }, target: poemT });
+  const gapDirty = dirtySt.controls.find((c) => c.key === "gap");
+  assert.equal(gapDirty.dirty, true);
+  assert.equal(gapDirty.resettable, true, "dirty pending edit is resettable even from a default source");
+}
+
 console.log("settings-panel tests passed");

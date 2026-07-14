@@ -624,8 +624,14 @@
       }
       var src = body.querySelector('.sp-src[data-key="' + c.key + '"]');
       if (src) {
-        src.textContent = (c.source === "local" || c.dirty) ? "•" : "";
+        // c.resettable (settings-panel.js) covers dirty pending edits AND any
+        // already-committed delta layer (local/cell/bandh) — a committed cell
+        // or bandh-width override must keep showing the reset affordance, not
+        // just an in-pane edit that hasn't been Applied yet.
+        src.textContent = c.resettable ? "•" : "";
         src.title = c.dirty ? "edited — Apply to commit; click to reset"
+          : c.source === "cell" ? "cell override — click to reset to inherited"
+          : c.source === "bandh" ? "bandh width override — click to reset to inherited"
           : c.source === "local" ? "local tweak — click to reset to inherited" : "";
       }
     });

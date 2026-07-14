@@ -24,6 +24,14 @@
 
   var LEVELS = ["poem", "bandh", "cell", "gap"];
 
+  // Provenance sources that represent a COMMITTED delta over the inherited
+  // value — i.e. something the ⟲ reset affordance should offer to clear.
+  // "cell" and "bandh" are committed overrides (profiles.js resolveSettings),
+  // not just in-pane pending edits, so they need the same reset visibility as
+  // "local" — enumerated explicitly (not "!== default/profile") so a new
+  // source value added later doesn't silently light the dot.
+  var RESETTABLE_SOURCES = ["local", "cell", "bandh"];
+
   // Structural keys — changes to these require a rebuild (not just re-justify).
   // Separator changes require rebuild because it lives between tables.
   var STRUCTURAL_KEYS = ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode", "separatorPt"];
@@ -68,7 +76,12 @@
       var dirty = (key in pending.set) || pending.clear.indexOf(key) !== -1;
       var value = (key in pending.set) ? pending.set[key]
         : (pending.clear.indexOf(key) !== -1 ? inheritedValue(resolved, key) : resolved.values[key]);
-      return { key: key, value: value, source: resolved.source[key], dirty: dirty };
+      var source = resolved.source[key];
+      // Committed cell/bandh overrides resolve with source "cell"/"bandh" (not
+      // "local"), but they are still a delta the user can reset — the dot must
+      // not vanish just because the override was already committed to the tag.
+      var resettable = dirty || RESETTABLE_SOURCES.indexOf(source) !== -1;
+      return { key: key, value: value, source: source, dirty: dirty, resettable: resettable };
     });
 
     var anyDirty = Object.keys(pending.set).length > 0 || pending.clear.length > 0;
@@ -137,6 +150,7 @@
   return {
     SCOPE_FIELDS: SCOPE_FIELDS,
     STRUCTURAL_KEYS: STRUCTURAL_KEYS,
+    RESETTABLE_SOURCES: RESETTABLE_SOURCES,
     panelStateFor: panelStateFor,
     mergePending: mergePending,
     pendingToLocal: pendingToLocal,
