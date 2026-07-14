@@ -564,8 +564,16 @@
   // Same purpose as _seededCellDecor, for the gap-decor inputs (symbol/fill/
   // color of the spacing cell at the cursor). No color-on checkbox exists for
   // gaps (sp-gap-color is a plain color picker — see taskpane.html), so
-  // "color" is a bare string, not a {on,value} pair.
-  var _seededGapDecor = { symbol: "", fillOn: false, fill: null, color: "" };
+  // "color" is a bare string, not a {on,value} pair. Two layers (review C2 —
+  // see AshaarOverrides.gapApplyInputs for the consistency rule):
+  //   disp = exactly what seeding put in the controls (display fallbacks
+  //          #f5f0e0/#a7352a included) — what "touched" diffs against;
+  //   orig = the resolved persisted values PRE-fallback ("" = none) — what
+  //          an untouched field round-trips back into the tag.
+  var _seededGapDecor = {
+    orig: { symbol: "", fill: "", color: "" },
+    disp: { symbol: "", fillOn: false, fill: "#f5f0e0", color: "#a7352a" }
+  };
 
   // ── Unified settings panel state ──────────────────────────────────────────
   var _panel = {
@@ -781,12 +789,17 @@
     document.getElementById("sp-gap-fill").value = hasFill ? decor.fill : "#f5f0e0";
     document.getElementById("sp-gap-color").value = decor.color || "#a7352a";
     // Same purpose as seedCellDecorInputs's _seededCellDecor snapshot: lets
-    // applyPanel's gap branch tell whether the user actually TOUCHED a field
-    // this Apply (vs. the seeded value simply sitting there), so fan-out
-    // never overwrites sibling gaps' untouched fields.
+    // applyPanel's gap branch (via AshaarOverrides.gapApplyInputs) tell
+    // whether the user actually TOUCHED a field this Apply. Review C2: disp
+    // records the DISPLAYED values (fallbacks included — the exact writes
+    // four lines up), orig the pre-fallback resolved values; the two MUST
+    // stay in lockstep with the control writes above, or a field becomes
+    // permanently "touched" (the bug: snapshotting color as "" while the
+    // input displayed #a7352a stamped the fallback over siblings' colors).
     _seededGapDecor = {
-      symbol: decor.symbol || "", fillOn: hasFill, fill: hasFill ? decor.fill : null,
-      color: decor.color || ""
+      orig: { symbol: decor.symbol || "", fill: decor.fill || "", color: decor.color || "" },
+      disp: { symbol: decor.symbol || "", fillOn: hasFill,
+              fill: hasFill ? decor.fill : "#f5f0e0", color: decor.color || "#a7352a" }
     };
   }
 
@@ -4417,27 +4430,27 @@
         await reapplyBlock(run);
         if (run) run.phase("pipeline");
       } else if (_panel.scopeLevel === "gap") {
-        var gapSymbolEl = document.getElementById("sp-gap-symbol");
-        var gapFillOnEl = document.getElementById("sp-gap-fill-on");
-        var gapFillEl = document.getElementById("sp-gap-fill");
-        var gapColorEl = document.getElementById("sp-gap-color");
-        var decor = {
-          symbol: gapSymbolEl.value,
-          fill: gapFillOnEl.checked ? gapFillEl.value : "",
-          color: gapColorEl.value,
-        };
-        // Blueprint (ii): which fields the user actually TOUCHED this Apply —
-        // only these fan out onto sibling gap keys; every other key must keep
-        // its own existing decor (a bandh/poem-target gap Apply must not
-        // delete unrelated sibling gaps' symbol/fill/color). Same shape as
-        // the cell branch's `touched` above, diffed against _seededGapDecor
-        // (seedGapDecorInputs) instead of _seededCellDecor.
-        var gapTouched = {
-          symbol: gapSymbolEl.value !== (_seededGapDecor.symbol || ""),
-          fill: gapFillOnEl.checked !== _seededGapDecor.fillOn ||
-            (gapFillOnEl.checked && gapFillEl.value !== _seededGapDecor.fill),
-          color: gapColorEl.value !== (_seededGapDecor.color || ""),
-        };
+        // Review C2: touched + incoming decor come from ONE snapshot-
+        // consistent computation (AshaarOverrides.gapApplyInputs, pinned by
+        // tests/cell-overrides.test.js): touched[f] = control differs from
+        // what seeding DISPLAYED (fallbacks included); incoming[f] =
+        // touched ? control value : the ORIGINAL persisted value ("" stays
+        // "", never the display fallback). Only touched fields fan out onto
+        // sibling gap keys; every other key keeps its own existing decor.
+        var gi = AshaarOverrides.gapApplyInputs(_seededGapDecor, {
+          symbol: document.getElementById("sp-gap-symbol").value,
+          fillOn: document.getElementById("sp-gap-fill-on").checked,
+          fill: document.getElementById("sp-gap-fill").value,
+          color: document.getElementById("sp-gap-color").value,
+        });
+        var decor = gi.decor;
+        var gapTouched = gi.touched;
+        // Review C3: paint outcome bookkeeping — set inside the transaction,
+        // consumed by the message tail below. skippedGaps counts targeted
+        // keys whose table no longer aligns to its stored pattern;
+        // paintFailed means the tag committed but the paint sync threw.
+        var skippedGaps = 0;
+        var paintFailed = false;
         // Blueprint (iii)/(iv): decor-only fast apply. Gap decor never
         // affects width math (natural-width matrix and
         // recomputeQaseedaNaturals iterate content cells only), so a gap
@@ -4467,57 +4480,134 @@
           });
           var newTag = cc.tag;
           keys.forEach(function (k) { newTag = AshaarWord.setTagSlotDecor(newTag, k, mergedByKey[k]); });
-          cc.tag = newTag;
-          // Resolve the live table geometry (sync #1 — same table lookup
-          // cellTargetKeys/reflectActiveCell use, minus the range-intersection
-          // scan: the table index is already known from each key).
+          // Sync #1: commit the tag write AND deep-load the block's live
+          // table geometry (per-row cell counts) in one round trip — same
+          // probed deep-load + verbatim-sequential-fallback idiom as
+          // captureQaseedaTables' QDEEP (8835c02 lineage). cellIndex is the
+          // cheap leaf: painting only WRITES to cells, so the shape check is
+          // the only read this path needs.
+          var GDEEP = "items/rows/items/cells/items/cellIndex";
           var tbls = cc.getRange().tables;
-          tbls.load("items");
-          await context.sync();
+          var gFastLoad = false;
+          try {
+            cc.tag = newTag;
+            tbls.load(GDEEP);
+            await context.sync();
+            // Probe one populated cell, touching the leaf — PropertyNotLoaded
+            // routes to the fallback.
+            for (var gbi = 0; gbi < tbls.items.length; gbi++) {
+              if (tbls.items[gbi].rows.items.length &&
+                  tbls.items[gbi].rows.items[0].cells.items.length) {
+                void tbls.items[gbi].rows.items[0].cells.items[0].cellIndex;
+                break;
+              }
+            }
+            gFastLoad = true;
+          } catch (eGFast) { gFastLoad = false; }
+          if (!gFastLoad) {
+            // FALLBACK (sequential). A failed sync discards its whole queue,
+            // so the tag write is re-queued here too; if the fast sync DID
+            // commit and only the probe threw, re-assigning the same tag is
+            // idempotent.
+            cc.tag = newTag;
+            tbls.load("items");
+            await context.sync();
+            tbls.items.forEach(function (tbl) { tbl.rows.load("items"); });
+            await context.sync();
+            tbls.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
+            await context.sync();
+          }
           var newPayload = AshaarWord.parseContentControlTag(newTag) || {};
           var prof = newPayload.profile ? (loadProfileStore()[newPayload.profile] || null) : null;
-          keys.forEach(function (k) {
-            var sepIdx = String(k).indexOf(":");
-            var tIdx = parseInt(String(k).slice(0, sepIdx), 10) || 0;
-            var slot = String(k).slice(sepIdx + 1);
-            var pattern = (newPayload.cells || [])[tIdx];
-            var tbl = tbls.items[tIdx];
-            if (!pattern || !tbl) return;
-            var map = AshaarCellMap.buildBandhCellMap(pattern);
-            var entry = null;
-            for (var mi = 0; mi < map.length; mi++) {
-              if (map[mi].kind === "spacing" && map[mi].slot === slot) { entry = map[mi]; break; }
+          // Review C3: only paint keys whose live table still matches its
+          // stored pattern — the same alignPatternToTable gate every other
+          // pattern-indexing site uses. A hand-reshaped table would otherwise
+          // route body.clear() onto the WRONG cell (possibly a content cell —
+          // corruption). Cached per table; misaligned tables' keys are
+          // counted and reported, not silently dropped.
+          var alignCache = {};
+          function gapTableAligned(tIdx) {
+            if (!(tIdx in alignCache)) {
+              var tbl = tbls.items[tIdx];
+              var pattern = (newPayload.cells || [])[tIdx];
+              if (!tbl || !pattern) { alignCache[tIdx] = false; }
+              else {
+                var perRowCounts = tbl.rows.items.map(function (row) { return row.cells.items.length; });
+                alignCache[tIdx] = AshaarCellMap.alignPatternToTable(perRowCounts, pattern);
+              }
             }
-            if (!entry) return;
-            var inRow = map.filter(function (e) { return e.row === entry.row; });
-            var wcell = tbl.getCell(entry.row, inRow.indexOf(entry));
-            // Same merge pass-2 of applyProfileToQaseeda uses, so standalone
-            // painting matches what a later profile pass would produce.
-            var pDecor = prof ? (prof.spacingDecor || {})[slot] : null;
-            var paint = AshaarOverrides.resolveSlotDecor(pDecor, mergedByKey[k]);
-            // Accepted characteristic (unchanged from pass-2): a long symbol
-            // may visually clip in the fixed-width spacing cell — the gap
-            // column is sized for a short glyph/number, not prose.
-            wcell.body.clear();
-            if (paint.symbol) {
-              wcell.body.insertText(paint.symbol, Word.InsertLocation.replace);
-              // §4 color transition-clear: this always (re)asserts color from
-              // the freshly-resolved `paint`, so a color→none transition
-              // self-heals to "black" right here — no separate pending/retry
-              // bookkeeping needed (unlike the cell branch's
-              // _pendingColorClears, which has to survive a SEPARATE render
-              // pass; this paint IS the render, in the same transaction).
-              wcell.body.font.color = paint.color || "black";
-            }
-            // shadingColor rejects "" / "No color"; "#FFFFFF" is the documented
-            // clear value (same quirk pass-2 works around).
-            wcell.shadingColor = paint.fill || "#FFFFFF";
-            wcell.body.paragraphs.getFirst().alignment = Word.Alignment.centered;
-          });
-          await context.sync(); // sync #2: commits the decor paint
+            return alignCache[tIdx];
+          }
+          try {
+            keys.forEach(function (k) {
+              var sepIdx = String(k).indexOf(":");
+              var tIdx = parseInt(String(k).slice(0, sepIdx), 10) || 0;
+              var slot = String(k).slice(sepIdx + 1);
+              if (!gapTableAligned(tIdx)) { skippedGaps++; return; }
+              var pattern = (newPayload.cells || [])[tIdx];
+              var tbl = tbls.items[tIdx];
+              var map = AshaarCellMap.buildBandhCellMap(pattern);
+              var entry = null;
+              for (var mi = 0; mi < map.length; mi++) {
+                if (map[mi].kind === "spacing" && map[mi].slot === slot) { entry = map[mi]; break; }
+              }
+              if (!entry) { skippedGaps++; return; }
+              var inRow = map.filter(function (e) { return e.row === entry.row; });
+              // Aligned ⇒ the pattern's (row, index-in-row) is exactly the
+              // live table's — index the already-loaded proxies directly.
+              var wcell = tbl.rows.items[entry.row].cells.items[inRow.indexOf(entry)];
+              // Review C1: paint from the ROUND-TRIPPED tag, not the raw
+              // merge object. mergeFanOutSlotDecor returns null for untouched
+              // fields, and resolveSlotDecor is property-EXISTENCE based ("k
+              // in override"), so the raw object would read null as an
+              // explicit "" override and force-clear profile defaults on
+              // every untouched field. setTagSlotDecor's codec compacts
+              // nulls/empties into genuinely-absent keys — which is what
+              // resolveSlotDecor expects and exactly what pass-2 reads, so
+              // standalone painting matches what a later profile pass would
+              // produce.
+              var persistedDecor = (newPayload.slotDecor || {})[k];
+              var pDecor = prof ? (prof.spacingDecor || {})[slot] : null;
+              var paint = AshaarOverrides.resolveSlotDecor(pDecor, persistedDecor);
+              // Accepted characteristic (unchanged from pass-2): a long symbol
+              // may visually clip in the fixed-width spacing cell — the gap
+              // column is sized for a short glyph/number, not prose.
+              wcell.body.clear();
+              if (paint.symbol) {
+                wcell.body.insertText(paint.symbol, Word.InsertLocation.replace);
+                // §4 color transition-clear: this always (re)asserts color from
+                // the freshly-resolved `paint`, so a color→none transition
+                // self-heals to "black" right here — no separate pending/retry
+                // bookkeeping needed (unlike the cell branch's
+                // _pendingColorClears, which has to survive a SEPARATE render
+                // pass; this paint IS the render, in the same transaction).
+                wcell.body.font.color = paint.color || "black";
+              }
+              // shadingColor rejects "" / "No color"; "#FFFFFF" is the documented
+              // clear value (same quirk pass-2 works around).
+              wcell.shadingColor = paint.fill || "#FFFFFF";
+              wcell.body.paragraphs.getFirst().alignment = Word.Alignment.centered;
+            });
+            await context.sync(); // sync #2: commits the decor paint
+          } catch (ePaint) {
+            // Review C3: the tag committed in sync #1 — a paint failure must
+            // NOT surface as a bare "Apply failed" (which would imply the
+            // settings were lost). Swallow here; the message tail below tells
+            // the truth, and the success tail still runs (pending was
+            // consumed into the committed tag).
+            paintFailed = true;
+          }
         });
         if (run) run.phase("decor write");
-        setMessage("Done.");
+        // Message-last: state exactly what happened. Settings are in the tag
+        // either way once we're here; only the repaint can be partial.
+        if (paintFailed) {
+          setMessage("Settings saved — repainting the gap cell(s) failed; click Apply again to retry.");
+        } else if (skippedGaps > 0) {
+          setMessage("Saved; " + skippedGaps + " gap(s) not repainted — table shape changed; Re-render to re-sync.");
+        } else {
+          setMessage("Done.");
+        }
       }
       // Success tail — must run AFTER the pipelines: they consume pending via
       // options() → panelValues() (resolved old tag + pending overlay), so the

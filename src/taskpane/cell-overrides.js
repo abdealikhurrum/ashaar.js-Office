@@ -110,12 +110,46 @@
     return { symbol: pick("symbol"), fill: pick("fill"), color: pick("color") };
   }
 
+  // Review C2: touched-fields + incoming decor for a gap-scope Apply,
+  // computed against the seeding snapshot. THE RULE — snapshot, display, and
+  // touched-check must be mutually consistent, per field:
+  //   snap.disp    = exactly what seeding put in the controls, DISPLAY
+  //                  FALLBACKS INCLUDED (a color input can't sit empty, so
+  //                  seeding shows #f5f0e0/#a7352a placeholders);
+  //   snap.orig    = the resolved persisted value PRE-fallback ("" = none);
+  //   touched[f]   = current control state differs from disp[f];
+  //   incoming[f]  = touched[f] ? the control-derived value : orig[f].
+  // An untouched field round-trips its ORIGINAL value ("" stays "", never
+  // the display fallback) — for the current key's full replace AND the
+  // fan-out merge — so a color picker still sitting on its seeded fallback
+  // can never stamp that fallback onto anything (the C2 bug: snapshotting
+  // "" while displaying #a7352a made color permanently "touched" on any gap
+  // that had none). dom = raw control state {symbol, fillOn, fill, color}.
+  function gapApplyInputs(snap, dom) {
+    snap = snap || {};
+    var orig = snap.orig || {};
+    var disp = snap.disp || {};
+    dom = dom || {};
+    var touched = {
+      symbol: (dom.symbol || "") !== (disp.symbol || ""),
+      fill: !!dom.fillOn !== !!disp.fillOn || (!!dom.fillOn && dom.fill !== disp.fill),
+      color: (dom.color || "") !== (disp.color || "")
+    };
+    var decor = {
+      symbol: touched.symbol ? (dom.symbol || "") : (orig.symbol || ""),
+      fill: touched.fill ? (dom.fillOn ? dom.fill : "") : (orig.fill || ""),
+      color: touched.color ? (dom.color || "") : (orig.color || "")
+    };
+    return { touched: touched, decor: decor };
+  }
+
   return {
     overrideKey: overrideKey,
     resolveCellOverride: resolveCellOverride,
     resolveSlotDecor: resolveSlotDecor,
     colorClearKeys: colorClearKeys,
     mergeFanOutOverride: mergeFanOutOverride,
-    mergeFanOutSlotDecor: mergeFanOutSlotDecor
+    mergeFanOutSlotDecor: mergeFanOutSlotDecor,
+    gapApplyInputs: gapApplyInputs
   };
 }));

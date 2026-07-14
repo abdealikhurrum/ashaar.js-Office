@@ -206,4 +206,112 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
   // there's no "current key" case to pin here (see cell equivalent above).
 }
 
+// ── gap Apply composition chain (review C1/C2): seeded snapshot → touched →
+// incoming decor → mergeFanOutSlotDecor → setTagSlotDecor → parse →
+// resolveSlotDecor(profileDefault, persisted[k]) — the exact pure chain
+// applyPanel's gap branch drives. Pins that painting reads the ROUND-TRIPPED
+// tag (C1: merge nulls must compact to absent keys, not explicit "" clears)
+// and that touched semantics are snapshot-consistent (C2: a color input
+// sitting on its seeded display fallback is NOT touched). ──────────────────
+{
+  const prof = { symbol: "؎", fill: "#eeeeee", color: "#112233" };
+
+  // Snapshot of a gap seeded with NO persisted decor of its own and no
+  // profile color: orig = resolved persisted values pre-display-fallback;
+  // disp = exactly what seeding put in the controls (fallbacks included).
+  const snap = {
+    orig: { symbol: "", fill: "", color: "" },
+    disp: { symbol: "", fillOn: false, fill: "#f5f0e0", color: "#a7352a" },
+  };
+
+  // (a) C1: user touches ONLY fill; sibling gap has no decor of its own.
+  // Untouched symbol/color must INHERIT the profile default after the chain,
+  // not be force-cleared by the merge's nulls.
+  {
+    const gi = AshaarOverrides.gapApplyInputs(snap, {
+      symbol: "", fillOn: true, fill: "#ff0000", color: "#a7352a",
+    });
+    assert.deepStrictEqual(gi.touched, { symbol: false, fill: true, color: false },
+      "only fill touched");
+    const merged = AshaarOverrides.mergeFanOutSlotDecor(null, gi.decor, gi.touched);
+    // Raw merge output carries null keys — resolveSlotDecor is existence-
+    // based, so feeding it the RAW merge would force-clear the profile
+    // symbol/color (the C1 bug):
+    assert.strictEqual(AshaarOverrides.resolveSlotDecor(prof, merged).symbol, "",
+      "raw merge object force-clears (why painting must not read it)");
+    // The chain the code actually drives: round-trip through the tag codec
+    // compacts nulls into genuinely-absent keys → inherit.
+    const tag = AshaarWord.setTagSlotDecor(
+      AshaarWord.contentControlTag("poem", { profile: "Q" }, [[["c", "g", "c"]]]),
+      "0:A#1", merged);
+    const persisted = (AshaarWord.parseContentControlTag(tag).slotDecor || {})["0:A#1"];
+    assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(prof, persisted),
+      { symbol: "؎", fill: "#ff0000", color: "#112233" },
+      "(a) untouched fields inherit profile defaults on sibling keys");
+  }
+
+  // (b) C2: sibling's explicit color survives an Apply that touched only the
+  // symbol — the color input still shows its seeded display fallback
+  // (#a7352a), which must NOT count as touched.
+  {
+    const gi = AshaarOverrides.gapApplyInputs(snap, {
+      symbol: "*", fillOn: false, fill: "#f5f0e0", color: "#a7352a",
+    });
+    assert.deepStrictEqual(gi.touched, { symbol: true, fill: false, color: false },
+      "display-fallback color is not touched");
+    const merged = AshaarOverrides.mergeFanOutSlotDecor(
+      { color: "#00ff00" }, gi.decor, gi.touched);
+    const tag = AshaarWord.setTagSlotDecor(
+      AshaarWord.contentControlTag("poem", { profile: "Q" }, [[["c", "g", "c"]]]),
+      "0:A#1", merged);
+    const persisted = (AshaarWord.parseContentControlTag(tag).slotDecor || {})["0:A#1"];
+    assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(prof, persisted),
+      { symbol: "*", fill: "#eeeeee", color: "#00ff00" },
+      "(b) sibling's explicit color survives a symbol-only Apply");
+  }
+
+  // (c) A genuinely touched color propagates to siblings.
+  {
+    const gi = AshaarOverrides.gapApplyInputs(snap, {
+      symbol: "", fillOn: false, fill: "#f5f0e0", color: "#123456",
+    });
+    assert.strictEqual(gi.touched.color, true, "changed color is touched");
+    const merged = AshaarOverrides.mergeFanOutSlotDecor(
+      { color: "#00ff00", symbol: "٭" }, gi.decor, gi.touched);
+    const tag = AshaarWord.setTagSlotDecor(
+      AshaarWord.contentControlTag("poem", { profile: "Q" }, [[["c", "g", "c"]]]),
+      "0:A#1", merged);
+    const persisted = (AshaarWord.parseContentControlTag(tag).slotDecor || {})["0:A#1"];
+    assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(prof, persisted),
+      { symbol: "٭", fill: "#eeeeee", color: "#123456" },
+      "(c) touched color propagates; sibling's own symbol survives");
+  }
+
+  // (d) Current key full-replace preserves untouched ORIGINAL values: a gap
+  // with no persisted color whose user touches only the symbol must write a
+  // decor whose color is "" (absent after round-trip → inherits profile),
+  // never the display fallback #a7352a.
+  {
+    const snapWithSymbol = {
+      orig: { symbol: "؎", fill: "", color: "" },
+      disp: { symbol: "؎", fillOn: false, fill: "#f5f0e0", color: "#a7352a" },
+    };
+    const gi = AshaarOverrides.gapApplyInputs(snapWithSymbol, {
+      symbol: "٭", fillOn: false, fill: "#f5f0e0", color: "#a7352a",
+    });
+    assert.deepStrictEqual(gi.decor, { symbol: "٭", fill: "", color: "" },
+      "untouched fields round-trip the original value, not the display fallback");
+    // Current key writes gi.decor verbatim (full replace).
+    const tag = AshaarWord.setTagSlotDecor(
+      AshaarWord.contentControlTag("poem", { profile: "Q" }, [[["c", "g", "c"]]]),
+      "0:A#1", gi.decor);
+    const persisted = (AshaarWord.parseContentControlTag(tag).slotDecor || {})["0:A#1"];
+    assert.deepStrictEqual(persisted, { symbol: "٭" },
+      "codec drops the empty fill/color — no baked-in fallback");
+    assert.deepStrictEqual(AshaarOverrides.resolveSlotDecor(prof, persisted),
+      { symbol: "٭", fill: "#eeeeee", color: "#112233" },
+      "(d) current key: untouched fields still inherit the profile");
+  }
+}
+
 console.log("cell-overrides.test.js OK");
