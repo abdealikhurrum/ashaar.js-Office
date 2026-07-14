@@ -63,6 +63,29 @@
     return AshaarOverrides.overrideKey(tableIndex, entry.kind === "content" ? entry.label : entry.slot);
   }
 
+  // Harmony-pooling key: which cells across DIFFERENT ROWS of a mapped
+  // (bandh-cell-map) table balance to one width. The label/slot alone (A1,
+  // B1, C1…) can't be used directly — the row letter makes every row its own
+  // pool, which was the bug (see natural-width-matrix.js positionKey). Simply
+  // stripping the row letter isn't safe either: a marsiya bandh can stack
+  // rows of DIFFERENT shape (3 content cells, then a solo, then a flanked
+  // pair) where the ordinal "1" recurs in every row but refers to physically
+  // different cells that must never share a width. So the group key is the
+  // ordinal (content/spacing number within its row, i.e. the label/slot with
+  // its row letter stripped) PLUS the row's own token-shape ("c"/"g" pattern
+  // joined) — two cells only pool when both the ordinal AND the row shape
+  // match, which holds exactly when the rows are structurally identical
+  // (a couplet's rows repeated down a single table) and never holds across
+  // rows of a different content layout. `kind` is folded in too so a content
+  // ordinal and a spacing ordinal can never collide.
+  function columnGroupKey(pattern, entry) {
+    entry = entry || {};
+    var rowShape = (pattern && pattern[entry.row]) ? pattern[entry.row].join("") : "";
+    var raw = entry.kind === "content" ? entry.label : entry.slot;
+    var ordinal = String(raw || "").replace(/^[A-Za-z]+#?/, "");
+    return entry.kind + ":" + rowShape + ":" + ordinal;
+  }
+
   // Fan one Apply out to the keys it targets. `map` is the current table's cell
   // map (buildBandhCellMap output for the table containing currentKey) — used
   // for "this"/"bandh". `tables` is the block's full per-table pattern list
@@ -122,5 +145,6 @@
     buildBandhCellMap: buildBandhCellMap,
     alignPatternToTable: alignPatternToTable,
     keysForTarget: keysForTarget,
+    columnGroupKey: columnGroupKey,
   };
 }));

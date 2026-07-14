@@ -18,11 +18,17 @@
 }(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  // Stable signature for a grid position. Cells with the same (row, col, span)
-  // across bandhs occupy the "same position" and balance to one width.
+  // Stable signature for a grid position. Cells with the same (col, span)
+  // occupy the "same position" and balance to one width. `row` is
+  // DELIBERATELY excluded: harmony must pool a position across every ROW that
+  // shares it (e.g. five baits stacked as five rows of one couplet table),
+  // not just across bandhs/tables. Including row here was the bug — each row
+  // became a pool of one and harmony degenerated to per-row elongation. A
+  // caller may still pass `row` (harmless — ignored) so existing call sites
+  // don't need to change their argument shape.
   function positionKey(sig) {
     sig = sig || {};
-    return (sig.row || 0) + ":" + (sig.col || 0) + ":" + (sig.span || 0);
+    return (sig.col || 0) + ":" + (sig.span || 0);
   }
 
   // A content cell holds misra text (participates in the matrix and is

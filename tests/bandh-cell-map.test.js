@@ -145,4 +145,64 @@ assert.strictEqual(AshaarCellMap.alignPatternToTable(null, [["c"]]), false);
   );
 }
 
+// ── columnGroupKey: harmony-pooling fix. Mapped cells pool across ROWS by
+// structural slot (row token-shape + ordinal), never by row letter — a
+// couplet's rows stacked in one table (same shape) pool; marsiya rows of
+// different content-count (3/1/2) never cross-pool despite sharing an
+// ordinal number. ──────────────────────────────────────────────────────────
+{
+  // Three same-shape couplet rows [c,c] stacked in one table.
+  const pattern = [["c", "c"], ["c", "c"], ["c", "c"]];
+  const map = AshaarCellMap.buildBandhCellMap(pattern);
+  const a1 = map.find((e) => e.label === "A1");
+  const b1 = map.find((e) => e.label === "B1");
+  const c1 = map.find((e) => e.label === "C1");
+  const a2 = map.find((e) => e.label === "A2");
+  assert.strictEqual(
+    AshaarCellMap.columnGroupKey(pattern, a1),
+    AshaarCellMap.columnGroupKey(pattern, b1),
+    "same row-shape, same ordinal (misra 1) → pools across rows"
+  );
+  assert.strictEqual(
+    AshaarCellMap.columnGroupKey(pattern, a1),
+    AshaarCellMap.columnGroupKey(pattern, c1)
+  );
+  assert.notStrictEqual(
+    AshaarCellMap.columnGroupKey(pattern, a1),
+    AshaarCellMap.columnGroupKey(pattern, a2),
+    "different ordinal (misra 1 vs misra 2) never pools"
+  );
+}
+{
+  // Marsiya: rows of DIFFERENT shape — 3 content cells, then a solo (1), then
+  // a flanked pair (2). Ordinal "1" appears in every row but must not
+  // cross-pool cells whose widths genuinely differ (different layouts).
+  const pattern = [["c", "c", "c"], ["g", "c", "g"], ["c", "g", "c"]];
+  const map = AshaarCellMap.buildBandhCellMap(pattern);
+  const rowAFirst = map.find((e) => e.label === "A1");
+  const rowBFirst = map.find((e) => e.label === "B1");
+  const rowCFirst = map.find((e) => e.label === "C1");
+  assert.notStrictEqual(
+    AshaarCellMap.columnGroupKey(pattern, rowAFirst),
+    AshaarCellMap.columnGroupKey(pattern, rowBFirst),
+    "different row shape → never pools even at the same ordinal"
+  );
+  assert.notStrictEqual(
+    AshaarCellMap.columnGroupKey(pattern, rowAFirst),
+    AshaarCellMap.columnGroupKey(pattern, rowCFirst)
+  );
+}
+{
+  // Content and spacing never collide even at the same ordinal number.
+  const pattern = [["c", "g"]];
+  const map = AshaarCellMap.buildBandhCellMap(pattern);
+  const content1 = map.find((e) => e.kind === "content");
+  const spacing1 = map.find((e) => e.kind === "spacing");
+  assert.notStrictEqual(
+    AshaarCellMap.columnGroupKey(pattern, content1),
+    AshaarCellMap.columnGroupKey(pattern, spacing1),
+    "content and spacing ordinals never collide"
+  );
+}
+
 console.log("bandh-cell-map.test.js OK");

@@ -949,7 +949,7 @@
             cells.push({
               cell: cell, current: current, base: base,
               measure: base.replace(/\s+/g, " ").trim(),
-              matKey: mapped ? (mapped.label || mapped.slot) : AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
+              matKey: mapped ? AshaarCellMap.columnGroupKey(tablePattern, mapped) : AshaarMatrix.positionKey({ row: ri, col: ci, span: cols }),
               kind: mapped ? mapped.kind : null,
               slot: (mapped && mapped.kind === "spacing") ? mapped.slot : null,
               decorKey: (mapped && mapped.kind === "spacing" && mapped.slot) ? AshaarOverrides.overrideKey(j, mapped.slot) : null,
@@ -3001,15 +3001,17 @@
           var cols = row.cells.items.length;
           row.cells.items.forEach(function (cell, ci) {
             allCells.push(cell);
-            // Harmony key + content/spacing: the label from the persisted map
-            // (A1 matches A1 across bandhs) when available, else the geometric
-            // signature. `__kind` lets an empty content cell stay content and a
-            // tagged gap be skipped regardless of its text.
+            // Harmony key + content/spacing: the column-group key derived from
+            // the persisted map (pools A1/B1/C1… across ROWS of one table when
+            // their row shapes genuinely match — see columnGroupKey) when
+            // available, else the geometric signature. `__kind` lets an empty
+            // content cell stay content and a tagged gap be skipped regardless
+            // of its text.
             var mapped = tblMap ? tblMap[cellSeq] : null;
             cellSeq++;
             if (mapped) {
               cell.__kind = mapped.kind;
-              cell.__matKey = mapped.label || mapped.slot;
+              cell.__matKey = AshaarCellMap.columnGroupKey(pattern, mapped);
               cell.__ovKey = (mapped.kind === "content" && mapped.label)
                 ? AshaarOverrides.overrideKey(ti, mapped.label) : null;
             } else {
@@ -3539,7 +3541,13 @@
             colPx: Math.round(colPx),
             colIn: (colPx / 96).toFixed(2),
             nat: Math.round(natSum),
-            target: Math.round(colPx * (calibParams.targetFill || 1)),
+            // gTarget is the ACTUAL value passed to justifyRunsConcentrated on
+            // the natural-fit kashida path (harmony-pooled via widthMatrix).
+            // The old colPx*targetFill readout ignored the matrix entirely and
+            // actively misled debugging of the row-pooling bug (M4). gTarget
+            // is only assigned on that branch; the spacing/scale branch never
+            // sets it, so keep the previous readout there unchanged.
+            target: Math.round(gTarget != null ? gTarget : colPx * (calibParams.targetFill || 1)),
             fin: Math.round(finSum),
             fill: colPx ? Math.round(finSum / colPx * 100) : 0,
             tw: twCount + (sp ? " ws" + sp.wordSpacing + " x" + sp.fontScale : ""),

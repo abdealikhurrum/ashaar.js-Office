@@ -1,18 +1,32 @@
 const assert = require("assert");
 const AshaarMatrix = require("../src/taskpane/natural-width-matrix");
 
-// ── positionKey: stable signature, order-independent fields ──────────────────
-assert.strictEqual(AshaarMatrix.positionKey({ row: 0, col: 6, span: 6 }), "0:6:6");
-assert.strictEqual(AshaarMatrix.positionKey({ row: 1, col: 0 }), "1:0:0"); // missing span → 0
+// ── positionKey: stable signature over (col, span) — row is DELIBERATELY
+// excluded. Harmony pools cells at the same grid position across ROWS (a
+// couplet's rows stacked in one table); including row in the key was the
+// bug — every row became its own pool of one and harmony degenerated to
+// per-cell elongation. See docs 2026-07-13 harmony-pooling fix. ─────────────
+assert.strictEqual(AshaarMatrix.positionKey({ row: 0, col: 6, span: 6 }), "6:6");
+assert.strictEqual(AshaarMatrix.positionKey({ row: 1, col: 0 }), "0:0"); // missing span → 0
 assert.strictEqual(
   AshaarMatrix.positionKey({ row: 0, col: 0, span: 6 }),
   AshaarMatrix.positionKey({ row: 0, col: 0, span: 6 }),
   "same signature → same key"
 );
+assert.strictEqual(
+  AshaarMatrix.positionKey({ row: 3, col: 0, span: 6 }),
+  AshaarMatrix.positionKey({ row: 9, col: 0, span: 6 }),
+  "row is ignored — same col/span pools across ANY rows (a)"
+);
 assert.notStrictEqual(
   AshaarMatrix.positionKey({ row: 0, col: 0, span: 6 }),
   AshaarMatrix.positionKey({ row: 0, col: 6, span: 6 }),
-  "different column → different key"
+  "different column → different key (b)"
+);
+assert.notStrictEqual(
+  AshaarMatrix.positionKey({ row: 0, col: 0, span: 6 }),
+  AshaarMatrix.positionKey({ row: 5, col: 0, span: 3 }),
+  "different span → different key even across rows (b)"
 );
 
 // ── buildMatrix: longest natural per position across bandhs ──────────────────
@@ -33,6 +47,53 @@ assert.notStrictEqual(
   // A position with a single cell → its own natural (trivial single-bandh case).
   const m = AshaarMatrix.buildMatrix([{ key: "0:0:6", natural: 325 }]);
   assert.strictEqual(m["0:0:6"], 325);
+}
+
+// ── Harmony-pooling fix (a): same column+span, different ROWS → same key,
+// and the pooled Wpos is the max across those rows (single-table couplet).
+{
+  const kA = AshaarMatrix.positionKey({ row: 0, col: 0, span: 6 });
+  const kB = AshaarMatrix.positionKey({ row: 1, col: 0, span: 6 });
+  const kC = AshaarMatrix.positionKey({ row: 2, col: 0, span: 6 });
+  assert.strictEqual(kA, kB, "same col/span, different rows → same key");
+  assert.strictEqual(kA, kC);
+  const m = AshaarMatrix.buildMatrix([
+    { key: kA, natural: 137 },
+    { key: kB, natural: 171 },
+    { key: kC, natural: 124 },
+  ]);
+  assert.strictEqual(m[kA], 171, "pooled Wpos is the max natural across the rows");
+}
+
+// ── Harmony-pooling fix (b): a different span or column, even across rows,
+// must NOT pool — distinct keys, distinct Wpos.
+{
+  const wide = AshaarMatrix.positionKey({ row: 0, col: 0, span: 6 });
+  const narrow = AshaarMatrix.positionKey({ row: 1, col: 6, span: 3 });
+  assert.notStrictEqual(wide, narrow);
+  const m = AshaarMatrix.buildMatrix([
+    { key: wide, natural: 171 },
+    { key: narrow, natural: 145 },
+  ]);
+  assert.strictEqual(m[wide], 171);
+  assert.strictEqual(m[narrow], 145, "distinct column/span never pool into the wide column's Wpos");
+}
+
+// ── Harmony-pooling fix (c): regression reproducing the couplet-harmony
+// scenario numerically. Five rows (baits) share ONE column position with
+// naturals [137,136,171,124,153]; reach 205.52, φ=0.5556 → pooling makes
+// every row's gTarget equal ≈190.2 (flush column), not per-row raggedness.
+{
+  const naturals = [137, 136, 171, 124, 153];
+  const reach = 205.52, phi = 0.5556;
+  const keys = naturals.map((n, ri) => AshaarMatrix.positionKey({ row: ri, col: 0, span: 6 }));
+  keys.forEach((k) => assert.strictEqual(k, keys[0], "all five rows pool to one key"));
+  const matrix = AshaarMatrix.buildMatrix(naturals.map((n, i) => ({ key: keys[i], natural: n })));
+  const Wpos = matrix[keys[0]];
+  assert.strictEqual(Wpos, 171, "Wpos = max of the five naturals");
+  const targets = naturals.map(() => AshaarMatrix.naturalFitTarget(Wpos, reach, phi));
+  targets.forEach((t) => assert.ok(Math.abs(t - 190.2) < 0.1, "gTarget ≈190.2, got " + t));
+  assert.ok(targets.every((t) => t === targets[0]), "every row gets the SAME gTarget — flush column");
 }
 {
   // Empty / degenerate.
