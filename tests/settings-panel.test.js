@@ -134,19 +134,27 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
 {
   const resolved = resolveSettings({ payload: { profile: "", local: {} }, profileStore: {}, scope: { level: "poem" } });
   const t = { kind: "block", scope: { level: "poem" }, cellEnabled: false, gapEnabled: false };
+  const RERENDER_SUFFIX = " · Re-render: always rebuilds poem tables (full re-layout)";
   const structural = AshaarPanel.panelStateFor({ resolved, pending: { set: { gap: 8 }, clear: [] }, target: t });
-  assert.strictEqual(structural.footer.costLabel, "Apply — rebuilds poem tables");
+  assert.strictEqual(structural.footer.costLabel, "Apply — rebuilds poem tables" + RERENDER_SUFFIX);
   const light = AshaarPanel.panelStateFor({ resolved, pending: { set: { strength: 9 }, clear: [] }, target: t });
-  assert.strictEqual(light.footer.costLabel, "Apply — re-justifies poem");
+  assert.strictEqual(light.footer.costLabel, "Apply — re-justifies poem" + RERENDER_SUFFIX);
   const cellT = { kind: "block", scope: { level: "cell", key: "A2:3" }, cellEnabled: true, gapEnabled: false, cellLabel: "A2:3" };
   const cellResolved = resolveSettings({ payload: { profile: "", local: {} }, profileStore: {}, scope: { level: "cell", key: "A2:3" } });
   assert.strictEqual(AshaarPanel.panelStateFor({ resolved: cellResolved, pending: { set: {}, clear: [] }, target: cellT }).footer.costLabel,
-    "Apply — re-justifies poem");
+    "Apply — re-justifies poem" + RERENDER_SUFFIX);
   // justifyMode none → unjustified suffix
   const noneResolved = resolveSettings({ payload: { profile: "", local: { justifyMode: "none" } }, profileStore: {}, scope: { level: "poem" } });
   assert.strictEqual(AshaarPanel.panelStateFor({ resolved: noneResolved, pending: { set: { gap: 8 }, clear: [] }, target: t }).footer.costLabel,
-    "Apply — rebuilds poem tables (unjustified: Justification is None)");
+    "Apply — rebuilds poem tables (unjustified: Justification is None)" + RERENDER_SUFFIX);
   assert.deepStrictEqual(AshaarPanel.STRUCTURAL_KEYS, ["gap", "widthMode", "widthPct", "layoutMode", "colWidthMode", "separatorPt"]);
+
+  // A plain (non-block) selection never shows Re-render — the button is
+  // disabled for it, so the caption must not mention it either.
+  const selT = { kind: "selection", scope: { level: "poem" }, cellEnabled: false, gapEnabled: false };
+  const selSt = AshaarPanel.panelStateFor({ resolved, pending: { set: { gap: 8 }, clear: [] }, target: selT });
+  assert.strictEqual(selSt.footer.costLabel, "Apply — rebuilds poem tables",
+    "no Re-render suffix outside a block target");
 }
 
 // ── resettable: committed cell/bandh overrides keep the reset dot, not just

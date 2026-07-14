@@ -50,11 +50,19 @@
     return head;
   }
 
-  function costLabelFor(pending, level, justifyMode) {
+  // isBlock: whether the cursor target is a block (poem/bandh/cell/gap) —
+  // exactly the condition that enables the Re-render button (see renderPanel:
+  // sp-rerender.disabled = !(target && target.kind === "block")). Re-render
+  // ALWAYS does a full rebuild regardless of what's dirty, unlike Apply
+  // (whose cost depends on whether the pending edits are structural) — the
+  // caption previously only ever described Apply, so a tester couldn't tell
+  // Re-render's cost without hovering a separate, easy-to-miss tooltip.
+  function costLabelFor(pending, level, justifyMode, isBlock) {
     var dirtyKeys = Object.keys(pending.set).concat(pending.clear);
     var structural = level === "poem" && dirtyKeys.some(function (k) { return STRUCTURAL_KEYS.indexOf(k) !== -1; });
     var label = structural ? "Apply — rebuilds poem tables" : "Apply — re-justifies poem";
     if (justifyMode === "none") label += " (unjustified: Justification is None)";
+    if (isBlock) label += " · Re-render: always rebuilds poem tables (full re-layout)";
     return label;
   }
 
@@ -100,7 +108,7 @@
       footer: {
         applyEnabled: true,
         revertLabel: resolved.profileName ? "Revert to profile" : "Reset to defaults",
-        costLabel: costLabelFor(pending, level, resolved.values.justifyMode),
+        costLabel: costLabelFor(pending, level, resolved.values.justifyMode, target.kind === "block"),
       },
     };
   }
