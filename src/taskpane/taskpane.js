@@ -4438,6 +4438,18 @@
             (gapFillOnEl.checked && gapFillEl.value !== _seededGapDecor.fill),
           color: gapColorEl.value !== (_seededGapDecor.color || ""),
         };
+        // Blueprint (iii)/(iv): decor-only fast apply. Gap decor never
+        // affects width math (natural-width matrix and
+        // recomputeQaseedaNaturals iterate content cells only), so a gap
+        // Apply can paint the targeted spacing cell(s) directly, in the SAME
+        // withWordStrict transaction as the tag write, instead of routing
+        // through the full pass-1/pass-2 pipeline (gatherQaseedaBlocks'
+        // whole-document CC scan + capture/measure + rewrite of every
+        // content cell) — that pipeline exists to keep justify math
+        // consistent across a profile, which gap decor never touches. This
+        // is also what makes gap decor come alive WITHOUT a profile: the
+        // only prior painter was applyProfileToQaseeda pass-2, which never
+        // runs on an unprofiled block.
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
           var keys = cellTargetKeys(cc.tag, "spacing", target.gapKey, "sp-gap-target");
@@ -4456,12 +4468,56 @@
           var newTag = cc.tag;
           keys.forEach(function (k) { newTag = AshaarWord.setTagSlotDecor(newTag, k, mergedByKey[k]); });
           cc.tag = newTag;
+          // Resolve the live table geometry (sync #1 — same table lookup
+          // cellTargetKeys/reflectActiveCell use, minus the range-intersection
+          // scan: the table index is already known from each key).
+          var tbls = cc.getRange().tables;
+          tbls.load("items");
           await context.sync();
+          var newPayload = AshaarWord.parseContentControlTag(newTag) || {};
+          var prof = newPayload.profile ? (loadProfileStore()[newPayload.profile] || null) : null;
+          keys.forEach(function (k) {
+            var sepIdx = String(k).indexOf(":");
+            var tIdx = parseInt(String(k).slice(0, sepIdx), 10) || 0;
+            var slot = String(k).slice(sepIdx + 1);
+            var pattern = (newPayload.cells || [])[tIdx];
+            var tbl = tbls.items[tIdx];
+            if (!pattern || !tbl) return;
+            var map = AshaarCellMap.buildBandhCellMap(pattern);
+            var entry = null;
+            for (var mi = 0; mi < map.length; mi++) {
+              if (map[mi].kind === "spacing" && map[mi].slot === slot) { entry = map[mi]; break; }
+            }
+            if (!entry) return;
+            var inRow = map.filter(function (e) { return e.row === entry.row; });
+            var wcell = tbl.getCell(entry.row, inRow.indexOf(entry));
+            // Same merge pass-2 of applyProfileToQaseeda uses, so standalone
+            // painting matches what a later profile pass would produce.
+            var pDecor = prof ? (prof.spacingDecor || {})[slot] : null;
+            var paint = AshaarOverrides.resolveSlotDecor(pDecor, mergedByKey[k]);
+            // Accepted characteristic (unchanged from pass-2): a long symbol
+            // may visually clip in the fixed-width spacing cell — the gap
+            // column is sized for a short glyph/number, not prose.
+            wcell.body.clear();
+            if (paint.symbol) {
+              wcell.body.insertText(paint.symbol, Word.InsertLocation.replace);
+              // §4 color transition-clear: this always (re)asserts color from
+              // the freshly-resolved `paint`, so a color→none transition
+              // self-heals to "black" right here — no separate pending/retry
+              // bookkeeping needed (unlike the cell branch's
+              // _pendingColorClears, which has to survive a SEPARATE render
+              // pass; this paint IS the render, in the same transaction).
+              wcell.body.font.color = paint.color || "black";
+            }
+            // shadingColor rejects "" / "No color"; "#FFFFFF" is the documented
+            // clear value (same quirk pass-2 works around).
+            wcell.shadingColor = paint.fill || "#FFFFFF";
+            wcell.body.paragraphs.getFirst().alignment = Word.Alignment.centered;
+          });
+          await context.sync(); // sync #2: commits the decor paint
         });
-        if (run) run.phase("tag write");
-        tagWritten();
-        await reapplyBlock(run);
-        if (run) run.phase("pipeline");
+        if (run) run.phase("decor write");
+        setMessage("Done.");
       }
       // Success tail — must run AFTER the pipelines: they consume pending via
       // options() → panelValues() (resolved old tag + pending overlay), so the
