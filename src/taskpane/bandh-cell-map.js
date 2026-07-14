@@ -72,14 +72,17 @@
   // the map itself carries no table index.
   //
   //   kind      ∈ "content" | "spacing"
-  //   mode      ∈ "this" | "bandh" | "poem"
+  //   mode      ∈ "this" | "bandh" | "poem" | "position"
   //   currentKey  the key of the cell/gap under the cursor
   //   tables    payload.cells (array of patterns, one per table) — required
-  //             for mode "poem"; ignored otherwise.
+  //             for mode "poem"/"position"; ignored otherwise.
   //
   // Containment holds by construction: "this" ⊆ "bandh" (same table) ⊆ "poem"
-  // (all tables); content and spacing never mix because both the map filter
-  // and the "poem" per-table rebuild filter strictly on `kind`.
+  // (all tables); "position" ⊆ "poem" too (same tables, filtered to one
+  // label). Content and spacing never mix because every fan-out filters
+  // strictly on `kind`, and (for "position") on the label/slot field that
+  // kind actually carries — a content label ("A1") and a spacing slot
+  // ("A#1") never collide.
   function keysForTarget(map, kind, mode, currentKey, tables) {
     if (mode === "this") return [currentKey];
     var tableIndex = parseInt(String(currentKey).split(":")[0], 10) || 0;
@@ -96,6 +99,21 @@
           .forEach(function (e) { out.push(keyForEntry(ti, e)); });
       });
       return out;
+    }
+    if (mode === "position") {
+      // "Same cell in all bandhs": every table's cell whose label (content)
+      // or slot (spacing) equals currentKey's, regardless of table index.
+      var curLabel = String(currentKey).slice(String(currentKey).indexOf(":") + 1);
+      var outP = [];
+      (tables || []).forEach(function (pattern, ti) {
+        buildBandhCellMap(pattern)
+          .filter(function (e) {
+            if (e.kind !== kind) return false;
+            return (kind === "content" ? e.label : e.slot) === curLabel;
+          })
+          .forEach(function (e) { outP.push(keyForEntry(ti, e)); });
+      });
+      return outP;
     }
     return [];
   }

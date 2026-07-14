@@ -113,6 +113,36 @@ assert.strictEqual(AshaarCellMap.alignPatternToTable(null, [["c"]]), false);
   // Content and spacing enumerations never mix.
   bandhContent.concat(poemContent).forEach((k) => assert.ok(k.indexOf("#") === -1, "content key has no '#': " + k));
   bandhSpacing.concat(poemSpacing).forEach((k) => assert.ok(k.indexOf("#") !== -1, "spacing key has '#': " + k));
+
+  // ── mode "position": same-label cell across EVERY table, not just the
+  // current one — "Same cell in all bandhs". Table 0's content is A1,A2;
+  // table 1's is A1,A2,B1 — position on table 1's A1 must hit both tables'
+  // A1 (and only A1: never A2/B1, and never table 1's own bandh-mates).
+  const positionContent = AshaarCellMap.keysForTarget(table1Map, "content", "position", curContentKey, tables);
+  assert.deepStrictEqual(
+    positionContent,
+    ["0:A1", "1:A1"],
+    "position → same label (A1) across all tables, no other labels"
+  );
+  const positionSpacing = AshaarCellMap.keysForTarget(table1Map, "spacing", "position", curSpacingKey, tables);
+  assert.deepStrictEqual(
+    positionSpacing,
+    ["0:A#1", "1:A#1"],
+    "position → same slot (A#1) across all tables"
+  );
+  // Content and spacing still never mix under "position".
+  positionContent.forEach((k) => assert.ok(k.indexOf("#") === -1, "position content key has no '#': " + k));
+  positionSpacing.forEach((k) => assert.ok(k.indexOf("#") !== -1, "position spacing key has '#': " + k));
+  // Containment: position ⊆ poem (same kind), for both kinds.
+  assert.ok(positionContent.every((k) => poemContent.indexOf(k) !== -1), "position content ⊆ poem content");
+  assert.ok(positionSpacing.every((k) => poemSpacing.indexOf(k) !== -1), "position spacing ⊆ poem spacing");
+  // A label that exists in only one table (B1) yields just that table's key.
+  const curB1Key = AshaarOverrides.overrideKey(1, "B1");
+  assert.deepStrictEqual(
+    AshaarCellMap.keysForTarget(table1Map, "content", "position", curB1Key, tables),
+    ["1:B1"],
+    "position on a table-unique label returns only that table's key"
+  );
 }
 
 console.log("bandh-cell-map.test.js OK");
