@@ -94,8 +94,10 @@ The **Fonts** strip (bottom of the pane) exists for fonts Word can render but th
 sandbox can't see (typical on Windows): pick the file, confirm the **Register as** name
 matches what Word shows (auto-filled from the font file when readable), click **Add font**,
 then **Verify at cursor** with the cursor in text using that font. The font is stored
-locally, never uploaded. If a font is unmeasurable at Apply time, the pane prompts you once
-with the same *Add font file…* flow.
+locally, never uploaded. If a font is unmeasurable at Apply time, a warning bar appears
+**inline inside the pane** (Word add-ins can't open pop-up windows) with two buttons:
+*Add font file…* opens the Fonts strip pre-filled, *Continue anyway* proceeds with
+approximate metrics.
 
 Keep custom font family names **31 characters or fewer** — Word silently truncates longer
 names, which breaks the name matching.
