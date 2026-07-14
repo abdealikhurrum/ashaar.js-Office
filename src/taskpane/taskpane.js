@@ -899,22 +899,54 @@
     var section = context.document.sections.getFirst();
     section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
 
-    var blockTables = blocks.map(function (cc) { var t = cc.getRange().tables; t.load("items"); return t; });
-    await context.sync();
-    blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.load("items"); }); });
-    await context.sync();
-    blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); }); });
-    await context.sync();
-    blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) {
-      row.cells.items.forEach(function (cell) {
-        cell.body.load("text"); cell.body.font.load("name,size");
-        // First-paragraph alignment + indent — the run-aware justify pass rebuilds
-        // each cell via OOXML and must re-assert its visual side (sadr/ajuz/solo)
-        // and any stacked-layout indent.
-        cell.body.paragraphs.load("alignment,leftIndent");
-      });
-    }); }); });
-    await context.sync();
+    // FAST (1 sync): hierarchical load per block of tables → rows → cells with
+    // each cell's body text, font name/size and first-paragraph alignment +
+    // indent — the exact reads the four-sync sequential chain below makes.
+    // Same batched idiom as justifySelectionInner's load phase (extends
+    // 8835c02's proven face-gate fast path); rejection → verbatim fallback.
+    // (First-paragraph alignment + indent: the run-aware justify pass rebuilds
+    // each cell via OOXML and must re-assert its visual side (sadr/ajuz/solo)
+    // and any stacked-layout indent.)
+    var QDEEP = "items/rows/items/cells/items/body/text," +
+      "items/rows/items/cells/items/body/font/name," +
+      "items/rows/items/cells/items/body/font/size," +
+      "items/rows/items/cells/items/body/paragraphs/items/alignment," +
+      "items/rows/items/cells/items/body/paragraphs/items/leftIndent";
+    var blockTables = blocks.map(function (cc) { return cc.getRange().tables; });
+    var qFastLoad = false;
+    try {
+      blockTables.forEach(function (t) { t.load(QDEEP); });
+      await context.sync();
+      // Probe one populated cell — PropertyNotLoaded routes to the fallback.
+      for (var qbi = 0; qbi < blockTables.length; qbi++) {
+        var qbt = blockTables[qbi];
+        if (qbt.items.length && qbt.items[0].rows.items.length &&
+            qbt.items[0].rows.items[0].cells.items.length) {
+          var qProbe = qbt.items[0].rows.items[0].cells.items[0];
+          void qProbe.body.text; void qProbe.body.font.name; void qProbe.body.paragraphs.items;
+          break;
+        }
+      }
+      qFastLoad = true;
+    } catch (eQFast) { qFastLoad = false; }
+    if (!qFastLoad) {
+      // FALLBACK (verbatim pre-batch path). A failed sync discards its whole
+      // queue, so the section pageLayout load is re-queued here too.
+      section.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+      blockTables.forEach(function (t) { t.load("items"); });
+      await context.sync();
+      blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.load("items"); }); });
+      await context.sync();
+      blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); }); });
+      await context.sync();
+      blockTables.forEach(function (t) { t.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) {
+        row.cells.items.forEach(function (cell) {
+          cell.body.load("text"); cell.body.font.load("name,size");
+          cell.body.paragraphs.load("alignment,leftIndent");
+        });
+      }); }); });
+      await context.sync();
+    }
 
     var pl = section.pageLayout;
     var pagePt = pl && pl.width ? (pl.width - (pl.leftMargin || 0) - (pl.rightMargin || 0)) : 468;
@@ -2645,20 +2677,40 @@
       if (isBlock) ccPayload = AshaarWord.parseContentControlTag(cc.tag);
       var workRange = isBlock ? cc.getRange() : selection;
       var tables = workRange.tables;
-      tables.load("items");
-      await context.sync();
+      // FAST (1 sync): hierarchical load of tables → rows → cells → body
+      // text/font-name — the same reads the sequential chain below makes in
+      // four round trips. Same batched idiom as justifySelectionInner's load
+      // phase (extends 8835c02's proven face-gate fast path one collection
+      // level up); any rejection falls back to the verbatim sequential path.
+      var rrFastLoad = false;
+      try {
+        tables.load("items/rows/items/cells/items/body/text,items/rows/items/cells/items/body/font/name");
+        await context.sync();
+        if (tables.items.length && tables.items[0].rows.items.length &&
+            tables.items[0].rows.items[0].cells.items.length) {
+          var rrProbe = tables.items[0].rows.items[0].cells.items[0];
+          void rrProbe.body.text; void rrProbe.body.font.name;
+        }
+        rrFastLoad = true;
+      } catch (eRrFast) {
+        rrFastLoad = false;
+        tables.load("items");
+        await context.sync();
+      }
       if (!tables.items.length) { setMessage("Click inside an Ashaar table to re-render."); return; }
 
-      tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
-      await context.sync();
-      tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
-      await context.sync();
-      tables.items.forEach(function (tbl) {
-        tbl.rows.items.forEach(function (row) {
-          row.cells.items.forEach(function (cell) { cell.body.load("text"); cell.body.font.load("name"); });
+      if (!rrFastLoad) {
+        tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+        await context.sync();
+        tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
+        await context.sync();
+        tables.items.forEach(function (tbl) {
+          tbl.rows.items.forEach(function (row) {
+            row.cells.items.forEach(function (cell) { cell.body.load("text"); cell.body.font.load("name"); });
+          });
         });
-      });
-      await context.sync();
+        await context.sync();
+      }
 
       // Reconstruct source (same reconstruction Adopt / word-fill use).
       // Gap-corruption fix (Parts A+B): for a MANAGED block, spacing cells
@@ -2962,8 +3014,56 @@
       }
 
       var tables = workRange.tables;
-      tables.load("items");
-      await context.sync(); if (debug) syncCount++;
+
+      // Hoisted from the auto-fit branch below (pure client-side capability
+      // check — no document read): the resize branches' preloads need it here.
+      var canResize = (typeof Office !== "undefined" && Office.context && Office.context.requirements
+        && Office.context.requirements.isSetSupported
+        && Office.context.requirements.isSetSupported("WordApiDesktop", "1.3"));
+      // Will a resize branch (auto-fit / table-width %) run later? Known
+      // entirely client-side (opts + capability), so its section-pageLayout
+      // and table-columns loads can ride the batched load below instead of
+      // costing their own round trips inside the branch.
+      var wantsResizePreload = doKashida && canResize &&
+        (!!opts.autoFitWidth || (!opts.autoFitWidth && !!opts.tableWidthPct));
+
+      // FAST (1 sync): one hierarchical load pulls tables → rows → cells plus
+      // each cell's columnWidth, body text, font name/size and first-paragraph
+      // alignment — the exact reads syncs #2–#5 of the sequential path made.
+      // Same idiom as collectBlockFaceNames' proven fast path (8835c02,
+      // user-confirmed live: row.cells.load("items/body/font/name")), extended
+      // one collection level up; unproven depth ⇒ verbatim sequential fallback
+      // below, so an API rejection can never break justify.
+      var DEEP_CELL_PATHS = "items/rows/items/cells/items/columnWidth," +
+        "items/rows/items/cells/items/body/text," +
+        "items/rows/items/cells/items/body/font/name," +
+        "items/rows/items/cells/items/body/font/size," +
+        "items/rows/items/cells/items/body/paragraphs/items/alignment";
+      var fastTableLoad = false, sectionPre = null, colsPreloaded = false;
+      try {
+        tables.load(DEEP_CELL_PATHS + (wantsResizePreload ? ",items/columns/items/width" : ""));
+        if (wantsResizePreload) {
+          sectionPre = context.document.sections.getFirst();
+          sectionPre.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+        }
+        await context.sync(); if (debug) syncCount++;
+        // Probe the deepest loaded properties — a host that accepted the load
+        // but didn't populate the tree throws PropertyNotLoaded here, which
+        // routes to the fallback exactly like a sync rejection would.
+        if (tables.items.length && tables.items[0].rows.items.length &&
+            tables.items[0].rows.items[0].cells.items.length) {
+          var probeCell = tables.items[0].rows.items[0].cells.items[0];
+          void probeCell.columnWidth; void probeCell.body.text;
+          void probeCell.body.font.name; void probeCell.body.paragraphs.items;
+        }
+        fastTableLoad = true;
+        colsPreloaded = wantsResizePreload;
+      } catch (eFastLoad) {
+        // Batched path rejected — fall back to the proven sequential loads.
+        fastTableLoad = false; sectionPre = null; colsPreloaded = false;
+        tables.load("items");
+        await context.sync(); if (debug) syncCount++;
+      }
 
       if (!tables.items.length) {
         // No tables — justify plain selection text, measuring with the selection's own font.
@@ -3030,13 +3130,16 @@
         return;
       }
 
-      // Load rows → cells, including each cell's REAL font name/size (not a guess).
-      tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
-      await context.sync(); if (debug) syncCount++;
-      tables.items.forEach(function (tbl) {
-        tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
-      });
-      await context.sync(); if (debug) syncCount++;
+      // FALLBACK (verbatim pre-batch path): load rows → cells sequentially,
+      // including each cell's REAL font name/size (not a guess).
+      if (!fastTableLoad) {
+        tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+        await context.sync(); if (debug) syncCount++;
+        tables.items.forEach(function (tbl) {
+          tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
+        });
+        await context.sync(); if (debug) syncCount++;
+      }
 
       var allCells = [];
       tables.items.forEach(function (tbl, ti) {
@@ -3069,31 +3172,54 @@
               cell.__matKey = AshaarMatrix.positionKey({ row: ri, col: ci, span: cols });
               cell.__ovKey = null;
             }
-            cell.body.load("text");
-            cell.body.font.load("name,size");
-            // Alignment of the cell's own first paragraph — used by the
-            // font-swap (Jameel) path to preserve the misra's visual side
-            // (sadr/ajuz/solo) when it rebuilds the cell via OOXML.
-            cell.body.paragraphs.load("alignment");
+            if (!fastTableLoad) {
+              cell.body.load("text");
+              cell.body.font.load("name,size");
+              // Alignment of the cell's own first paragraph — used by the
+              // font-swap (Jameel) path to preserve the misra's visual side
+              // (sadr/ajuz/solo) when it rebuilds the cell via OOXML.
+              cell.body.paragraphs.load("alignment");
+            }
           });
         });
       });
-      await context.sync(); if (debug) syncCount++;
+      if (!fastTableLoad) { await context.sync(); if (debug) syncCount++; }
 
       // Split each cell into word-ranges so justify can read a font per word and
       // rebuild the cell as an ordered list of runs (run-aware justification).
-      allCells.forEach(function (cell) {
-        cell.__wordRanges = cell.body.getRange().getTextRanges([" "], true);
-        cell.__wordRanges.load("items");
-      });
-      await context.sync(); if (debug) syncCount++;
-      allCells.forEach(function (cell) {
-        cell.__wordRanges.items.forEach(function (wr) {
-          wr.load("text");
-          wr.font.load("name,size,bold,italic");
+      // FAST (1 sync): batched collection load "items/text,items/font/…" — the
+      // exact shape 8835c02's face-gate fast path proved live in Word (one
+      // collection level, nav-chain beneath). FALLBACK: the verbatim two-sync
+      // expansion (items, then per-item text/font). getTextRanges is a pure
+      // read, safe to re-invoke on the fallback attempt.
+      var fastWrLoad = false;
+      try {
+        allCells.forEach(function (cell) {
+          cell.__wordRanges = cell.body.getRange().getTextRanges([" "], true);
+          cell.__wordRanges.load("items/text,items/font/name,items/font/size,items/font/bold,items/font/italic");
         });
-      });
-      await context.sync(); if (debug) syncCount++;
+        await context.sync(); if (debug) syncCount++;
+        // Probe one populated item — PropertyNotLoaded routes to the fallback.
+        for (var pwi = 0; pwi < allCells.length; pwi++) {
+          var pwItems = allCells[pwi].__wordRanges.items;
+          if (pwItems.length) { void pwItems[0].text; void pwItems[0].font.name; break; }
+        }
+        fastWrLoad = true;
+      } catch (eFastWr) { fastWrLoad = false; }
+      if (!fastWrLoad) {
+        allCells.forEach(function (cell) {
+          cell.__wordRanges = cell.body.getRange().getTextRanges([" "], true);
+          cell.__wordRanges.load("items");
+        });
+        await context.sync(); if (debug) syncCount++;
+        allCells.forEach(function (cell) {
+          cell.__wordRanges.items.forEach(function (wr) {
+            wr.load("text");
+            wr.font.load("name,size,bold,italic");
+          });
+        });
+        await context.sync(); if (debug) syncCount++;
+      }
 
       // Representative font taken from the cells themselves (fall back to the
       // pane). §7: skip a cell whose text is nothing but justification
@@ -3160,14 +3286,15 @@
       // Auto-fit (in place): widen each table's columns so the widest misra has
       // kashida headroom, then justify into the new widths. Uses the desktop-only
       // TableColumn API (WordApiDesktop 1.3); on hosts without it, justify proceeds
-      // at the current widths (no resize).
-      var canResize = (typeof Office !== "undefined" && Office.context && Office.context.requirements
-        && Office.context.requirements.isSetSupported
-        && Office.context.requirements.isSetSupported("WordApiDesktop", "1.3"));
+      // at the current widths (no resize). canResize is hoisted above the
+      // batched table load (its preload predicate needs it).
       if (opts.autoFitWidth && canvasCtx && canResize) {
-        var sectionA = context.document.sections.getFirst();
-        sectionA.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
-        await context.sync(); if (debug) syncCount++;
+        var sectionA = sectionPre;
+        if (!sectionA) {
+          sectionA = context.document.sections.getFirst();
+          sectionA.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+          await context.sync(); if (debug) syncCount++;
+        }
         var plA = sectionA.pageLayout;
         var pagePt = plA && plA.width ? (plA.width - (plA.leftMargin || 0) - (plA.rightMargin || 0)) : 468;
         var kOn = (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") && Number(opts.tatweelCount || 0) > 0;
@@ -3192,11 +3319,15 @@
         });
 
         if (scaleByTable.some(function (s) { return s > 1.01; })) {
+          // colsPreloaded: the batched table load already pulled every table's
+          // columns/width — no round trip needed to expand them here.
           var colSets = tables.items.map(function (tbl, i) {
             if (scaleByTable[i] <= 1.01) return null;
-            var cols = tbl.columns; cols.load("items/width"); return cols;
+            var cols = tbl.columns;
+            if (!colsPreloaded) cols.load("items/width");
+            return cols;
           });
-          await context.sync(); if (debug) syncCount++;
+          if (!colsPreloaded) { await context.sync(); if (debug) syncCount++; }
           colSets.forEach(function (cols, i) {
             if (!cols) return;
             cols.items.forEach(function (col) { col.width = Math.round(col.width * scaleByTable[i] * 100) / 100; });
@@ -3214,14 +3345,21 @@
         // how insert treats the slider when auto-fit is off, but on the EXISTING
         // table — so a width change no longer requires copy-and-replace. Uniform
         // scale preserves the gap:content proportions (layout shape intact).
-        var sectionW = context.document.sections.getFirst();
-        sectionW.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
-        await context.sync(); if (debug) syncCount++;
+        var sectionW = sectionPre;
+        if (!sectionW) {
+          sectionW = context.document.sections.getFirst();
+          sectionW.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
+          await context.sync(); if (debug) syncCount++;
+        }
         var plW = sectionW.pageLayout;
         var pageW = plW && plW.width ? (plW.width - (plW.leftMargin || 0) - (plW.rightMargin || 0)) : 468;
         var targetW = Math.max(1, (Number(opts.tableWidthPct) / 100) * pageW);
-        var colSetsW = tables.items.map(function (tbl) { var c = tbl.columns; c.load("items/width"); return c; });
-        await context.sync(); if (debug) syncCount++;
+        var colSetsW = tables.items.map(function (tbl) {
+          var c = tbl.columns;
+          if (!colsPreloaded) c.load("items/width");
+          return c;
+        });
+        if (!colsPreloaded) { await context.sync(); if (debug) syncCount++; }
         var didResize = false;
         colSetsW.forEach(function (cols) {
           var cur = 0; cols.items.forEach(function (col) { cur += (col.width || 0); });
