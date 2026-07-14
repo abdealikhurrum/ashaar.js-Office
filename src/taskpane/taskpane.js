@@ -82,11 +82,18 @@
   var ASHAAR_UPSTREAM_VERSION = "caf103f1"; // src/vendor/ASHAAR_UPSTREAM_VERSION: commit=caf103f1c8...
 
   // Format collected per-cell justification metrics into the Debug panel.
-  // `meta` (optional) surfaces session-level probe/calibrate cache hit|miss.
+  // `meta` (optional) surfaces session-level probe/calibrate cache hit|miss,
+  // and (when supplied) the count of context.sync() round trips the justify
+  // pipeline made this run.
   function renderDebug(diags, meta) {
     if (!debugOutput) return;
-    if (!diags.length) { debugOutput.textContent = "(no kashida cells measured)"; return; }
-    var metaLine = meta ? ("probe=" + meta.probe + " calib=" + meta.calib + "\n") : "";
+    if (!diags.length) {
+      debugOutput.textContent = "(no kashida cells measured)" +
+        (meta && meta.syncs != null ? (" — syncs=" + meta.syncs) : "");
+      return;
+    }
+    var metaLine = meta ? ("probe=" + meta.probe + " calib=" + meta.calib +
+      (meta.syncs != null ? (" syncs=" + meta.syncs) : "") + "\n") : "";
     var head = "cell  font        res  col(in)   nat  target  final  fill  tw/cap  text";
     var rows = diags.map(function (d) {
       return [
@@ -2698,7 +2705,7 @@
     // Step 2: fill in place with the correct per-cell mechanism for the chosen
     // mode (skipped when the pane mode is "none").
     var justifyOk = true;
-    if (opts.justifyMode && opts.justifyMode !== "none") justifyOk = await justifySelection();
+    if (opts.justifyMode && opts.justifyMode !== "none") justifyOk = await justifySelection(run);
     if (run) run.phase("justify");
     if (run) {
       run.end();
@@ -2820,13 +2827,13 @@
 
   // Wrapper: suppress active-context reflection while our own justify mutates
   // the document/selection, and guarantee the flag resets on every path.
-  async function justifySelection() {
+  async function justifySelection(run) {
     _reflectBusy = true;
-    try { return await justifySelectionInner(); }
+    try { return await justifySelectionInner(run); }
     finally { _reflectBusy = false; }
   }
 
-  async function justifySelectionInner() {
+  async function justifySelectionInner(run) {
     var opts = options();
     var fontId = opts.fontMode === "nastaliq" ? "noto" : opts.fontMode;
     var mechanism = AshaarFonts.mechanismOf(fontId);
@@ -2857,6 +2864,7 @@
     var debug = !!(debugMode && debugMode.checked);
     var diags = [];
     var probeCacheStatus = "skip", calibCacheStatus = "skip"; // §8 debug visibility
+    var syncCount = 0; // debug-mode-only: counts context.sync() calls made inside this pipeline
 
     setMessage("Justifying…");
 
@@ -2889,7 +2897,7 @@
       // Find enclosing Ashaar Poem content control (the poem is the calibration unit)
       var cc = selection.parentContentControlOrNullObject;
       cc.load("title,tag");
-      await context.sync();
+      await context.sync(); if (debug) syncCount++;
 
       var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem")
         ? cc.getRange() : selection;
@@ -2913,13 +2921,13 @@
 
       var tables = workRange.tables;
       tables.load("items");
-      await context.sync();
+      await context.sync(); if (debug) syncCount++;
 
       if (!tables.items.length) {
         // No tables — justify plain selection text, measuring with the selection's own font.
         selection.load("text");
         selection.font.load("name,size");
-        await context.sync();
+        await context.sync(); if (debug) syncCount++;
         // Just-in-time font-measurement gate (Task 9): a plain selection has no
         // block/cell fonts to gather, so gate on this single face. "cancel"
         // aborts before insertText below — nothing in the document changes.
@@ -2961,9 +2969,9 @@
             plainJustRange = selection.insertText(strippedPlain, Word.InsertLocation.replace);
           }
           plainJustRange.paragraphs.load("items");
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
           plainJustRange.paragraphs.items.forEach(function (p) { p.alignment = Word.Alignment.justified; });
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
           plainWordNativeMsg = wordNativeReason + "Justified paragraph (Word native).";
           return;
         }
@@ -2976,17 +2984,17 @@
         }
         var justifiedText = AshaarWord.justifyPlainTextBlock(stripJustification(selection.text), plainOpts);
         selection.insertText(justifiedText, Word.InsertLocation.replace);
-        await context.sync();
+        await context.sync(); if (debug) syncCount++;
         return;
       }
 
       // Load rows → cells, including each cell's REAL font name/size (not a guess).
       tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
-      await context.sync();
+      await context.sync(); if (debug) syncCount++;
       tables.items.forEach(function (tbl) {
         tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
       });
-      await context.sync();
+      await context.sync(); if (debug) syncCount++;
 
       var allCells = [];
       tables.items.forEach(function (tbl, ti) {
@@ -3028,7 +3036,7 @@
           });
         });
       });
-      await context.sync();
+      await context.sync(); if (debug) syncCount++;
 
       // Split each cell into word-ranges so justify can read a font per word and
       // rebuild the cell as an ordered list of runs (run-aware justification).
@@ -3036,14 +3044,14 @@
         cell.__wordRanges = cell.body.getRange().getTextRanges([" "], true);
         cell.__wordRanges.load("items");
       });
-      await context.sync();
+      await context.sync(); if (debug) syncCount++;
       allCells.forEach(function (cell) {
         cell.__wordRanges.items.forEach(function (wr) {
           wr.load("text");
           wr.font.load("name,size,bold,italic");
         });
       });
-      await context.sync();
+      await context.sync(); if (debug) syncCount++;
 
       // Representative font taken from the cells themselves (fall back to the
       // pane). §7: skip a cell whose text is nothing but justification
@@ -3117,7 +3125,7 @@
       if (opts.autoFitWidth && canvasCtx && canResize) {
         var sectionA = context.document.sections.getFirst();
         sectionA.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
-        await context.sync();
+        await context.sync(); if (debug) syncCount++;
         var plA = sectionA.pageLayout;
         var pagePt = plA && plA.width ? (plA.width - (plA.leftMargin || 0) - (plA.rightMargin || 0)) : 468;
         var kOn = (opts.justifyMode === "kashida" || opts.justifyMode === "spacing") && Number(opts.tatweelCount || 0) > 0;
@@ -3146,17 +3154,17 @@
             if (scaleByTable[i] <= 1.01) return null;
             var cols = tbl.columns; cols.load("items/width"); return cols;
           });
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
           colSets.forEach(function (cols, i) {
             if (!cols) return;
             cols.items.forEach(function (col) { col.width = Math.round(col.width * scaleByTable[i] * 100) / 100; });
           });
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
           // Re-read cell widths (now changed) so justify targets the resized columns.
           tables.items.forEach(function (tbl) {
             tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
           });
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
         }
       } else if (!opts.autoFitWidth && canvasCtx && canResize && opts.tableWidthPct) {
         // Table-width % applied IN PLACE (no rebuild): scale each table's columns
@@ -3166,12 +3174,12 @@
         // scale preserves the gap:content proportions (layout shape intact).
         var sectionW = context.document.sections.getFirst();
         sectionW.load("pageLayout/width,pageLayout/leftMargin,pageLayout/rightMargin");
-        await context.sync();
+        await context.sync(); if (debug) syncCount++;
         var plW = sectionW.pageLayout;
         var pageW = plW && plW.width ? (plW.width - (plW.leftMargin || 0) - (plW.rightMargin || 0)) : 468;
         var targetW = Math.max(1, (Number(opts.tableWidthPct) / 100) * pageW);
         var colSetsW = tables.items.map(function (tbl) { var c = tbl.columns; c.load("items/width"); return c; });
-        await context.sync();
+        await context.sync(); if (debug) syncCount++;
         var didResize = false;
         colSetsW.forEach(function (cols) {
           var cur = 0; cols.items.forEach(function (col) { cur += (col.width || 0); });
@@ -3182,13 +3190,18 @@
           didResize = true;
         });
         if (didResize) {
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
           tables.items.forEach(function (tbl) {
             tbl.rows.items.forEach(function (row) { row.cells.load("items/columnWidth"); });
           });
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
         }
       }
+
+      // Sub-phase marker (debug mode): everything above this point is table/
+      // row/cell/word-range loading (plus any auto-fit/table-width resize),
+      // i.e. the round trips that gather what probe/calibrate/justify need.
+      if (run) run.phase("load cells");
 
       // Probe + calibrate using the real font/size and content widths.
       // §8: both memoized via _tuneCache — probe by (font, engine build),
@@ -3214,6 +3227,7 @@
         }
       }
       if (fontProfile) opts._fontProfile = fontProfile;
+      if (run) run.phase("probe");
 
       var calibParams = { targetFill: 0.92 };
       if (fontProfile) calibParams.fontQualityBoost = 1.8;
@@ -3247,6 +3261,7 @@
           }
         }
       }
+      if (run) run.phase("calibrate");
 
       // Canvas font shorthand for one run: "[italic] [bold] Npt \"Family\"".
       function runFontStr(name, size, bold, italic) {
@@ -3566,6 +3581,7 @@
 
         plans.push({ cell: cell, runs: runs, outTexts: outTexts, sp: sp, align: cellAlignOf(cell), ov: cellOv });
       });
+      if (run) run.phase("justify");
 
       // Phase 2 (write): one context.sync() per cell so a range failure on one
       // cell falls back to a flattened whole-cell replace without aborting the
@@ -3615,7 +3631,7 @@
             p.cell.body.clear();
             p.cell.body.insertOoxml(AshaarWord.wrapOoxml(p.ooxml), Word.InsertLocation.replace);
             applyCellDecor(p.cell, p.ov);
-            await context.sync();
+            await context.sync(); if (debug) syncCount++;
             changed++;
           } catch (e) {
             if (debug) diags.push({ i: diags.length, font: "OOXML-FAIL", text: (e && e.message || "").slice(0, 14) });
@@ -3627,7 +3643,7 @@
           flatPara.insertText(p.flat, Word.InsertLocation.replace);
           if (p.align) flatPara.alignment = officeAlign(p.align);
           applyCellDecor(p.cell, p.ov);
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
           changed++;
           continue;
         }
@@ -3658,19 +3674,20 @@
           // existing sync below (or Word.run's final implicit sync when the
           // text turned out unchanged) — no added round-trips.
           if (p.cell.__ovKey) applyCellDecor(p.cell, p.ov);
-          if (cellChanged) { await context.sync(); changed++; }
+          if (cellChanged) { await context.sync(); if (debug) syncCount++; changed++; }
         } catch (e) {
           // Queued range write failed at sync (or count mismatch) — flatten.
           p.cell.body.paragraphs.getFirst().insertText(p.outTexts.join(" "), Word.InsertLocation.replace);
           applyCellDecor(p.cell, p.ov);
-          await context.sync();
+          await context.sync(); if (debug) syncCount++;
           changed++;
           if (debug) diags.push({ i: diags.length, font: "RANGE-FALLBACK", text: (e && e.message || "").slice(0, 14) });
         }
       }
+      if (run) run.phase("write");
 
       setMessage("Justified " + changed + " cell(s) across " + tables.items.length + " table(s).");
-      if (debug) renderDebug(diags, { probe: probeCacheStatus, calib: calibCacheStatus });
+      if (debug) renderDebug(diags, { probe: probeCacheStatus, calib: calibCacheStatus, syncs: syncCount });
     });
     // Re-assert the cancel message AFTER withWord's unconditional "Done.".
     if (plainGateCancelled) setMessage("Add the font, then Apply again.");
@@ -3995,7 +4012,7 @@
         // Plain selection: one-shot justify with panel values; nothing persisted.
         // (The single-face gate for this route lives inside justifySelection's
         // own no-tables capture — it reads the selection's real font there.)
-        await justifySelection();   // justifySelection reads options() → panelValues()
+        await justifySelection(run);   // justifySelection reads options() → panelValues()
         _panel.pending = { set: {}, clear: [] };
         refreshPanel();
         // This branch returns before the block path's tail below, which is
@@ -4026,7 +4043,7 @@
         });
         if (run) run.phase("tag write");
         tagWritten();
-        await reapplyBlock();                            // re-justify in place
+        await reapplyBlock(run);                            // re-justify in place
         if (run) run.phase("pipeline");
       } else if (_panel.scopeLevel === "cell") {
         var cellFillOnEl = document.getElementById("sp-cell-fill-on");
@@ -4097,7 +4114,7 @@
         });
         if (run) run.phase("tag write");
         tagWritten();
-        await reapplyBlock();
+        await reapplyBlock(run);
         if (run) run.phase("pipeline");
       } else if (_panel.scopeLevel === "gap") {
         await withWordStrict(async function (context) {
@@ -4115,7 +4132,7 @@
         });
         if (run) run.phase("tag write");
         tagWritten();
-        await reapplyBlock();
+        await reapplyBlock(run);
         if (run) run.phase("pipeline");
       }
       // Success tail — must run AFTER the pipelines: they consume pending via
@@ -4226,12 +4243,12 @@
     if (run) run.phase("tag write");
     tagWritten();
     if (structuralDirty) await reRender();     // bare rebuild + in-place justify
-    else await justifySelection();             // justify only — no destructive rebuild
+    else await justifySelection(run);          // justify only — no destructive rebuild
     if (run) run.phase("pipeline");
   }
 
   // Re-justify the block in place (non-structural scopes).
-  async function reapplyBlock() { await justifySelection(); }
+  async function reapplyBlock(run) { await justifySelection(run); }
 
   // Assign: link the block to the selected profile; local tweaks survive.
   // Fix round 1 (reviewer): strict tag write — a failed write must not run the
