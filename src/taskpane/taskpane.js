@@ -863,6 +863,21 @@
   // widths on a canvas. Geometry uses each block's OWN stored opts (from its tag)
   // so it matches how the block was/will be rendered. Returns everything both the
   // rebuild and justify passes need.
+  // Every decor symbol this block could have written into a gap cell: the
+  // profile's per-slot spacingDecor plus the block tag's slotDecor overrides.
+  // Feeds AshaarTableAdopt.stripDecorCells (gap-corruption fix, Part B) when a
+  // table's shape can't be aligned to its persisted pattern.
+  function blockDecorSymbols(profile, slotDecor) {
+    var syms = [];
+    [profile && profile.spacingDecor, slotDecor].forEach(function (map) {
+      Object.keys(map || {}).forEach(function (k) {
+        var s = map[k] && map[k].symbol;
+        if (s) syms.push(s);
+      });
+    });
+    return syms;
+  }
+
   async function captureQaseedaTables(context, blocks, profile) {
     var fallbackName = "Times New Roman";
 
@@ -895,6 +910,7 @@
       var pattern = payload.cells || null;
       var overrides = payload.overrides || {};
       var slotDecor = payload.slotDecor || {};
+      var decorSyms = blockDecorSymbols(profile, slotDecor);
       var repFont = "", repSize = 0;
       var tableInfos = blockTables[bi].items.map(function (tbl, j) {
         var perRowCounts = tbl.rows.items.map(function (row) { return row.cells.items.length; });
@@ -937,6 +953,14 @@
           });
           rowsText.push(rowText);
         });
+        // Gap-corruption fix (Parts A+B): spacing cells must never re-enter the
+        // reconstructed source. Aligned pattern → blank every gap cell (a
+        // decorated gap like "٭" would otherwise read back as a misra and get
+        // baked into the next rebuild as CONTENT). No alignment → defense in
+        // depth: blank cells that are exactly one of the block's decor symbols.
+        rowsText = tblMap
+          ? AshaarTableAdopt.blankSpacingCells(rowsText, tablePattern)
+          : AshaarTableAdopt.stripDecorCells(rowsText, decorSyms);
         return { tbl: tbl, cells: cells, rowsText: rowsText, overrides: overrides, slotDecor: slotDecor,
           bandhWidthPt: payload.widthPt, blockIdx: j, grid: 0 };
       });
@@ -2480,10 +2504,23 @@
       await context.sync();
 
       // Reconstruct source (same reconstruction Adopt / word-fill use).
-      source = tables.items.map(function (tbl) {
+      // Gap-corruption fix (Parts A+B): for a MANAGED block, spacing cells
+      // must never re-enter the source — blank them via the persisted pattern
+      // (or, unaligned, strip decor-symbol-only cells) exactly as
+      // captureQaseedaTables does. Unmanaged tables keep raw cells.
+      var rrDecorSyms = ccPayload
+        ? blockDecorSymbols(loadProfileStore()[ccPayload.profile], ccPayload.slotDecor)
+        : [];
+      source = tables.items.map(function (tbl, ti) {
         var rows = tbl.rows.items.map(function (row) {
           return row.cells.items.map(function (cell) { return cell.body.text || ""; });
         });
+        if (ccPayload) {
+          var pat = ccPayload.cells ? ccPayload.cells[ti] : null;
+          rows = AshaarCellMap.alignPatternToTable(rows.map(function (r) { return r.length; }), pat)
+            ? AshaarTableAdopt.blankSpacingCells(rows, pat)
+            : AshaarTableAdopt.stripDecorCells(rows, rrDecorSyms);
+        }
         return AshaarTableAdopt.adoptTableToSource(rows, { direction: "rtl" });
       }).filter(function (s) { return s.trim(); }).join("\n\n");
 
@@ -2571,11 +2608,12 @@
 
       // Find enclosing Ashaar Poem content control (mirrors the kashida/spacing path).
       var cc = selection.parentContentControlOrNullObject;
-      cc.load("title");
+      cc.load("title,tag");
       await context.sync();
 
-      var workRange = (!cc.isNullObject && cc.title === "Ashaar Poem")
-        ? cc.getRange() : selection;
+      var wfIsBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
+      var wfPayload = wfIsBlock ? AshaarWord.parseContentControlTag(cc.tag) : null;
+      var workRange = wfIsBlock ? cc.getRange() : selection;
 
       var tables = workRange.tables;
       tables.load("items");
@@ -2602,10 +2640,22 @@
       // Each table → one stanza; multiple tables in scope → stanza-separated.
       // Same reconstruction adoptTable uses, so the round-trip parsing rules
       // (misra/bayt/refrain detection from row layout) stay in one place.
-      source = tables.items.map(function (tbl) {
+      // Gap-corruption fix (Parts A+B): managed blocks blank their spacing
+      // cells (pattern-aligned) or strip decor-symbol-only cells (unaligned)
+      // before reconstruction — same treatment as captureQaseedaTables.
+      var wfDecorSyms = wfPayload
+        ? blockDecorSymbols(loadProfileStore()[wfPayload.profile], wfPayload.slotDecor)
+        : [];
+      source = tables.items.map(function (tbl, ti) {
         var rows = tbl.rows.items.map(function (row) {
           return row.cells.items.map(function (cell) { return cell.body.text || ""; });
         });
+        if (wfPayload) {
+          var pat = wfPayload.cells ? wfPayload.cells[ti] : null;
+          rows = AshaarCellMap.alignPatternToTable(rows.map(function (r) { return r.length; }), pat)
+            ? AshaarTableAdopt.blankSpacingCells(rows, pat)
+            : AshaarTableAdopt.stripDecorCells(rows, wfDecorSyms);
+        }
         return AshaarTableAdopt.adoptTableToSource(rows, { direction: "rtl" });
       }).filter(function (s) { return s.trim(); }).join("\n\n");
 
