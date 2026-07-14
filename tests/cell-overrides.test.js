@@ -163,4 +163,47 @@ assert.strictEqual(AshaarOverrides.overrideKey(0, "B2"), "0:B2");
   );
 }
 
+// ── mergeFanOutSlotDecor: fan-out onto sibling gap keys preserves untouched
+// fields (blueprint (ii) — a bandh/poem-target gap Apply must not wipe an
+// unrelated sibling gap's own symbol/fill/color when only one field was
+// edited on the current gap) ────────────────────────────────────────────────
+{
+  const existing = { symbol: "؎", fill: "#f5f0e0", color: "#112233" };
+  const incoming = { symbol: "*", fill: null, color: null };
+  // Only "symbol" touched → fill/color survive from the sibling's OWN
+  // existing decor; symbol comes from incoming.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutSlotDecor(existing, incoming, { symbol: true }),
+    { symbol: "*", fill: "#f5f0e0", color: "#112233" },
+    "untouched fields survive on a non-current gap key"
+  );
+
+  // A cleared field (touched=true, incoming=null) clears even though the
+  // sibling key had its own value.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutSlotDecor(existing, incoming, { fill: true }),
+    { symbol: "؎", fill: null, color: "#112233" },
+    "touched-and-cleared field clears on every targeted key"
+  );
+
+  // Nothing touched → the sibling key is untouched by this Apply entirely.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutSlotDecor(existing, incoming, {}),
+    { symbol: "؎", fill: "#f5f0e0", color: "#112233" },
+    "no touched fields → sibling key is untouched"
+  );
+
+  // A key with no prior decor at all: untouched fields stay null; touched
+  // fields still land.
+  assert.deepStrictEqual(
+    AshaarOverrides.mergeFanOutSlotDecor(null, { symbol: "؎", fill: null, color: null }, { symbol: true }),
+    { symbol: "؎", fill: null, color: null },
+    "no existing decor → untouched fields stay null, touched field lands"
+  );
+
+  // The current key bypasses merge entirely in applyPanel (full replace) —
+  // mergeFanOutSlotDecor is only ever called for OTHER fanned-out keys, so
+  // there's no "current key" case to pin here (see cell equivalent above).
+}
+
 console.log("cell-overrides.test.js OK");

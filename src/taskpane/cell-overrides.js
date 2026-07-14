@@ -89,11 +89,33 @@
     };
   }
 
+  // Fan-out merge for a bandh/poem-target gap-scope Apply — the slotDecor
+  // analog of mergeFanOutOverride. The pane's `incoming` decor is derived
+  // from the CURRENT gap's state, so writing it verbatim onto every fanned-
+  // out sibling key would delete symbol/fill/color the user never touched
+  // this Apply (e.g. "same gap in all bandhs" wiping every sibling's own
+  // symbol just because the current gap has none). Per field: if the user
+  // touched it this Apply (`touched[field]` true), use `incoming`; otherwise
+  // keep the key's OWN existing value (still null if it never had one). The
+  // current key bypasses this entirely (full replace — the pane is the full
+  // truth for it); see applyPanel's gap branch.
+  function mergeFanOutSlotDecor(existing, incoming, touched) {
+    existing = existing || {};
+    incoming = incoming || {};
+    touched = touched || {};
+    function pick(field) {
+      return touched[field] ? (incoming[field] != null ? incoming[field] : null)
+        : (existing[field] != null ? existing[field] : null);
+    }
+    return { symbol: pick("symbol"), fill: pick("fill"), color: pick("color") };
+  }
+
   return {
     overrideKey: overrideKey,
     resolveCellOverride: resolveCellOverride,
     resolveSlotDecor: resolveSlotDecor,
     colorClearKeys: colorClearKeys,
-    mergeFanOutOverride: mergeFanOutOverride
+    mergeFanOutOverride: mergeFanOutOverride,
+    mergeFanOutSlotDecor: mergeFanOutSlotDecor
   };
 }));

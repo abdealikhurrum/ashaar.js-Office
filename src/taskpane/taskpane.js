@@ -4417,16 +4417,44 @@
         await reapplyBlock(run);
         if (run) run.phase("pipeline");
       } else if (_panel.scopeLevel === "gap") {
+        var gapSymbolEl = document.getElementById("sp-gap-symbol");
+        var gapFillOnEl = document.getElementById("sp-gap-fill-on");
+        var gapFillEl = document.getElementById("sp-gap-fill");
+        var gapColorEl = document.getElementById("sp-gap-color");
+        var decor = {
+          symbol: gapSymbolEl.value,
+          fill: gapFillOnEl.checked ? gapFillEl.value : "",
+          color: gapColorEl.value,
+        };
+        // Blueprint (ii): which fields the user actually TOUCHED this Apply —
+        // only these fan out onto sibling gap keys; every other key must keep
+        // its own existing decor (a bandh/poem-target gap Apply must not
+        // delete unrelated sibling gaps' symbol/fill/color). Same shape as
+        // the cell branch's `touched` above, diffed against _seededGapDecor
+        // (seedGapDecorInputs) instead of _seededCellDecor.
+        var gapTouched = {
+          symbol: gapSymbolEl.value !== (_seededGapDecor.symbol || ""),
+          fill: gapFillOnEl.checked !== _seededGapDecor.fillOn ||
+            (gapFillOnEl.checked && gapFillEl.value !== _seededGapDecor.fill),
+          color: gapColorEl.value !== (_seededGapDecor.color || ""),
+        };
         await withWordStrict(async function (context) {
           var cc = await findBlockAt(context);
-          var decor = {
-            symbol: document.getElementById("sp-gap-symbol").value,
-            fill: document.getElementById("sp-gap-fill-on").checked ? document.getElementById("sp-gap-fill").value : "",
-            color: document.getElementById("sp-gap-color").value,
-          };
           var keys = cellTargetKeys(cc.tag, "spacing", target.gapKey, "sp-gap-target");
+          var oldPayload = AshaarWord.parseContentControlTag(cc.tag) || {};
+          // The current key still fully replaces (the pane is the full truth
+          // for the seeded/reflected gap); every OTHER fanned-out key merges
+          // the touched fields onto ITS OWN existing decor —
+          // AshaarOverrides.mergeFanOutSlotDecor (cell-overrides.js), pinned
+          // by tests/cell-overrides.test.js.
+          var mergedByKey = {};
+          keys.forEach(function (k) {
+            if (k === target.gapKey) { mergedByKey[k] = decor; return; }
+            var existing = (oldPayload.slotDecor && oldPayload.slotDecor[k]) || null;
+            mergedByKey[k] = AshaarOverrides.mergeFanOutSlotDecor(existing, decor, gapTouched);
+          });
           var newTag = cc.tag;
-          keys.forEach(function (k) { newTag = AshaarWord.setTagSlotDecor(newTag, k, decor); });
+          keys.forEach(function (k) { newTag = AshaarWord.setTagSlotDecor(newTag, k, mergedByKey[k]); });
           cc.tag = newTag;
           await context.sync();
         });
