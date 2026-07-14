@@ -2097,42 +2097,65 @@
   // undo. Errors (transient selection state) degrade to an empty face list,
   // which makes the gate resolve "ok" and let the caller's own routing surface
   // any real problem.
+  //
+  // Two read strategies, fast-first-with-fallback:
+  //   FAST (4 syncs incl. findBlockAt's own): "items/body/font/name" chains
+  //   two patterns proven separately elsewhere in this file — a collection's
+  //   `.load("items/<scalar>")` (e.g. row.cells.load("items/columnWidth"))
+  //   populates the collection's items AND a per-item property in one sync,
+  //   and `cell.body.font.name` is an established single-valued-nav chain to
+  //   that scalar. Their COMPOSITION through a collection load, however, is
+  //   unprecedented in this codebase and unverifiable outside Word — if
+  //   Word's batch translator rejects the 3-hop path, the sync throws, and
+  //   without a fallback that throw would hit the fail-open catch below and
+  //   silently disable the font gate FOREVER on block Applies.
+  //   FALLBACK (5 syncs incl. findBlockAt's): on ANY throw from the fast
+  //   attempt, retry the whole read with the previous proven sequential
+  //   pattern (tables→rows→cells→font, verbatim pre-7951c21 code) before
+  //   conceding to the empty-list fail-open — so a rejected batch path costs
+  //   one wasted attempt, never the gate itself.
+  //   TODO: once the user confirms the fast path works in Word (debug
+  //   syncs=N / gate behavior), drop the fallback and keep the fast path.
   async function collectBlockFaceNames() {
     var names = {};
     if (typeof Word === "undefined") return [];
     try {
-      await Word.run(async function (context) {
-        var cc = await findBlockAt(context);
-        var tables = cc.getRange().tables;
-        tables.load("items");
-        await context.sync();
-        tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
-        await context.sync();
-        // Collapsed from 2 round trips to 1: "items/body/font/name" chains the
-        // SAME two patterns already proven elsewhere in this file — a
-        // collection's `.load("items/<scalar>")` (e.g. row.cells.load(
-        // "items/columnWidth") a few hundred lines below) populates a
-        // collection's items AND a scalar property per item in one sync; and
-        // `cell.body.font.name` (used throughout justifySelectionInner) is
-        // itself a proven two-hop single-valued-nav-property chain to that
-        // scalar. Composing them lets ONE cells-collection load populate both
-        // cells.items and each cell's font name, cutting this function from 4
-        // syncs to 3. A further cut to 2 (folding rows.load into the tables
-        // load, or cells.load into the rows load) would require expanding a
-        // NESTED COLLECTION — not a scalar — through a parent collection's
-        // select path in a single call; there's no precedent for that in this
-        // codebase or in the Word JS API docs (collection-to-collection
-        // expansion needs its own object reference + its own load(), which
-        // only exists after the parent collection's items are synced), so it
-        // was deliberately not attempted rather than guessed at.
-        tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items/body/font/name"); }); });
-        await context.sync();
-        var cells = [];
-        tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) {
-          cells.push(cell);
-        }); }); });
-        cells.forEach(function (cell) { if (cell.body.font && cell.body.font.name) names[cell.body.font.name] = true; });
-      });
+      try {
+        await Word.run(async function (context) {
+          var cc = await findBlockAt(context);
+          var tables = cc.getRange().tables;
+          tables.load("items");
+          await context.sync();
+          tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+          await context.sync();
+          tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items/body/font/name"); }); });
+          await context.sync();
+          tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) {
+            if (cell.body.font && cell.body.font.name) names[cell.body.font.name] = true;
+          }); }); });
+        });
+      } catch (fastErr) {
+        // Fast batched path rejected (or any other throw) — retry with the
+        // proven sequential read before the fail-open below.
+        names = {};
+        await Word.run(async function (context) {
+          var cc = await findBlockAt(context);
+          var tables = cc.getRange().tables;
+          tables.load("items");
+          await context.sync();
+          tables.items.forEach(function (tbl) { tbl.rows.load("items"); });
+          await context.sync();
+          tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.load("items"); }); });
+          await context.sync();
+          var cells = [];
+          tables.items.forEach(function (tbl) { tbl.rows.items.forEach(function (row) { row.cells.items.forEach(function (cell) {
+            cell.body.font.load("name");
+            cells.push(cell);
+          }); }); });
+          await context.sync();
+          cells.forEach(function (cell) { if (cell.body.font && cell.body.font.name) names[cell.body.font.name] = true; });
+        });
+      }
     } catch (e) { /* transient selection — gate degrades to no known faces */ }
     return Object.keys(names);
   }
@@ -2721,7 +2744,11 @@
     // mode (skipped when the pane mode is "none").
     var justifyOk = true;
     if (opts.justifyMode && opts.justifyMode !== "none") justifyOk = await justifySelection(run);
-    if (run) run.phase("justify");
+    // "finalize", not "justify": justifySelection (threaded `run` above) now
+    // emits its own "justify" sub-phase; this marker labels only the tail
+    // between the pipeline returning and here — a duplicate name would put
+    // two colliding "justify" entries with different meanings in every dump.
+    if (run) run.phase("finalize");
     if (run) {
       run.end();
       debugOutput.textContent += "\n" + JSON.stringify(run.report());
