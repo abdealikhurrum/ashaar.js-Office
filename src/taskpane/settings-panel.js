@@ -24,13 +24,17 @@
 
   var LEVELS = ["poem", "bandh", "cell", "gap"];
 
-  // Provenance sources that represent a COMMITTED delta over the inherited
-  // value — i.e. something the ⟲ reset affordance should offer to clear.
-  // "cell" and "bandh" are committed overrides (profiles.js resolveSettings),
-  // not just in-pane pending edits, so they need the same reset visibility as
-  // "local" — enumerated explicitly (not "!== default/profile") so a new
-  // source value added later doesn't silently light the dot.
-  var RESETTABLE_SOURCES = ["local", "cell", "bandh"];
+  // Which committed delta layer each SCOPE can actually clear via the ⟲ reset
+  // (review fix R5): the reset pipeline routes a clear through the CURRENT
+  // scope's Apply branch (poem → local map; bandh → setTagBandhWidth; cell →
+  // setTagOverride), so a dot is only honest when the value's source layer is
+  // the one that branch writes. Example of the bug this prevents: at CELL
+  // scope, misraWidthPt can resolve with source "bandh" (profiles.js applies
+  // the bandh width at cell scope too) — a reset there writes a cell-layer
+  // null that the still-present bandh layer keeps out-winning, a permanent
+  // no-op with a permanently-lit dot. Enumerated explicitly (not negated) so
+  // a new source value added later doesn't silently light the dot.
+  var CLEARABLE_SOURCE_BY_LEVEL = { poem: "local", bandh: "bandh", cell: "cell", gap: null };
 
   // Structural keys — changes to these require a rebuild (not just re-justify).
   // Separator changes require rebuild because it lives between tables.
@@ -85,10 +89,12 @@
       var value = (key in pending.set) ? pending.set[key]
         : (pending.clear.indexOf(key) !== -1 ? inheritedValue(resolved, key) : resolved.values[key]);
       var source = resolved.source[key];
-      // Committed cell/bandh overrides resolve with source "cell"/"bandh" (not
-      // "local"), but they are still a delta the user can reset — the dot must
-      // not vanish just because the override was already committed to the tag.
-      var resettable = dirty || RESETTABLE_SOURCES.indexOf(source) !== -1;
+      // Committed overrides resolve with source "cell"/"bandh"/"local" (not
+      // dirty), but they are still a delta the user can reset — the dot must
+      // not vanish just because the override was already committed to the
+      // tag. Scope-gated (see CLEARABLE_SOURCE_BY_LEVEL): only the layer the
+      // CURRENT scope's Apply branch can actually clear gets the dot.
+      var resettable = dirty || (source != null && source === CLEARABLE_SOURCE_BY_LEVEL[level]);
       return { key: key, value: value, source: source, dirty: dirty, resettable: resettable };
     });
 
@@ -158,7 +164,7 @@
   return {
     SCOPE_FIELDS: SCOPE_FIELDS,
     STRUCTURAL_KEYS: STRUCTURAL_KEYS,
-    RESETTABLE_SOURCES: RESETTABLE_SOURCES,
+    CLEARABLE_SOURCE_BY_LEVEL: CLEARABLE_SOURCE_BY_LEVEL,
     panelStateFor: panelStateFor,
     mergePending: mergePending,
     pendingToLocal: pendingToLocal,

@@ -624,12 +624,14 @@
       }
       var src = body.querySelector('.sp-src[data-key="' + c.key + '"]');
       if (src) {
-        // c.resettable (settings-panel.js) covers dirty pending edits AND any
-        // already-committed delta layer (local/cell/bandh) — a committed cell
-        // or bandh-width override must keep showing the reset affordance, not
-        // just an in-pane edit that hasn't been Applied yet.
+        // c.resettable (settings-panel.js) covers dirty pending edits AND the
+        // already-committed delta layer the CURRENT scope can actually clear
+        // (poem→local, bandh→bandh, cell→cell) — a committed override must
+        // keep showing the reset affordance, but only where resetting isn't
+        // a wrong-layer no-op (review R5).
         src.textContent = c.resettable ? "•" : "";
-        src.title = c.dirty ? "edited — Apply to commit; click to reset"
+        src.title = !c.resettable ? ""
+          : c.dirty ? "edited — Apply to commit; click to reset"
           : c.source === "cell" ? "cell override — click to reset to inherited"
           : c.source === "bandh" ? "bandh width override — click to reset to inherited"
           : c.source === "local" ? "local tweak — click to reset to inherited" : "";
@@ -1474,9 +1476,38 @@
           var newPats = null;
           try { newPats = AshaarWord.poemCellPatterns(blk.source, { layoutMode: eff.layoutMode }, Ashaar); } catch (ePat) { newPats = null; }
           if (p.cells && newPats && !AshaarWord.cellPatternsEqual(p.cells, newPats)) {
+            // Review fix (R3): overrides/slotDecor keys are POSITIONAL
+            // ("tableIndex:label" / "tableIndex:slot") against the OLD
+            // pattern — after a genuine shape change some of them no longer
+            // exist in the new pattern's key space. Carrying them verbatim
+            // left orphaned dead weight in the tag, so prune every key that
+            // the re-minted patterns can't address. RECORDED HEALING
+            // LIMITATION: keys that DO survive the prune may still target a
+            // renumbered cell (e.g. "0:A2" landing on what used to be A3) —
+            // labels are positional and the pre-drift→post-drift cell mapping
+            // is unknown here, so true label migration is not possible
+            // without capturing that mapping before the drift. Backlog.
+            var validDriftKeys = {};
+            newPats.forEach(function (patN, tiN) {
+              AshaarCellMap.buildBandhCellMap(patN).forEach(function (e) {
+                validDriftKeys[AshaarOverrides.overrideKey(
+                  tiN, e.kind === "content" ? e.label : e.slot)] = true;
+              });
+            });
+            var prunedKeyCount = 0;
+            var pruneToValidKeys = function (mapObj) {
+              var out = {};
+              Object.keys(mapObj || {}).forEach(function (k) {
+                if (validDriftKeys[k]) out[k] = mapObj[k];
+                else prunedKeyCount++;
+              });
+              return out;
+            };
+            var driftOverrides = pruneToValidKeys(p.overrides);
+            var driftSlotDecor = pruneToValidKeys(p.slotDecor);
             tagForRebuild = AshaarWord.contentControlTag(blk.source, {
               profile: p.profile, local: p.local, profileCache: p.profileCache,
-              overrides: p.overrides, slotDecor: p.slotDecor, widthPt: p.widthPt,
+              overrides: driftOverrides, slotDecor: driftSlotDecor, widthPt: p.widthPt,
               misraPattern: p.misraPattern || "paired", misraCount: Number(p.misraCount || 4)
             }, newPats);
             tagForRebuild = AshaarWord.setTagRunFonts(tagForRebuild, capRuns.blockPacks[bi]);
@@ -1486,7 +1517,10 @@
               var driftIdx = onlyBlockResolvedTags.indexOf(blk.oldTag);
               if (driftIdx !== -1) onlyBlockResolvedTags[driftIdx] = tagForRebuild;
             }
-            if (qDebug) qMeta.patternDrift = (qMeta.patternDrift || 0) + 1;
+            if (qDebug) {
+              qMeta.patternDrift = (qMeta.patternDrift || 0) + 1;
+              qMeta.patternDriftPrunedKeys = (qMeta.patternDriftPrunedKeys || 0) + prunedKeyCount;
+            }
           }
           // Embed the content control IN the OOXML (block-level w:sdt spanning all
           // tables) so insertOoxml creates a control over the WHOLE poem. Wrapping
@@ -2155,14 +2189,16 @@
   // After embedding the SDT directly in the OOXML (AshaarWord.wrapOoxmlControl)
   // there is no insertContentControl() return value to configure — unlike the
   // insertContentControl() path, which hands back the control it just made.
-  // Locate the freshly inserted control by title+tag instead: the tag is
-  // content/options-derived (AshaarWord.contentControlTag), so it uniquely
-  // identifies the control we just created (same "find by tag" idiom
-  // gatherQaseedaBlocks uses to re-locate blocks after a rebuild). Used to
-  // restore the visible bounding-box outline the insertContentControl() path
-  // used to set explicitly.
-  async function styleInsertedPoemControl(context, tag) {
-    var ccs = context.document.contentControls;
+  // Locate the freshly inserted control inside the RANGE insertOoxml returned
+  // (review hardening): contentControlTag is fully deterministic (no nonce),
+  // so two same-settings inserts mint byte-identical tags and a document-wide
+  // title+tag search could match the WRONG poem's control. Scoping the lookup
+  // to the returned range removes that ambiguity class entirely; the title+tag
+  // match within it stays as a guard against unrelated nested controls. Used
+  // to restore the visible bounding-box outline the insertContentControl()
+  // path used to set explicitly.
+  async function styleInsertedPoemControl(context, insertedRange, tag) {
+    var ccs = insertedRange.contentControls;
     ccs.load("items/title,items/tag");
     await context.sync();
     var items = ccs.items;
@@ -2311,7 +2347,7 @@
         AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", newTag),
         replaceSelection ? Word.InsertLocation.replace : Word.InsertLocation.end);
       await context.sync();
-      await styleInsertedPoemControl(context, newTag);
+      await styleInsertedPoemControl(context, inserted, newTag);
       await context.sync();
     });
   }
@@ -2345,7 +2381,7 @@
           AshaarWord.wrapOoxmlControl(bodyG.join("<w:p/>"), "Ashaar Poem", tagG),
           Word.InsertLocation.end);
         await context.sync();
-        await styleInsertedPoemControl(context, tagG);
+        await styleInsertedPoemControl(context, insG, tagG);
         await context.sync();
         return;
       }
@@ -2380,7 +2416,7 @@
           AshaarWord.wrapOoxmlControl(ooxmlBody, "Ashaar Poem", tagS),
           Word.InsertLocation.end);
         await context.sync();
-        await styleInsertedPoemControl(context, tagS);
+        await styleInsertedPoemControl(context, inserted, tagS);
         await context.sync();
         return;
       }
@@ -2698,6 +2734,7 @@
 
       var tables = workRange.tables;
       tables.load("items");
+      workRange.load("text"); // for the plain-selection artifact strip below
       await context.sync();
 
       if (!tables.items.length) {
@@ -2706,9 +2743,19 @@
         // was misleading for prose that was never going to be in a table.
         // Word's native paragraph justify is exactly the mechanism css mode
         // already delegates to for tables (via jc), so apply it directly.
-        workRange.paragraphs.load("items");
+        // Review fix (R4): strip prior kashida artifacts (tatweels /
+        // hair-spaces from an earlier kashida Apply) BEFORE justifying, same
+        // as the spacing-mode plain path — otherwise the old artifacts stay
+        // in the text and get space-stretched around. insertText returns the
+        // replacing range; justify THAT, not the stale pre-replace proxy.
+        var wfStripped = stripJustification(workRange.text);
+        var wfJustRange = workRange;
+        if (wfStripped !== workRange.text) {
+          wfJustRange = workRange.insertText(wfStripped, Word.InsertLocation.replace);
+        }
+        wfJustRange.paragraphs.load("items");
         await context.sync();
-        workRange.paragraphs.items.forEach(function (p) { p.alignment = Word.Alignment.justified; });
+        wfJustRange.paragraphs.items.forEach(function (p) { p.alignment = Word.Alignment.justified; });
         await context.sync();
         wfPlainNative = true;
         return;
@@ -2901,9 +2948,21 @@
         // downgraded) is unaffected and keeps the width-blind tatweel
         // insertion below.
         if (plainOpts.justifyMode === "spacing") {
-          selection.paragraphs.load("items");
+          // Review fix (R4 regression): the pre-native-justify code path
+          // always ran the text through stripJustification before replacing —
+          // which removed tatweels/hair-spaces left by an earlier kashida
+          // Apply. Restore that strip first, or a previously-tatweeled
+          // selection would keep its tatweels AND get space-stretched around
+          // them. insertText returns the replacing range — justify THAT
+          // (the original selection proxy no longer covers the new text).
+          var strippedPlain = stripJustification(selection.text);
+          var plainJustRange = selection;
+          if (strippedPlain !== selection.text) {
+            plainJustRange = selection.insertText(strippedPlain, Word.InsertLocation.replace);
+          }
+          plainJustRange.paragraphs.load("items");
           await context.sync();
-          selection.paragraphs.items.forEach(function (p) { p.alignment = Word.Alignment.justified; });
+          plainJustRange.paragraphs.items.forEach(function (p) { p.alignment = Word.Alignment.justified; });
           await context.sync();
           plainWordNativeMsg = wordNativeReason + "Justified paragraph (Word native).";
           return;
@@ -3753,7 +3812,7 @@
         AshaarWord.wrapOoxmlControl(bodyBG, "Ashaar Poem", tagBG),
         Word.InsertLocation.end);
       await context.sync();
-      await styleInsertedPoemControl(context, tagBG);
+      await styleInsertedPoemControl(context, inserted, tagBG);
       await context.sync();
       setMessage("12-column grid inserted. Merge cells in Word, then Capture as a template.");
     });
@@ -3848,7 +3907,7 @@
         AshaarWord.wrapOoxmlControl(bodyAT, "Ashaar Poem", tagAT),
         Word.InsertLocation.end);
       await context.sync();
-      await styleInsertedPoemControl(context, tagAT);
+      await styleInsertedPoemControl(context, inserted, tagAT);
       await context.sync();
       setMessage("Template \"" + tmpl.name + "\" inserted.");
     });

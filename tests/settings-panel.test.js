@@ -157,12 +157,14 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
     "no Re-render suffix outside a block target");
 }
 
-// ── resettable: committed cell/bandh overrides keep the reset dot, not just
-// local deltas or in-pane pending edits ──────────────────────────────────────
+// ── resettable: committed overrides keep the reset dot, but ONLY at the scope
+// whose Apply branch can actually clear that layer (scope-aware, review R5) ──
 {
-  assert.deepStrictEqual(AshaarPanel.RESETTABLE_SOURCES, ["local", "cell", "bandh"]);
+  assert.deepStrictEqual(AshaarPanel.CLEARABLE_SOURCE_BY_LEVEL,
+    { poem: "local", bandh: "bandh", cell: "cell", gap: null });
 
-  // "cell" source (committed override) → resettable even though not dirty.
+  // "cell" source (committed override) AT CELL SCOPE → resettable even though
+  // not dirty.
   const cellResolved = resolveSettings({
     payload: { profile: "", local: {}, overrides: { "0:A1": { strength: 9 } } },
     profileStore: {},
@@ -173,9 +175,9 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
   const strengthC = cellSt.controls.find((c) => c.key === "strength");
   assert.equal(strengthC.source, "cell");
   assert.equal(strengthC.dirty, false, "committed, not a pending edit");
-  assert.equal(strengthC.resettable, true, "committed cell override still offers a reset");
+  assert.equal(strengthC.resettable, true, "committed cell override still offers a reset at cell scope");
 
-  // "bandh" source (committed width) → resettable.
+  // "bandh" source (committed width) AT BANDH SCOPE → resettable.
   const bandhResolved = resolveSettings({
     payload: { profile: "", local: {}, widthPt: 300 },
     profileStore: {},
@@ -185,12 +187,55 @@ const { resolveSettings, profileFromSettings, defaultSettings } = require("../sr
   const bandhSt = AshaarPanel.panelStateFor({ resolved: bandhResolved, pending: { set: {}, clear: [] }, target: bandhT });
   const widthB = bandhSt.controls.find((c) => c.key === "misraWidthPt");
   assert.equal(widthB.source, "bandh");
-  assert.equal(widthB.resettable, true, "committed bandh width still offers a reset");
+  assert.equal(widthB.resettable, true, "committed bandh width still offers a reset at bandh scope");
+
+  // "bandh"-sourced width AT CELL SCOPE → NO dot: the cell Apply branch's
+  // clear writes a cell-layer null the bandh layer keeps out-winning — a
+  // permanent no-op the dot must not advertise (review R5's bug).
+  const cellBandhResolved = resolveSettings({
+    payload: { profile: "", local: {}, widthPt: 300, overrides: {} },
+    profileStore: {},
+    scope: { level: "cell", key: "0:A1" },
+  });
+  const cellBandhSt = AshaarPanel.panelStateFor({ resolved: cellBandhResolved, pending: { set: {}, clear: [] }, target: cellT });
+  const widthAtCell = cellBandhSt.controls.find((c) => c.key === "misraWidthPt");
+  assert.equal(widthAtCell.source, "bandh", "bandh width surfaces at cell scope");
+  assert.equal(widthAtCell.resettable, false, "…but cell scope cannot clear the bandh layer → no dot");
+
+  // "cell"-sourced width at cell scope → dot (the cell layer IS clearable there).
+  const cellOwnResolved = resolveSettings({
+    payload: { profile: "", local: {}, widthPt: 300, overrides: { "0:A1": { widthPt: 200 } } },
+    profileStore: {},
+    scope: { level: "cell", key: "0:A1" },
+  });
+  const cellOwnSt = AshaarPanel.panelStateFor({ resolved: cellOwnResolved, pending: { set: {}, clear: [] }, target: cellT });
+  const widthOwn = cellOwnSt.controls.find((c) => c.key === "misraWidthPt");
+  assert.equal(widthOwn.source, "cell");
+  assert.equal(widthOwn.resettable, true, "cell-sourced width at cell scope → dot");
+
+  // "local"-sourced strength at CELL scope → no dot (cell scope's clear
+  // cannot remove the poem-level local delta — same no-op class).
+  const cellLocalResolved = resolveSettings({
+    payload: { profile: "", local: { strength: 7 }, overrides: {} },
+    profileStore: {},
+    scope: { level: "cell", key: "0:A1" },
+  });
+  const cellLocalSt = AshaarPanel.panelStateFor({ resolved: cellLocalResolved, pending: { set: {}, clear: [] }, target: cellT });
+  const strengthLocalAtCell = cellLocalSt.controls.find((c) => c.key === "strength");
+  assert.equal(strengthLocalAtCell.source, "local");
+  assert.equal(strengthLocalAtCell.resettable, false, "local delta not clearable from cell scope → no dot");
+
+  // "local" at POEM scope → dot (poem scope owns the local layer).
+  const store = { K: profileFromSettings("K", Object.assign(defaultSettings(), { strength: 9 })) };
+  const poemT = { kind: "block", scope: { level: "poem" }, cellEnabled: false, gapEnabled: false };
+  const localResolved = resolveSettings({ payload: { profile: "K", local: { gap: 8 } }, profileStore: store, scope: { level: "poem" } });
+  const localSt = AshaarPanel.panelStateFor({ resolved: localResolved, pending: { set: {}, clear: [] }, target: poemT });
+  const gapLocal = localSt.controls.find((c) => c.key === "gap");
+  assert.equal(gapLocal.source, "local");
+  assert.equal(gapLocal.resettable, true, "local delta at poem scope → dot");
 
   // "default" and "profile" sources → NOT resettable when not dirty.
-  const store = { K: profileFromSettings("K", Object.assign(defaultSettings(), { strength: 9 })) };
   const profResolved = resolveSettings({ payload: { profile: "K", local: {} }, profileStore: store, scope: { level: "poem" } });
-  const poemT = { kind: "block", scope: { level: "poem" }, cellEnabled: false, gapEnabled: false };
   const profSt = AshaarPanel.panelStateFor({ resolved: profResolved, pending: { set: {}, clear: [] }, target: poemT });
   const strengthP = profSt.controls.find((c) => c.key === "strength");
   assert.equal(strengthP.source, "profile");
