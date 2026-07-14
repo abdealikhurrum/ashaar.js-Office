@@ -2678,6 +2678,11 @@
   async function justifySelectionWordFill(opts) {
     setMessage("Justifying…");
     var source = "";
+    // Hoisted like plainGateCancelled below: withWord unconditionally
+    // overwrites the callback's setMessage with "Done." on success, so the
+    // honest message for this branch has to be re-asserted AFTER withWord
+    // returns (see the re-assert comment further down).
+    var wfPlainNative = false;
 
     await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -2696,7 +2701,16 @@
       await context.sync();
 
       if (!tables.items.length) {
-        setMessage("Select an Ashaar table to fill.");
+        // "Let Word fill it" (css mode) has no Ashaar table/width to fill
+        // toward on a plain selection — "Select an Ashaar table to fill."
+        // was misleading for prose that was never going to be in a table.
+        // Word's native paragraph justify is exactly the mechanism css mode
+        // already delegates to for tables (via jc), so apply it directly.
+        workRange.paragraphs.load("items");
+        await context.sync();
+        workRange.paragraphs.items.forEach(function (p) { p.alignment = Word.Alignment.justified; });
+        await context.sync();
+        wfPlainNative = true;
         return;
       }
 
@@ -2744,6 +2758,12 @@
       workRange.select();
       await context.sync();
     });
+
+    // Re-assert AFTER withWord's unconditional "Done." — the native-justify
+    // branch above already did the real work; withWord's Word.run resolving
+    // without throwing means its "Done." would otherwise silently replace
+    // this honest message.
+    if (wfPlainNative) { setMessage("Justified paragraph (Word native)."); return true; }
 
     if (!source.trim()) return false; // a friendly message was already shown
 
@@ -2809,6 +2829,12 @@
     // its callback (see adoptTable's note), which would clobber the gate's
     // cancel message. Hoisted flag; re-set the message after (last write wins).
     var plainGateCancelled = false;
+    // Same idiom, for the plain-selection Word-native-justify branch below
+    // (spacing mode / kashida→spacing downgrade have no width to fill toward
+    // on a plain selection, so they hand off to Word's own paragraph justify
+    // instead of a silent no-op) — the honest message needs re-asserting
+    // after withWord's unconditional "Done.".
+    var plainWordNativeMsg = null;
 
     var ranOk = await withWord(async function (context) {
       var selection = context.document.getSelection();
@@ -2857,11 +2883,30 @@
         // injected tatweels, so downgrade kashida→spacing for them; generic /
         // arbitrary Arabic fonts (Fatemi Maqala, …) keep kashida.
         var plainOpts = opts;
+        var wordNativeReason = "";
         if (opts.justifyMode === "kashida" &&
             AshaarFonts.mechanismForFontName(selection.font.name) === "whitespace") {
           plainOpts = Object.assign({}, opts, { justifyMode: "spacing" });
-          setMessage("“" + (selection.font.name || "This font") +
-            "” can’t stretch letters in Word — filling by spacing instead.");
+          wordNativeReason = "“" + (selection.font.name || "This font") +
+            "” can’t stretch letters in Word — ";
+        }
+        // "spacing" mode (whether requested directly or reached via the
+        // kashida→whitespace-font downgrade above) has no width to fill
+        // toward on a plain selection: AshaarWord.justifyPlainTextBlock /
+        // justifyText (word-html.js) return the text UNCHANGED without a
+        // colWidthPx, which looked like a successful no-op ("Done."). Word's
+        // own paragraph justify stretches inter-word spaces to the margins —
+        // exactly the spacing-mode behavior, done honestly — so use it
+        // instead. kashida mode on a generic/tatweel-mechanism font (not
+        // downgraded) is unaffected and keeps the width-blind tatweel
+        // insertion below.
+        if (plainOpts.justifyMode === "spacing") {
+          selection.paragraphs.load("items");
+          await context.sync();
+          selection.paragraphs.items.forEach(function (p) { p.alignment = Word.Alignment.justified; });
+          await context.sync();
+          plainWordNativeMsg = wordNativeReason + "Justified paragraph (Word native).";
+          return;
         }
         if (doKashida) {
           var pc = document.createElement("canvas").getContext("2d");
@@ -3562,6 +3607,10 @@
     });
     // Re-assert the cancel message AFTER withWord's unconditional "Done.".
     if (plainGateCancelled) setMessage("Add the font, then Apply again.");
+    // Same re-assert for the plain-selection Word-native-justify branch —
+    // its work genuinely succeeded (ranOk stays true), only the message
+    // needs restoring over "Done.".
+    if (plainWordNativeMsg) setMessage(plainWordNativeMsg);
     // Final review I3: a gate cancel is a soft early-return inside the
     // callback — withWord itself still reports true (Word.run didn't throw)
     // — so override the signal to false here for an honest result.
@@ -3882,6 +3931,14 @@
         await justifySelection();   // justifySelection reads options() → panelValues()
         _panel.pending = { set: {}, clear: [] };
         refreshPanel();
+        // This branch returns before the block path's tail below, which is
+        // where run.end() normally fires — without this, a plain-selection
+        // Apply's metrics run was started (line above) and never closed.
+        if (run) {
+          run.phase("justify");
+          run.end();
+          debugOutput.textContent += "\n" + JSON.stringify(run.report());
+        }
         return;
       }
       // Just-in-time font-measurement gate (Task 9), BEFORE any routing/tag
