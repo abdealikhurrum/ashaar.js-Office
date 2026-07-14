@@ -3763,9 +3763,18 @@
       });
       if (run) run.phase("justify");
 
-      // Phase 2 (write): one context.sync() per cell so a range failure on one
-      // cell falls back to a flattened whole-cell replace without aborting the
-      // batch (the run-aware write can only error at sync, not synchronously).
+      // Phase 2 (write): FAST path queues every plan's writes and commits in
+      // ONE sync — the historical per-cell sync existed only for error
+      // isolation (a range failure on one cell falls back to a flattened
+      // whole-cell replace without aborting the batch; the run-aware write
+      // can only error at sync, not synchronously), not because these write
+      // types invalidate sibling cell proxies (only table RESIZE and
+      // CC-range insertOoxml do — docs/memory; the per-cell loop itself has
+      // always kept using sibling proxies after each insertOoxml sync). So
+      // error isolation is preserved by FALLBACK instead: if the batched
+      // sync throws, rerun the verbatim per-cell loop, which re-applies the
+      // same client-side-computed content (idempotent replaces) and keeps
+      // its per-plan flatten fallbacks.
       // Map a cell's own alignment → an Office enum. Applied on flat/run-aware
       // writes so re-justifying a cell that was previously Cell-fit (paragraph
       // jc=distribute) clears the distribute — Office.js has no "distribute"
@@ -3804,7 +3813,55 @@
       }
 
       var changed = 0;
-      for (var pi = 0; pi < plans.length; pi++) {
+      // FAST (1 sync): queue all cells' writes, flush once. `changed` counts
+      // exactly what the per-cell loop would count — every write decision is
+      // client-side (plans), only the flush is deferred.
+      var batchedWriteOk = false;
+      if (plans.length) {
+        try {
+          for (var bwi = 0; bwi < plans.length; bwi++) {
+            var bp = plans[bwi];
+            if (bp.ooxml) {
+              bp.cell.body.clear();
+              bp.cell.body.insertOoxml(AshaarWord.wrapOoxml(bp.ooxml), Word.InsertLocation.replace);
+              applyCellDecor(bp.cell, bp.ov);
+              changed++;
+              continue;
+            }
+            if (bp.flat != null) {
+              var bFlatPara = bp.cell.body.paragraphs.getFirst();
+              bFlatPara.insertText(bp.flat, Word.InsertLocation.replace);
+              if (bp.align) bFlatPara.alignment = officeAlign(bp.align);
+              applyCellDecor(bp.cell, bp.ov);
+              changed++;
+              continue;
+            }
+            if (!bp.runs) { applyCellDecor(bp.cell, bp.ov); changed++; continue; }
+            var bCellChanged = false;
+            bp.runs.forEach(function (r, i) {
+              var bPieces = bp.outTexts[i].split(" ");
+              r.refs.forEach(function (w, j) {
+                if (bp.sp && bp.sp.fontScale !== 1) { w.range.font.size = r.size * bp.sp.fontScale; bCellChanged = true; }
+                if (bPieces[j] !== w.text) { w.range.insertText(bPieces[j], Word.InsertLocation.replace); bCellChanged = true; }
+              });
+            });
+            if (bp.align) { bp.cell.body.paragraphs.getFirst().alignment = officeAlign(bp.align); bCellChanged = true; }
+            if (bp.cell.__ovKey) applyCellDecor(bp.cell, bp.ov);
+            if (bCellChanged) changed++;
+          }
+          await context.sync(); if (debug) syncCount++;
+          batchedWriteOk = true;
+        } catch (eBatchWrite) {
+          // Batched flush failed — a partial prefix of the queue may already
+          // be applied (sync is not transactional). Re-applying via the
+          // per-cell loop below is safe: each plan's content is computed
+          // client-side, so repeats are idempotent replaces.
+          batchedWriteOk = false;
+          changed = 0;
+          if (debug) diags.push({ i: diags.length, font: "BATCH-FALLBACK", text: (eBatchWrite && eBatchWrite.message || "").slice(0, 14) });
+        }
+      }
+      for (var pi = 0; !batchedWriteOk && pi < plans.length; pi++) {
         var p = plans[pi];
         if (p.ooxml) {
           try {
