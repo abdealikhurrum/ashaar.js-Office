@@ -16,10 +16,10 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel));
 }
 
-// FatemiMaqala (bundled) → family "FatemiMaqala"
+// Fatemi Maqala (bundled; family renamed with a space in the 2026-07 font update)
 const fatemi = AshaarFontStore.parseNames(read("assets/fonts/FatemiMaqala-Regular.ttf"));
 assert.ok(fatemi, "parseNames returns a result for a TTF");
-assert.equal(fatemi.family, "FatemiMaqala", "detects FatemiMaqala family name");
+assert.equal(fatemi.family, "Fatemi Maqala", "detects Fatemi Maqala family name");
 
 // AlFatemi (vendored) → family "AlFatemi"
 const alfatemi = AshaarFontStore.parseNames(read("vendor/font-fatemi/alfatemi/AlFatemi-Regular.ttf"));
@@ -29,7 +29,7 @@ assert.equal(alfatemi.family, "AlFatemi", "detects AlFatemi family name");
 // Accepts ArrayBuffer as well as Buffer/Uint8Array
 const buf = read("assets/fonts/FatemiMaqala-Regular.ttf");
 const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-assert.equal(AshaarFontStore.parseNames(ab).family, "FatemiMaqala", "accepts ArrayBuffer input");
+assert.equal(AshaarFontStore.parseNames(ab).family, "Fatemi Maqala", "accepts ArrayBuffer input");
 
 // Non-sfnt input (WOFF/garbage) → null, so callers fall back to the filename
 assert.equal(AshaarFontStore.parseNames(Buffer.from("wOFFnot a real font")), null,

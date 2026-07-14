@@ -2,6 +2,16 @@
    family-name matches exactly what Word reports (name table nameID 1) so the
    WebView resolves it and the justify canvas measures the same outlines Word renders. */
 @font-face {
+  font-family: "Fatemi Maqala";
+  src: url("../../assets/fonts/FatemiMaqala-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+/* Legacy alias: documents saved before the 2026-07 family rename carry
+   w:cs="FatemiMaqala"; keep that name resolvable so their cells still
+   measure against the real outlines instead of a substitute font. */
+@font-face {
   font-family: "FatemiMaqala";
   src: url("../../assets/fonts/FatemiMaqala-Regular.ttf") format("truetype");
   font-weight: normal;

@@ -2848,7 +2848,7 @@
         if (c) { c.font = repSize + "pt \"" + repName + "\""; canvasCtx = c; opts._justifyCtx = c; }
       }
 
-      // Ensure a bundled @font-face (e.g. FatemiMaqala) finishes loading before we
+      // Ensure a bundled @font-face (e.g. Fatemi Maqala) finishes loading before we
       // measure, so the canvas measures the same outlines Word renders. @font-face
       // fonts load lazily on first use; this forces the load and awaits it.
       if (canvasCtx && typeof document !== "undefined" && document.fonts && document.fonts.load) {
