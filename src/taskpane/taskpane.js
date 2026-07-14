@@ -561,6 +561,12 @@
   // an empty/no-override cell reads as untouched until the user edits it.
   var _seededCellDecor = { fillOn: false, fill: null, colorOn: false, color: null };
 
+  // Same purpose as _seededCellDecor, for the gap-decor inputs (symbol/fill/
+  // color of the spacing cell at the cursor). No color-on checkbox exists for
+  // gaps (sp-gap-color is a plain color picker — see taskpane.html), so
+  // "color" is a bare string, not a {on,value} pair.
+  var _seededGapDecor = { symbol: "", fillOn: false, fill: null, color: "" };
+
   // ── Unified settings panel state ──────────────────────────────────────────
   var _panel = {
     pending: { set: {}, clear: [] },
@@ -688,15 +694,22 @@
         var isBlock = !cc.isNullObject && cc.title === "Ashaar Poem";
         var payload = isBlock ? AshaarWord.parseContentControlTag(cc.tag) : null;
         await reflectActiveCell(context, sel, cc, isBlock, payload);
-        // Guarded reseed: only when the composite (block tag + cell key)
-        // CHANGED since the last seed — spurious same-cell reflections carry
-        // an unchanged tag and must not wipe mid-edit state, while the same
-        // OVERRIDE KEY in a different poem (keys repeat across poems) or a
-        // rewritten tag on the same cell MUST reseed. Never read cc.tag
-        // unless isBlock (null-object proxy throws — same rule as below).
-        var seedKey = (isBlock ? cc.tag : "") + "|" + _activeOvKey;
+        // Guarded reseed: only when the composite (block tag + cell key +
+        // gap key) CHANGED since the last seed — spurious same-cell
+        // reflections carry an unchanged tag and must not wipe mid-edit
+        // state, while the same OVERRIDE/DECOR KEY in a different poem
+        // (keys repeat across poems) or a rewritten tag on the same cell
+        // MUST reseed. _activeDecorKey folds into the composite (not just
+        // _activeOvKey) so that leaving gap A's fields checked and clicking
+        // gap B no longer leaks A's stale symbol/fill/color onto B's Apply
+        // (the bug: gap decor inputs were raw shared DOM state with no seed
+        // function at all — content cells already had this guard via
+        // _activeOvKey; gaps didn't). Never read cc.tag unless isBlock
+        // (null-object proxy throws — same rule as below).
+        var seedKey = (isBlock ? cc.tag : "") + "|" + _activeOvKey + "|" + _activeDecorKey;
         if (seedKey !== _lastSeededDecorKey) {
           if (_activeOvKey) seedCellDecorInputs(payload);
+          if (_activeDecorKey) seedGapDecorInputs(payload);
           _lastSeededDecorKey = seedKey;
         }
         _panel.target = isBlock
@@ -745,6 +758,35 @@
     _seededCellDecor = {
       fillOn: hasFill, fill: hasFill ? ov.fill : null,
       colorOn: hasColor, color: hasColor ? ov.color : null
+    };
+  }
+
+  // Mirrors seedCellDecorInputs for the gap (spacing-cell) decor inputs — see
+  // the block comment above seedCellDecorInputs for why this exists (stale
+  // shared-DOM-state leak between cells/gaps). Seeds from
+  // payload.slotDecor[_activeDecorKey], falling back through
+  // AshaarOverrides.resolveSlotDecor against the assigned profile's spacing
+  // default for THIS slot (profile.spacingDecor[_activeSlot]) — same merge
+  // pass-2 of applyProfileToQaseeda uses to paint a gap — so what gets seeded
+  // here matches what the document would actually show, whether or not the
+  // block is profiled.
+  function seedGapDecorInputs(payload) {
+    var oDecor = (payload && payload.slotDecor && payload.slotDecor[_activeDecorKey]) || null;
+    var prof = (payload && payload.profile) ? loadProfileStore()[payload.profile] : null;
+    var pDecor = (prof && _activeSlot) ? (prof.spacingDecor || {})[_activeSlot] : null;
+    var decor = AshaarOverrides.resolveSlotDecor(pDecor, oDecor);
+    var hasFill = !!decor.fill;
+    document.getElementById("sp-gap-symbol").value = decor.symbol || "";
+    document.getElementById("sp-gap-fill-on").checked = hasFill;
+    document.getElementById("sp-gap-fill").value = hasFill ? decor.fill : "#f5f0e0";
+    document.getElementById("sp-gap-color").value = decor.color || "#a7352a";
+    // Same purpose as seedCellDecorInputs's _seededCellDecor snapshot: lets
+    // applyPanel's gap branch tell whether the user actually TOUCHED a field
+    // this Apply (vs. the seeded value simply sitting there), so fan-out
+    // never overwrites sibling gaps' untouched fields.
+    _seededGapDecor = {
+      symbol: decor.symbol || "", fillOn: hasFill, fill: hasFill ? decor.fill : null,
+      color: decor.color || ""
     };
   }
 
