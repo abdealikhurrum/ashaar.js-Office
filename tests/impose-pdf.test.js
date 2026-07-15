@@ -1,6 +1,6 @@
 const assert = require("assert");
 const PDFLib = require("pdf-lib");
-const { imposePdf, makeTestSheet } = require("../src/taskpane/impose-pdf");
+const { imposePdf, makeTestSheet, makeTestBooklet } = require("../src/taskpane/impose-pdf");
 
 async function makeSourcePdf(pageCount, width, height) {
   const doc = await PDFLib.PDFDocument.create();
@@ -58,6 +58,24 @@ async function makeSourcePdf(pageCount, width, height) {
   assert.equal(testDoc.getPageCount(), 2, "test sheet = front + back");
   assert.equal(testDoc.getPage(0).getWidth(), 842);
   assert.equal(testDoc.getPage(1).getHeight(), 595);
+
+  // Multi-signature test booklet: reader-order source pages carrying fold
+  // instructions; the caller imposes it like any real document. sheets=3
+  // → 12 pages. Defaults to A5 portrait.
+  for (const scheme of ["saddle", "quire4"]) {
+    for (const direction of ["rtl", "ltr"]) {
+      const booklet = await makeTestBooklet({
+        pdfLib: PDFLib, scheme: scheme, direction: direction, sheets: 3,
+      });
+      const doc = await PDFLib.PDFDocument.load(booklet);
+      assert.equal(doc.getPageCount(), 12, scheme + "/" + direction + ": 3 sheets = 12 pages");
+      assert.equal(Math.round(doc.getPage(0).getWidth()), 420, "A5 portrait default");
+    }
+  }
+  await assert.rejects(
+    makeTestBooklet({ pdfLib: PDFLib, scheme: "spiral", direction: "rtl", sheets: 2 }),
+    /scheme/
+  );
 
   console.log("impose-pdf tests passed");
 })().catch((e) => {
