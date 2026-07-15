@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { plan, facePlacements, drawParams } = require("../src/taskpane/impose-core");
+const { plan, facePlacements, drawParams, selectFaces } = require("../src/taskpane/impose-core");
 
 // plan({pageCount, scheme, direction}) → {paddedCount, blanks, sheets}
 // sheets[i] = {front: [left, right], back: [left, right]} with 1-based reader
@@ -143,6 +143,20 @@ const { plan, facePlacements, drawParams } = require("../src/taskpane/impose-cor
     { x: 200, y: 200, rotateDeg: 180 },
     "180° draws from opposite corner (x+w, y+h)"
   );
+}
+
+// ── selectFaces: pick fronts/backs for manual (non-duplex) printing ─────────
+// Faces alternate front, back, front, back. 'fronts'/'backs' filter them;
+// reverse=true flips the order of the selected faces for printers that stack
+// output in reverse.
+{
+  const faces = ["f1", "b1", "f2", "b2", "f3", "b3"];
+  assert.deepEqual(selectFaces(faces, "all"), faces);
+  assert.deepEqual(selectFaces(faces, "fronts"), ["f1", "f2", "f3"]);
+  assert.deepEqual(selectFaces(faces, "backs"), ["b1", "b2", "b3"]);
+  assert.deepEqual(selectFaces(faces, "backs", true), ["b3", "b2", "b1"]);
+  assert.deepEqual(selectFaces(faces, "fronts", true), ["f3", "f2", "f1"]);
+  assert.throws(() => selectFaces(faces, "sides"), /which/);
 }
 
 // ── Validation ──────────────────────────────────────────────────────────────

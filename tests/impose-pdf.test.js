@@ -38,6 +38,18 @@ async function makeSourcePdf(pageCount, width, height) {
   const docLong = await PDFLib.PDFDocument.load(outLong);
   assert.equal(docLong.getPageCount(), 4, "quire4: 2 sheets = 4 faces");
 
+  // Manual duplex: fronts-only / backs-only exports (5 pages → 2 sheets).
+  const fronts = await imposePdf(src, {
+    scheme: "saddle", direction: "rtl", flip: "short",
+    faces: "fronts", pdfLib: PDFLib,
+  });
+  assert.equal((await PDFLib.PDFDocument.load(fronts)).getPageCount(), 2, "2 front faces");
+  const backs = await imposePdf(src, {
+    scheme: "saddle", direction: "rtl", flip: "short",
+    faces: "backs", reverse: true, pdfLib: PDFLib,
+  });
+  assert.equal((await PDFLib.PDFDocument.load(backs)).getPageCount(), 2, "2 back faces");
+
   // Printer test sheet: one duplex sheet (2 faces) at the given sheet size.
   // The back carries both an upright and a 180°-rotated caption so whichever
   // reads upright after printing names the printer's duplex flip setting.
