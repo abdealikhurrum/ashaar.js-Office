@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { plan, facePlacements, drawParams, selectFaces } = require("../src/taskpane/impose-core");
+const { plan, facePlacements, drawParams, selectFaces, PAPER_SIZES } = require("../src/taskpane/impose-core");
 
 // plan({pageCount, scheme, direction}) → {paddedCount, blanks, sheets}
 // sheets[i] = {front: [left, right], back: [left, right]} with 1-based reader
@@ -80,6 +80,89 @@ const { plan, facePlacements, drawParams, selectFaces } = require("../src/taskpa
   assert.deepEqual(a.sheets, b.sheets);
 }
 
+// ── Mini-quire (cut into quarters & staple) ─────────────────────────────────
+// front/back are flat 2x2 grids in physical row-major order:
+// [top-left, top-right, bottom-left, bottom-right]. Each grid cell is a
+// leaf: front = recto, back = verso (no fold — the leaf is a flat cut card).
+
+{
+  const p = plan({ pageCount: 8, scheme: "miniquire8", direction: "rtl" });
+  assert.equal(p.paddedCount, 8);
+  assert.deepEqual(p.blanks, []);
+  assert.equal(p.sheets.length, 1, "8 pages = 1 sheet");
+  // RTL reading order: top-right, top-left, bottom-right, bottom-left.
+  assert.deepEqual(p.sheets[0].front, [3, 1, 7, 5], "[TL,TR,BL,BR] recto");
+  assert.deepEqual(p.sheets[0].back, [4, 2, 8, 6], "[TL,TR,BL,BR] verso");
+}
+
+// LTR reading order: top-left, top-right, bottom-left, bottom-right.
+{
+  const p = plan({ pageCount: 8, scheme: "miniquire8", direction: "ltr" });
+  assert.deepEqual(p.sheets[0].front, [1, 3, 5, 7]);
+  assert.deepEqual(p.sheets[0].back, [2, 4, 6, 8]);
+}
+
+// 16 pages = 2 independent mini-quire sheets.
+{
+  const p = plan({ pageCount: 16, scheme: "miniquire8", direction: "rtl" });
+  assert.equal(p.sheets.length, 2);
+  assert.deepEqual(p.sheets[1].front, [11, 9, 15, 13]);
+  assert.deepEqual(p.sheets[1].back, [12, 10, 16, 14]);
+  const seen = p.sheets.flatMap((s) => s.front.concat(s.back)).sort((a, b) => a - b);
+  assert.deepEqual(seen, Array.from({ length: 16 }, (_, i) => i + 1));
+}
+
+// Non-multiple-of-8 pads with blanks.
+{
+  const p = plan({ pageCount: 5, scheme: "miniquire8", direction: "rtl" });
+  assert.equal(p.paddedCount, 8);
+  assert.deepEqual(p.blanks, [6, 7, 8]);
+}
+
+// ── Zine fold (single sheet, single-sided, no staples) ──────────────────────
+// front is a flat 2x4 grid, row-major, row 0 = top. back is null: the
+// technique is inherently single-sided (verified against a working
+// reference implementation; see the comment above GRID/ZINE_LTR).
+
+{
+  const p = plan({ pageCount: 8, scheme: "zinefold8", direction: "ltr" });
+  assert.equal(p.sheets.length, 1);
+  assert.strictEqual(p.sheets[0].back, null);
+  assert.deepEqual(p.sheets[0].front, [
+    { page: 8, rotate180: true }, { page: 1, rotate180: true },
+    { page: 2, rotate180: true }, { page: 7, rotate180: true },
+    { page: 6, rotate180: false }, { page: 3, rotate180: false },
+    { page: 4, rotate180: false }, { page: 5, rotate180: false },
+  ]);
+}
+
+// RTL mirrors the grid left-right, keeping each row's rotation intact.
+{
+  const p = plan({ pageCount: 8, scheme: "zinefold8", direction: "rtl" });
+  assert.deepEqual(p.sheets[0].front, [
+    { page: 7, rotate180: true }, { page: 2, rotate180: true },
+    { page: 1, rotate180: true }, { page: 8, rotate180: true },
+    { page: 5, rotate180: false }, { page: 4, rotate180: false },
+    { page: 3, rotate180: false }, { page: 6, rotate180: false },
+  ]);
+}
+
+// Every page 1-8 appears exactly once, and pages carry through a second
+// independent sheet with a +8 offset.
+{
+  const p = plan({ pageCount: 16, scheme: "zinefold8", direction: "ltr" });
+  assert.equal(p.sheets.length, 2);
+  const seen = p.sheets.flatMap((s) => s.front.map((e) => e.page)).sort((a, b) => a - b);
+  assert.deepEqual(seen, Array.from({ length: 16 }, (_, i) => i + 1));
+}
+
+// Non-multiple-of-8 pads with blanks.
+{
+  const p = plan({ pageCount: 3, scheme: "zinefold8", direction: "ltr" });
+  assert.equal(p.paddedCount, 8);
+  assert.deepEqual(p.blanks, [4, 5, 6, 7, 8]);
+}
+
 // ── facePlacements: print-ready geometry per face ───────────────────────────
 // Faces come in print order (sheet0 front, sheet0 back, sheet1 front, ...).
 // Each face: {width, height, slots:[{page, x, y, rotateDeg}]}, x/y = bottom-left
@@ -129,6 +212,135 @@ const { plan, facePlacements, drawParams, selectFaces } = require("../src/taskpa
   const pages = faces.flatMap((f) => f.slots.map((s) => s.page));
   assert.deepEqual(pages, [1, null, null, 2, 3, null, 5, 4], "6,7,8 are blank");
 }
+
+// ── facePlacements: mini-quire (2x2 grid per side, cut & staple) ────────────
+// Slots are laid out row-major, row 0 = top; y counts up from the bottom of
+// the sheet (pdf-lib convention), so top-row slots get the larger y.
+
+{
+  const faces = facePlacements({
+    pageCount: 8, scheme: "miniquire8", direction: "rtl",
+    srcWidth: 100, srcHeight: 150, flip: "short",
+  });
+  assert.equal(faces.length, 2, "1 sheet = 2 faces (front+back)");
+  assert.equal(faces[0].width, 200, "2 cols x source width");
+  assert.equal(faces[0].height, 300, "2 rows x source height");
+  assert.deepEqual(faces[0].slots, [
+    { page: 3, x: 0, y: 150, rotateDeg: 0 },
+    { page: 1, x: 100, y: 150, rotateDeg: 0 },
+    { page: 7, x: 0, y: 0, rotateDeg: 0 },
+    { page: 5, x: 100, y: 0, rotateDeg: 0 },
+  ], "front: TL,TR,BL,BR = 3,1,7,5");
+  assert.deepEqual(faces[1].slots, [
+    { page: 4, x: 0, y: 150, rotateDeg: 0 },
+    { page: 2, x: 100, y: 150, rotateDeg: 0 },
+    { page: 8, x: 0, y: 0, rotateDeg: 0 },
+    { page: 6, x: 100, y: 0, rotateDeg: 0 },
+  ], "back, short-edge flip: verso lands directly behind its recto");
+}
+
+// Long-edge duplex generalizes per row: columns swap within each row, whole
+// back face rotates 180°, exactly like the 1-row schemes.
+{
+  const faces = facePlacements({
+    pageCount: 8, scheme: "miniquire8", direction: "rtl",
+    srcWidth: 100, srcHeight: 150, flip: "long",
+  });
+  assert.deepEqual(faces[1].slots, [
+    { page: 2, x: 0, y: 150, rotateDeg: 180 },
+    { page: 4, x: 100, y: 150, rotateDeg: 180 },
+    { page: 6, x: 0, y: 0, rotateDeg: 180 },
+    { page: 8, x: 100, y: 0, rotateDeg: 180 },
+  ]);
+}
+
+// ── facePlacements: zine fold (2x4 grid, single-sided) ──────────────────────
+// No back face is emitted at all — one face per sheet — and rotation comes
+// from the scheme's own baked-in table, not the flip setting.
+
+{
+  const faces = facePlacements({
+    pageCount: 8, scheme: "zinefold8", direction: "ltr",
+    srcWidth: 100, srcHeight: 150, flip: "short",
+  });
+  assert.equal(faces.length, 1, "1 sheet = 1 face (single-sided, no back)");
+  assert.equal(faces[0].width, 400, "4 cols x source width");
+  assert.equal(faces[0].height, 300, "2 rows x source height");
+  assert.deepEqual(faces[0].slots, [
+    { page: 8, x: 0, y: 150, rotateDeg: 180 },
+    { page: 1, x: 100, y: 150, rotateDeg: 180 },
+    { page: 2, x: 200, y: 150, rotateDeg: 180 },
+    { page: 7, x: 300, y: 150, rotateDeg: 180 },
+    { page: 6, x: 0, y: 0, rotateDeg: 0 },
+    { page: 3, x: 100, y: 0, rotateDeg: 0 },
+    { page: 4, x: 200, y: 0, rotateDeg: 0 },
+    { page: 5, x: 300, y: 0, rotateDeg: 0 },
+  ]);
+}
+
+// ── facePlacements: paperSize scale-to-fit ───────────────────────────────────
+// With opts.paperSize, the sheet is fixed at that size and source content is
+// scaled (preserving aspect) and centered into each grid cell, instead of
+// the sheet auto-sizing from the source page. Slots gain width/height.
+
+{
+  // saddle: 1x2 grid. Source is narrower than its cell → centered horizontally.
+  const faces = facePlacements({
+    pageCount: 8, scheme: "saddle", direction: "rtl",
+    srcWidth: 90, srcHeight: 150, flip: "short",
+    paperSize: { width: 400, height: 200 },
+  });
+  assert.equal(faces[0].width, 400, "sheet is fixed at the target paper width");
+  assert.equal(faces[0].height, 200);
+  assert.deepEqual(faces[0].slots, [
+    { page: 1, x: 40, y: 0, rotateDeg: 0, width: 120, height: 200 },
+    { page: 8, x: 240, y: 0, rotateDeg: 0, width: 120, height: 200 },
+  ], "each 200x200 cell fits a 90x150 source at scale 4/3 (120x200), centered horizontally");
+}
+
+// miniquire8: 2x2 grid. Source is wider than its cell → centered vertically,
+// and centering must respect each row's own vertical band.
+{
+  const faces = facePlacements({
+    pageCount: 8, scheme: "miniquire8", direction: "ltr",
+    srcWidth: 200, srcHeight: 90, flip: "short",
+    paperSize: { width: 400, height: 400 },
+  });
+  assert.equal(faces[0].width, 400);
+  assert.equal(faces[0].height, 400);
+  assert.deepEqual(faces[0].slots, [
+    { page: 1, x: 0, y: 255, rotateDeg: 0, width: 200, height: 90 },
+    { page: 3, x: 200, y: 255, rotateDeg: 0, width: 200, height: 90 },
+    { page: 5, x: 0, y: 55, rotateDeg: 0, width: 200, height: 90 },
+    { page: 7, x: 200, y: 55, rotateDeg: 0, width: 200, height: 90 },
+  ], "top row's band is y:200-400, bottom row's is y:0-200; content centered in each");
+}
+
+// A named PAPER_SIZES key resolves the same way as an explicit object.
+{
+  const named = facePlacements({
+    pageCount: 8, scheme: "saddle", direction: "rtl",
+    srcWidth: 90, srcHeight: 150, flip: "short", paperSize: "a4",
+  });
+  assert.equal(Math.round(named[0].width), Math.round(PAPER_SIZES.a4.width));
+  assert.equal(Math.round(named[0].height), Math.round(PAPER_SIZES.a4.height));
+}
+assert.deepEqual(Object.keys(PAPER_SIZES).sort(), ["a4", "a5", "halfLetter", "letter"]);
+
+// Without paperSize, slots keep their original shape (no width/height keys) —
+// existing callers see byte-identical output to before this feature.
+{
+  const faces = facePlacements({
+    pageCount: 8, scheme: "saddle", direction: "rtl",
+    srcWidth: 100, srcHeight: 200, flip: "short",
+  });
+  assert.deepEqual(Object.keys(faces[0].slots[0]).sort(), ["page", "rotateDeg", "x", "y"]);
+}
+
+assert.throws(() => facePlacements({
+  pageCount: 8, scheme: "saddle", direction: "rtl",
+  srcWidth: 100, srcHeight: 200, flip: "short", paperSize: "tabloid",
+}), /paperSize/);
 
 // ── drawParams: pdf-lib draw origin for a slot ──────────────────────────────
 // pdf-lib's drawPage rotates around the given (x,y); a 180° slot must be drawn

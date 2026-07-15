@@ -72,10 +72,90 @@ async function makeSourcePdf(pageCount, width, height) {
       assert.equal(Math.round(doc.getPage(0).getWidth()), 420, "A5 portrait default");
     }
   }
+  // 8-pages-per-sheet schemes: sheets=3 → 24 pages.
+  for (const scheme of ["miniquire8", "zinefold8"]) {
+    for (const direction of ["rtl", "ltr"]) {
+      const booklet = await makeTestBooklet({
+        pdfLib: PDFLib, scheme: scheme, direction: direction, sheets: 3,
+      });
+      const doc = await PDFLib.PDFDocument.load(booklet);
+      assert.equal(doc.getPageCount(), 24, scheme + "/" + direction + ": 3 sheets = 24 pages");
+    }
+  }
   await assert.rejects(
     makeTestBooklet({ pdfLib: PDFLib, scheme: "spiral", direction: "rtl", sheets: 2 }),
     /scheme/
   );
+
+  // miniquire8: duplex sheets carry dashed cut lines at both center creases.
+  {
+    const miniSrc = await makeSourcePdf(8, 100, 150);
+    const out = await imposePdf(miniSrc, {
+      scheme: "miniquire8", direction: "rtl", flip: "short", pdfLib: PDFLib,
+    });
+    const doc = await PDFLib.PDFDocument.load(out);
+    assert.equal(doc.getPageCount(), 2, "1 sheet = front+back faces");
+    assert.equal(doc.getPage(0).getWidth(), 200, "2 cols x source width");
+    assert.equal(doc.getPage(0).getHeight(), 300, "2 rows x source height");
+  }
+
+  // zinefold8: single-sided — one output page per sheet, no back face,
+  // and manual duplex options ("faces") are ignored (nothing to split).
+  {
+    const zineSrc = await makeSourcePdf(8, 100, 150);
+    const out = await imposePdf(zineSrc, {
+      scheme: "zinefold8", direction: "ltr", pdfLib: PDFLib,
+    });
+    const doc = await PDFLib.PDFDocument.load(out);
+    assert.equal(doc.getPageCount(), 1, "single-sided: 1 sheet = 1 face");
+    assert.equal(doc.getPage(0).getWidth(), 400, "4 cols x source width");
+
+    const outFronts = await imposePdf(zineSrc, {
+      scheme: "zinefold8", direction: "ltr", faces: "fronts", pdfLib: PDFLib,
+    });
+    assert.equal((await PDFLib.PDFDocument.load(outFronts)).getPageCount(), 1,
+      '"fronts" is ignored for a single-sided scheme');
+  }
+
+  // paperSize: the printed sheet matches the chosen paper regardless of the
+  // source PDF's own page size — this is what fixes an oversized zinefold8
+  // sheet (4 columns x an unscaled source page could dwarf any home printer).
+  for (const scheme of ["saddle", "miniquire8", "zinefold8"]) {
+    const src = await makeSourcePdf(scheme === "zinefold8" ? 8 : 8, 300, 500);
+    const out = await imposePdf(src, {
+      scheme: scheme, direction: "rtl", flip: "short", paperSize: "a4", pdfLib: PDFLib,
+    });
+    const doc = await PDFLib.PDFDocument.load(out);
+    const sheet = doc.getPage(0);
+    assert.equal(Math.round(sheet.getWidth()), 842, scheme + ": sheet width matches A4 landscape, not the source page");
+    assert.equal(Math.round(sheet.getHeight()), 595, scheme + ": sheet height matches A4 landscape");
+  }
+
+  // An unknown paperSize name fails clearly rather than silently ignoring it.
+  await assert.rejects(
+    imposePdf(await makeSourcePdf(4, 300, 500), {
+      scheme: "saddle", direction: "rtl", flip: "short", paperSize: "tabloid", pdfLib: PDFLib,
+    }),
+    /paperSize/
+  );
+
+  // makeTestSheet also accepts a named paperSize.
+  {
+    const test = await makeTestSheet({ pdfLib: PDFLib, paperSize: "letter" });
+    const doc = await PDFLib.PDFDocument.load(test);
+    assert.equal(Math.round(doc.getPage(0).getWidth()), 792, "letter landscape width");
+    assert.equal(Math.round(doc.getPage(0).getHeight()), 612, "letter landscape height");
+  }
+
+  // End-to-end: the zinefold8 test booklet, imposed with a chosen paper size,
+  // comes out at exactly that size (the bug this feature fixes).
+  {
+    const source = await makeTestBooklet({ pdfLib: PDFLib, scheme: "zinefold8", direction: "rtl", sheets: 1 });
+    const out = await imposePdf(source, { scheme: "zinefold8", direction: "rtl", paperSize: "halfLetter", pdfLib: PDFLib });
+    const doc = await PDFLib.PDFDocument.load(out);
+    assert.equal(Math.round(doc.getPage(0).getWidth()), 612, "half-letter landscape width");
+    assert.equal(Math.round(doc.getPage(0).getHeight()), 396, "half-letter landscape height");
+  }
 
   console.log("impose-pdf tests passed");
 })().catch((e) => {

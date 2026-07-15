@@ -214,6 +214,9 @@ textarea {
   gap: 10px;
 }
 
+.field[hidden] {
+  display: none;
+}
 .field {
   display: flex;
   flex-direction: column;
@@ -454,6 +457,15 @@ button:disabled:hover {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--muted);
+}
+.adopt-hint.zine-note {
+  border: 1px solid var(--line, #ddd);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 10px;
+}
+.adopt-hint.warn {
+  color: #a15c00;
 }
 .adopt-advanced {
   margin-top: 8px;

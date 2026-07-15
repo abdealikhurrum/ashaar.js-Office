@@ -5,8 +5,10 @@
   var hostStatus = document.getElementById("host-status");
   var modeTable = document.getElementById("mode-table");
   var modeConvert = document.getElementById("mode-convert");
+  var modeBooklet = document.getElementById("mode-booklet");
   var tablePanel = document.getElementById("table-mode-panel");
   var convertPanel = document.getElementById("convert-mode-panel");
+  var bookletPanel = document.getElementById("booklet-mode-panel");
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
   var layoutPreset = document.getElementById("layout-preset");
@@ -306,15 +308,23 @@
 
   function setMode(mode) {
     var isTable = mode === "table";
+    var isConvert = mode === "convert";
+    var isBooklet = mode === "booklet";
     modeTable.classList.toggle("is-active", isTable);
-    modeConvert.classList.toggle("is-active", !isTable);
+    modeConvert.classList.toggle("is-active", isConvert);
+    modeBooklet.classList.toggle("is-active", isBooklet);
     modeTable.setAttribute("aria-selected", String(isTable));
-    modeConvert.setAttribute("aria-selected", String(!isTable));
+    modeConvert.setAttribute("aria-selected", String(isConvert));
+    modeBooklet.setAttribute("aria-selected", String(isBooklet));
     tablePanel.classList.toggle("is-active", isTable);
-    convertPanel.classList.toggle("is-active", !isTable);
+    convertPanel.classList.toggle("is-active", isConvert);
+    bookletPanel.classList.toggle("is-active", isBooklet);
     tablePanel.hidden = !isTable;
-    convertPanel.hidden = isTable;
-    setMessage(isTable ? "Table input mode: draw a blank grid, then type in Word." : "Ashaar.js conversion mode: paste source text, then insert a converted table.");
+    convertPanel.hidden = !isConvert;
+    bookletPanel.hidden = !isBooklet;
+    setMessage(isTable ? "Table input mode: draw a blank grid, then type in Word."
+      : isConvert ? "Ashaar.js conversion mode: paste source text, then insert a converted table."
+      : "Booklet mode: impose the open document into a print-ready booklet.");
   }
 
   function renderPreview() {
@@ -4902,6 +4912,10 @@
     misraCount.addEventListener("change", applyLayoutPreset);
     modeTable.addEventListener("click", function () { setMode("table"); });
     modeConvert.addEventListener("click", function () { setMode("convert"); });
+    modeBooklet.addEventListener("click", function () {
+      setMode("booklet");
+      if (window.BookletPane) window.BookletPane.onShow();
+    });
     document.getElementById("insert-structure").addEventListener("click", insertStructure);
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
     document.getElementById("insert-tabstop").addEventListener("click", insertTabStopPoem);
