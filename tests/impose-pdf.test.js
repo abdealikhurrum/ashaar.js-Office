@@ -1,6 +1,6 @@
 const assert = require("assert");
 const PDFLib = require("pdf-lib");
-const { imposePdf } = require("../src/taskpane/impose-pdf");
+const { imposePdf, makeTestSheet } = require("../src/taskpane/impose-pdf");
 
 async function makeSourcePdf(pageCount, width, height) {
   const doc = await PDFLib.PDFDocument.create();
@@ -37,6 +37,15 @@ async function makeSourcePdf(pageCount, width, height) {
   });
   const docLong = await PDFLib.PDFDocument.load(outLong);
   assert.equal(docLong.getPageCount(), 4, "quire4: 2 sheets = 4 faces");
+
+  // Printer test sheet: one duplex sheet (2 faces) at the given sheet size.
+  // The back carries both an upright and a 180°-rotated caption so whichever
+  // reads upright after printing names the printer's duplex flip setting.
+  const test = await makeTestSheet({ pdfLib: PDFLib, width: 842, height: 595 });
+  const testDoc = await PDFLib.PDFDocument.load(test);
+  assert.equal(testDoc.getPageCount(), 2, "test sheet = front + back");
+  assert.equal(testDoc.getPage(0).getWidth(), 842);
+  assert.equal(testDoc.getPage(1).getHeight(), 595);
 
   console.log("impose-pdf tests passed");
 })().catch((e) => {
