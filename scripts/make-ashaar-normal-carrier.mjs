@@ -36,6 +36,17 @@ var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<w:name w:val="Ashaar Normal"/><w:basedOn w:val="Normal"/><w:unhideWhenUsed/>' +
   '<w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr><w:rPr><w:rtl/></w:rPr>' +
   '</w:style>' +
+  // Built-in footnote styles redefined RTL, so importStyles merges right-to-left
+  // reading order into the target's footnote text + reference marker (the object
+  // model can't set their bidi either). styleId/name match Word's built-ins so
+  // the merge lands on them. NOTE: the footnote SEPARATOR line is a special
+  // footnote in footnotes.xml, NOT a style — importStyles can't touch it.
+  '<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="Footnote Text"/>' +
+  '<w:basedOn w:val="Normal"/><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr><w:rPr><w:rtl/></w:rPr>' +
+  '</w:style>' +
+  '<w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="Footnote Reference"/>' +
+  '<w:rPr><w:rtl/><w:vertAlign w:val="superscript"/></w:rPr>' +
+  '</w:style>' +
   '</w:styles>';
 
 var documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
