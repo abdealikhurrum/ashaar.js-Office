@@ -52,9 +52,9 @@
   function defaultGroup(name) {
     return {
       name: typeof name === "string" ? name : "",
-      heading1: { font: "Kanz al-Marjaan", sizePt: 18 },
-      heading2: { font: "Kanz al-Marjaan", sizePt: 16 },
-      heading3: { font: "Kanz al-Marjaan", sizePt: 14 },
+      heading1: { font: "Kanz Al Marjaan", sizePt: 18 },
+      heading2: { font: "Kanz Al Marjaan", sizePt: 16 },
+      heading3: { font: "Kanz Al Marjaan", sizePt: 14 },
       emphasis: { color: "#FF0000", bumpPt: 3 },
       quote: { borderColor: "#000000", borderWidth: "Pt050", indentPt: 0 },
       quranQuote: { font: "Amiri Quran", lineHeightPt: null } // null = Word auto
