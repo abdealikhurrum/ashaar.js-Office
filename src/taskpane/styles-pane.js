@@ -211,6 +211,99 @@
     byId("styles-quranquote-lh").value = group.quranQuote.lineHeightPt == null ? "" : group.quranQuote.lineHeightPt;
   }
 
+  // Task 8: "Update style" handler — writes current field values into the
+  // active group and persists it, shadowing built-ins on first edit.
+  function updateActiveGroupFromFields() {
+    var updated = readFieldsIntoGroup(activeGroupName);
+    groupStore[activeGroupName] = updated;
+    saveGroupStore(groupStore, function () {
+      applyActiveGroupToDocument();
+    });
+  }
+
+  function bindUpdateButtons() {
+    ["styles-h1-update", "styles-h2-update", "styles-h3-update",
+      "styles-emphasis-update", "styles-quote-update", "styles-quranquote-update"
+    ].forEach(function (id) {
+      byId(id).addEventListener("click", updateActiveGroupFromFields);
+    });
+  }
+
+  // Task 8: Apply paragraph styles (headings, quote, quranQuote) to selection.
+  function applyParagraphStyle(styleName) {
+    Word.run(function (context) {
+      var selection = context.document.getSelection();
+      var paragraphs = selection.paragraphs;
+      paragraphs.load("items");
+      return context.sync().then(function () {
+        paragraphs.items.forEach(function (p) { p.style = styleName; });
+        return context.sync();
+      });
+    }).catch(function (e) {
+      setStatus(byId("styles-rtl-status"), "Error applying style: " + (e.message || String(e)), true);
+    });
+  }
+
+  function bindParagraphApplyButtons() {
+    byId("styles-h1-apply").addEventListener("click", function () { applyParagraphStyle(AshaarStyles.STYLE_NAME.heading1); });
+    byId("styles-h2-apply").addEventListener("click", function () { applyParagraphStyle(AshaarStyles.STYLE_NAME.heading2); });
+    byId("styles-h3-apply").addEventListener("click", function () { applyParagraphStyle(AshaarStyles.STYLE_NAME.heading3); });
+    byId("styles-quote-apply").addEventListener("click", function () { applyParagraphStyle(AshaarStyles.STYLE_NAME.quote); });
+    byId("styles-quranquote-apply").addEventListener("click", function () { applyParagraphStyle(AshaarStyles.STYLE_NAME.quranQuote); });
+  }
+
+  // Task 8: Apply emphasis (character style + live size bump).
+  function applyEmphasis() {
+    var bumpPt = Number(byId("styles-emphasis-bump").value) || 0;
+    var color = byId("styles-emphasis-color").value;
+    Word.run(function (context) {
+      var selection = context.document.getSelection();
+      selection.font.load("size");
+      return context.sync().then(function () {
+        var resultSize = AshaarStyles.computeEmphasisSize(selection.font.size, bumpPt);
+        selection.style = AshaarStyles.STYLE_NAME.emphasis;
+        selection.font.color = color;
+        selection.font.size = resultSize;
+        return context.sync();
+      });
+    }).catch(function (e) {
+      setStatus(byId("styles-rtl-status"), "Error applying Emphasis: " + (e.message || String(e)), true);
+    });
+  }
+
+  // Task 8: Instance-level overrides.
+  function applyQuoteIndentOverride() {
+    var raw = byId("styles-quote-indent-override").value;
+    if (raw === "") return; // blank = no override requested
+    var pt = AshaarStyles.clampIndentPt(Number(raw));
+    Word.run(function (context) {
+      var paragraphs = context.document.getSelection().paragraphs;
+      paragraphs.load("items");
+      return context.sync().then(function () {
+        paragraphs.items.forEach(function (p) { p.leftIndent = pt; p.rightIndent = pt; });
+        return context.sync();
+      });
+    }).catch(function (e) {
+      setStatus(byId("styles-rtl-status"), "Error applying indent override: " + (e.message || String(e)), true);
+    });
+  }
+
+  function applyQuranQuoteLineHeightOverride() {
+    var raw = byId("styles-quranquote-lh-override").value;
+    if (raw === "") return;
+    var pt = AshaarStyles.clampLineHeightPt(Number(raw));
+    Word.run(function (context) {
+      var paragraphs = context.document.getSelection().paragraphs;
+      paragraphs.load("items");
+      return context.sync().then(function () {
+        paragraphs.items.forEach(function (p) { p.lineSpacing = pt; });
+        return context.sync();
+      });
+    }).catch(function (e) {
+      setStatus(byId("styles-rtl-status"), "Error applying line-height override: " + (e.message || String(e)), true);
+    });
+  }
+
   // Public: called when the Styles tab is first shown (Task 4's onTabShown
   // hook) and again whenever the group picker changes (Task 6).
   function onTabShown() {
@@ -252,6 +345,12 @@
       populateFieldsFromGroup(activeGroup());
       applyActiveGroupToDocument();
     });
+    // Task 8 bindings: Update, paragraph apply, emphasis apply, override applies
+    bindUpdateButtons();
+    bindParagraphApplyButtons();
+    byId("styles-emphasis-apply").addEventListener("click", applyEmphasis);
+    byId("styles-quote-indent-override-apply").addEventListener("click", applyQuoteIndentOverride);
+    byId("styles-quranquote-lh-override-apply").addEventListener("click", applyQuranQuoteLineHeightOverride);
     applyActiveGroupToDocument();
     populateFieldsFromGroup(activeGroup());
   }
