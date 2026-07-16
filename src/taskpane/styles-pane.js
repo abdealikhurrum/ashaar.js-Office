@@ -349,8 +349,8 @@
     bindUpdateButtons();
     bindParagraphApplyButtons();
     byId("styles-emphasis-apply").addEventListener("click", applyEmphasis);
-    byId("styles-quote-indent-override-apply").addEventListener("click", applyQuoteIndentOverride);
-    byId("styles-quranquote-lh-override-apply").addEventListener("click", applyQuranQuoteLineHeightOverride);
+    byId("styles-quote-override-apply").addEventListener("click", applyQuoteIndentOverride);
+    byId("styles-quranquote-override-apply").addEventListener("click", applyQuranQuoteLineHeightOverride);
     applyActiveGroupToDocument();
     populateFieldsFromGroup(activeGroup());
   }
