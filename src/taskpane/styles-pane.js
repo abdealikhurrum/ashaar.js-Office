@@ -304,6 +304,34 @@
     });
   }
 
+  // Task 9: RTL document setup action — sets Normal style's Latin/CS fonts+size
+  // and the section's RTL layout (margins, column order, footnote direction).
+  function runRtlSetup() {
+    var latinFont = byId("styles-rtl-latin-font").value;
+    var csFont = byId("styles-rtl-cs-font").value;
+    var csSize = Number(byId("styles-rtl-cs-size").value) || 12;
+    setStatus(byId("styles-rtl-status"), "Applying…");
+    Word.run(function (context) {
+      var normal = context.document.getStyles().getByNameOrNullObject("Normal");
+      var section = context.document.sections.getFirst();
+      normal.load("isNullObject");
+      return context.sync().then(function () {
+        if (!normal.isNullObject) {
+          normal.font.nameAscii = latinFont;
+          normal.font.nameBidirectional = csFont;
+          normal.font.sizeBidirectional = csSize;
+        }
+        section.pageSetup.sectionDirection = Word.SectionDirection.rightToLeft;
+        return context.sync();
+      });
+    }).then(function () {
+      setStatus(byId("styles-rtl-status"),
+        "Applied: Latin font, complex-script font/size, and right-to-left section layout (margins, column order, footnote numbering direction).");
+    }).catch(function (e) {
+      setStatus(byId("styles-rtl-status"), "Error: " + (e.message || String(e)), true);
+    });
+  }
+
   // Public: called when the Styles tab is first shown (Task 4's onTabShown
   // hook) and again whenever the group picker changes (Task 6).
   function onTabShown() {
@@ -351,6 +379,8 @@
     byId("styles-emphasis-apply").addEventListener("click", applyEmphasis);
     byId("styles-quote-override-apply").addEventListener("click", applyQuoteIndentOverride);
     byId("styles-quranquote-override-apply").addEventListener("click", applyQuranQuoteLineHeightOverride);
+    // Task 9 binding: RTL document setup
+    byId("styles-rtl-apply").addEventListener("click", runRtlSetup);
     applyActiveGroupToDocument();
     populateFieldsFromGroup(activeGroup());
   }
