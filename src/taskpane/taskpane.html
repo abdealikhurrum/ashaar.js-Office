@@ -412,6 +412,7 @@
         <p id="styles-unsupported" class="adopt-hint" hidden>This add-in's Styles tab requires desktop Word (Windows or Mac) — it isn't available on Word for the web.</p>
 
         <div id="styles-body">
+          <p id="styles-status" class="adopt-hint" aria-live="polite"></p>
           <section class="sp-profile-row">
             <label for="styles-group-select">Style group</label>
             <select id="styles-group-select"></select>
@@ -504,7 +505,6 @@
 
           <details class="import-panel">
             <summary>RTL document setup</summary>
-            <p id="styles-rtl-status" class="adopt-hint">Not yet applied in this document.</p>
             <div class="field"><label for="styles-rtl-latin-font">Latin font</label>
               <input id="styles-rtl-latin-font" type="text" value="Times New Roman"></div>
             <div class="field"><label for="styles-rtl-cs-font">Complex-script font</label>

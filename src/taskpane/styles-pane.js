@@ -76,7 +76,7 @@
     }).then(function () {
       if (then) then();
     }).catch(function (e) {
-      setStatus(byId("styles-rtl-status"), "Error applying style group: " + (e.message || String(e)), true);
+      setStatus(byId("styles-status"), "Error applying style group: " + (e.message || String(e)), true);
     });
   }
 
@@ -240,7 +240,7 @@
         return context.sync();
       });
     }).catch(function (e) {
-      setStatus(byId("styles-rtl-status"), "Error applying style: " + (e.message || String(e)), true);
+      setStatus(byId("styles-status"), "Error applying style: " + (e.message || String(e)), true);
     });
   }
 
@@ -267,7 +267,7 @@
         return context.sync();
       });
     }).catch(function (e) {
-      setStatus(byId("styles-rtl-status"), "Error applying Emphasis: " + (e.message || String(e)), true);
+      setStatus(byId("styles-status"), "Error applying Emphasis: " + (e.message || String(e)), true);
     });
   }
 
@@ -284,7 +284,7 @@
         return context.sync();
       });
     }).catch(function (e) {
-      setStatus(byId("styles-rtl-status"), "Error applying indent override: " + (e.message || String(e)), true);
+      setStatus(byId("styles-status"), "Error applying indent override: " + (e.message || String(e)), true);
     });
   }
 
@@ -300,7 +300,7 @@
         return context.sync();
       });
     }).catch(function (e) {
-      setStatus(byId("styles-rtl-status"), "Error applying line-height override: " + (e.message || String(e)), true);
+      setStatus(byId("styles-status"), "Error applying line-height override: " + (e.message || String(e)), true);
     });
   }
 
@@ -310,7 +310,7 @@
     var latinFont = byId("styles-rtl-latin-font").value;
     var csFont = byId("styles-rtl-cs-font").value;
     var csSize = Number(byId("styles-rtl-cs-size").value) || 12;
-    setStatus(byId("styles-rtl-status"), "Applying…");
+    setStatus(byId("styles-status"), "Applying…");
     Word.run(function (context) {
       var normal = context.document.getStyles().getByNameOrNullObject("Normal");
       var section = context.document.sections.getFirst();
@@ -325,10 +325,10 @@
         return context.sync();
       });
     }).then(function () {
-      setStatus(byId("styles-rtl-status"),
+      setStatus(byId("styles-status"),
         "Applied: Latin font, complex-script font/size, and right-to-left section layout (margins, column order, footnote numbering direction).");
     }).catch(function (e) {
-      setStatus(byId("styles-rtl-status"), "Error: " + (e.message || String(e)), true);
+      setStatus(byId("styles-status"), "Error: " + (e.message || String(e)), true);
     });
   }
 
