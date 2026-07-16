@@ -8,6 +8,7 @@
     "make-test-doc": "node scripts/make-test-doc.mjs",
     "make-adopt-doc": "node scripts/make-adopt-test-doc.mjs",
     "make-styles-doc": "node scripts/make-styles-test-doc.mjs",
+    "make-normal-carrier": "node scripts/make-ashaar-normal-carrier.mjs",
     "make-user-guide": "python3 scripts/make-user-guide-docx.py",
     "make-kashida-test": "python3 scripts/make-kashida-word-test.py",
     "stop": "office-addin-debugging stop manifest.xml desktop",
