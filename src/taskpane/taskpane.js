@@ -11,6 +11,11 @@
   var convertPanel = document.getElementById("convert-mode-panel");
   var bookletPanel = document.getElementById("booklet-mode-panel");
   var stylesPanel = document.getElementById("styles-mode-panel");
+  // Poetry-only chrome: the formatting settings panel + kashida/cell actions.
+  // Shown only in the Table Input / Conversion modes; Styles and Booklet don't
+  // use poetry formatting.
+  var settingsPanel = document.getElementById("settings-panel");
+  var justifyActions = document.getElementById("justify-actions");
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
   var layoutPreset = document.getElementById("layout-preset");
@@ -329,6 +334,10 @@
     convertPanel.hidden = !isConvert;
     bookletPanel.hidden = !isBooklet;
     stylesPanel.hidden = !isStyles;
+    // Poetry formatting chrome belongs only to Table Input / Conversion.
+    var poetryMode = isTable || isConvert;
+    if (settingsPanel) settingsPanel.hidden = !poetryMode;
+    if (justifyActions) justifyActions.hidden = !poetryMode;
     setMessage(isTable ? "Table input mode: draw a blank grid, then type in Word."
       : isConvert ? "Ashaar.js conversion mode: paste source text, then insert a converted table."
       : isBooklet ? "Booklet mode: impose the open document into a print-ready booklet."
