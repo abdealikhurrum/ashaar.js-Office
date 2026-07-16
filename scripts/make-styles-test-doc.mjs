@@ -118,11 +118,15 @@ var documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
 
 // Footnotes part: the two required boilerplate footnotes (separator id -1,
 // continuation separator id 0) plus the single real footnote (id 1) referenced
-// from the body above.
+// from the body above. The separator paragraphs are bidi + right-aligned so the
+// separator line sits on the RIGHT in an RTL document — Office.js cannot reach
+// these special footnotes, so authoring them here (and in the future template)
+// is the only programmatic way to move the separator; otherwise it's a manual
+// Draft-view step (References → Show Notes → Footnote Separator).
 var footnotesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-  '<w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote>' +
-  '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' +
+  '<w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote>' +
+  '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' +
   '<w:footnote w:id="1"><w:p><w:pPr><w:bidi/><w:jc w:val="right"/><w:pStyle w:val="FootnoteText"/></w:pPr>' +
   '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/><w:rtl/></w:rPr><w:footnoteRef/></w:r>' +
   '<w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space="preserve"> یہ حاشیے کا متن ہے — آر ٹی ایل ترتیب کی جانچ کے لیے۔</w:t></w:r>' +

@@ -315,29 +315,54 @@
     });
   }
 
-  // Task 9: RTL document setup action — sets Normal style's Latin/CS fonts+size
-  // and the section's RTL layout (margins, column order, footnote direction).
+  // Task 9 (+ manual-test refinements): RTL document setup. Creates a named
+  // "Ashaar Normal" body style (rather than mutating the built-in Normal —
+  // keeps built-ins pristine, spec decision #1), right-aligns the built-in
+  // "Footnote Text" style so footnotes sit on the right, and flips the section
+  // to right-to-left layout. Office.js has NO paragraph reading-order/bidi
+  // setter (VBA-only), so right-alignment is the closest RTL lever for body +
+  // footnote paragraphs; and the footnote SEPARATOR line (a special id=-1
+  // footnote) is not exposed by the footnote API at all — it can only be
+  // right-aligned via Word's Draft view (Show Notes → Footnote Separator) or a
+  // prebuilt template.
+  var ASHAAR_NORMAL_NAME = "Ashaar Normal";
   function runRtlSetup() {
     var latinFont = byId("styles-rtl-latin-font").value;
     var csFont = byId("styles-rtl-cs-font").value;
     var csSize = Number(byId("styles-rtl-cs-size").value) || 12;
     setStatus(byId("styles-status"), "Applying…");
     Word.run(function (context) {
-      var normal = context.document.getStyles().getByNameOrNullObject("Normal");
+      var styles = context.document.getStyles();
+      var ashaarNormal = styles.getByNameOrNullObject(ASHAAR_NORMAL_NAME);
+      // Built-in footnote text style; present once the document has a footnote.
+      var footnote = styles.getByNameOrNullObject("Footnote Text");
       var section = context.document.sections.getFirst();
-      normal.load("isNullObject");
+      ashaarNormal.load("isNullObject");
+      footnote.load("isNullObject");
       return context.sync().then(function () {
-        if (!normal.isNullObject) {
-          normal.font.nameAscii = latinFont;
-          normal.font.nameBidirectional = csFont;
-          normal.font.sizeBidirectional = csSize;
-        }
-        section.pageSetup.sectionDirection = Word.SectionDirection.rightToLeft;
-        return context.sync();
+        var an = ashaarNormal.isNullObject
+          ? context.document.addStyle(ASHAAR_NORMAL_NAME, "Paragraph")
+          : ashaarNormal;
+        return context.sync().then(function () {
+          an.baseStyle = "Normal";
+          an.unhideWhenUsed = true;
+          an.font.nameAscii = latinFont;
+          an.font.nameBidirectional = csFont;
+          an.font.size = csSize;
+          an.font.sizeBidirectional = csSize;
+          an.paragraphFormat.alignment = Word.Alignment.right;
+          if (!footnote.isNullObject) {
+            footnote.font.nameBidirectional = csFont;
+            footnote.font.sizeBidirectional = csSize;
+            footnote.paragraphFormat.alignment = Word.Alignment.right;
+          }
+          section.pageSetup.sectionDirection = Word.SectionDirection.rightToLeft;
+          return context.sync();
+        });
       });
     }).then(function () {
       setStatus(byId("styles-status"),
-        "Applied: Latin font, complex-script font/size, and right-to-left section layout (margins, column order, footnote numbering direction).");
+        "Applied: created “Ashaar Normal” body style (right-aligned, complex-script font/size), right-aligned footnote text, and right-to-left section layout. Apply “Ashaar Normal” to body paragraphs from Word’s Styles gallery. The add-in API can’t set true paragraph reading order or move the footnote separator line — for those use Word’s Layout → Paragraph Direction and Draft view → Show Notes → Footnote Separator.");
     }).catch(function (e) {
       setStatus(byId("styles-status"), "Error: " + (e.message || String(e)), true);
     });

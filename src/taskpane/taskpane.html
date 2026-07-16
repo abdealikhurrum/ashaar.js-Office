@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260716-styles-emphasis-fixes";
+      window.ASHAAR_ASSET_VERSION = "20260716-styles-normal-footnotes";
     </script>
     <script>
       (function (v) {
@@ -512,7 +512,7 @@
             <div class="field"><label for="styles-rtl-cs-size">Complex-script size (pt)</label>
               <input id="styles-rtl-cs-size" type="number" min="6" max="72" value="12"></div>
             <button id="styles-rtl-apply" type="button">Set up RTL document</button>
-            <p class="adopt-hint">Note: Word's automatic RTL detection handles paragraph direction for typed Arabic/Urdu/Persian text. Office.js has no supported way to force Normal-style paragraph direction (a VBA-only capability) — if a blank paragraph's cursor/list behavior looks wrong, use Word's own Layout &rarr; Paragraph Direction control.</p>
+            <p class="adopt-hint">Creates an <b>Ashaar Normal</b> body style (right-aligned, complex-script font/size) — apply it to body paragraphs from Word's Styles gallery — right-aligns footnote text, and sets right-to-left section layout. The add-in API cannot set true paragraph reading order or move the footnote <i>separator</i> line (VBA/UI-only): for perfect bidi use Word's Layout &rarr; Paragraph Direction, and to move the separator use Draft view &rarr; Show Notes &rarr; Footnote Separator (or the downloadable template).</p>
           </details>
         </div>
       </section>
