@@ -15,6 +15,11 @@
   // since Ashaar Quran Quote is basedOn Ashaar Quote (not a Word built-in).
   var ROLES = ["heading1", "heading2", "heading3", "emphasis", "quote", "quranQuote"];
 
+  // The RTL body style (created/enriched by RTL setup). Ashaar Quote is basedOn
+  // this so quotes inherit the body font/size/RTL by default; not one of ROLES
+  // (it has no per-group recipe — its font/size come from the RTL setup fields).
+  var NORMAL_STYLE_NAME = "Ashaar Normal";
+
   var STYLE_NAME = {
     heading1: "Ashaar Heading 1",
     heading2: "Ashaar Heading 2",
@@ -29,7 +34,7 @@
     heading2: "Heading 2",
     heading3: "Heading 3",
     emphasis: "Emphasis",
-    quote: "Quote",
+    quote: NORMAL_STYLE_NAME,   // quotes follow the Ashaar Normal body style by default
     quranQuote: "Ashaar Quote"
   };
 
@@ -121,6 +126,7 @@
 
   return {
     ROLES: ROLES,
+    NORMAL_STYLE_NAME: NORMAL_STYLE_NAME,
     STYLE_NAME: STYLE_NAME,
     BASE_STYLE: BASE_STYLE,
     STYLE_TYPE: STYLE_TYPE,

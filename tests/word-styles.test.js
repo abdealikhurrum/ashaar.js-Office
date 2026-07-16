@@ -11,9 +11,11 @@ const AshaarStyles = require("../src/taskpane/word-styles");
   assert.equal(AshaarStyles.STYLE_NAME.quranQuote, "Ashaar Quran Quote");
   assert.equal(AshaarStyles.BASE_STYLE.heading1, "Heading 1");
   assert.equal(AshaarStyles.BASE_STYLE.emphasis, "Emphasis");
-  assert.equal(AshaarStyles.BASE_STYLE.quote, "Quote");
+  assert.equal(AshaarStyles.BASE_STYLE.quote, "Ashaar Normal",
+    "Quote follows the Ashaar Normal body style by default");
   assert.equal(AshaarStyles.BASE_STYLE.quranQuote, "Ashaar Quote",
     "Quran Quote is based on OUR Quote style, not a Word built-in");
+  assert.equal(AshaarStyles.NORMAL_STYLE_NAME, "Ashaar Normal");
   assert.equal(AshaarStyles.STYLE_TYPE.emphasis, "Character");
   assert.equal(AshaarStyles.STYLE_TYPE.quote, "Paragraph");
 }

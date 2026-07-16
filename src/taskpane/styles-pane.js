@@ -173,7 +173,14 @@
   // Quran Quote's baseStyle references it.
   function ensureAshaarStyles(context, group) {
     var styleObjs = {};
-    var chain = Promise.resolve();
+    // Ashaar Quote is basedOn Ashaar Normal, so that style must exist before the
+    // quote roles are configured. Ensure a minimal one (basedOn Normal) here if
+    // it's absent; RTL setup later enriches it (true bidi via import + fonts).
+    var chain = ensureStyle(context, AshaarStyles.NORMAL_STYLE_NAME, "Paragraph").then(function (an) {
+      an.baseStyle = "Normal";
+      an.unhideWhenUsed = true;
+      return context.sync();
+    });
     AshaarStyles.ROLES.forEach(function (role) {
       chain = chain.then(function () {
         return ensureStyle(context, AshaarStyles.STYLE_NAME[role], AshaarStyles.STYLE_TYPE[role]);
@@ -274,15 +281,20 @@
     Word.run(function (context) {
       var selection = context.document.getSelection();
       selection.font.load("size, sizeBidirectional");
+      var resultSize;
       return context.sync().then(function () {
         // Arabic-script text renders at the complex-script size (szCs), so base
-        // the bump on sizeBidirectional and write it back there — writing only
-        // .size (the Latin size) leaves Arabic text visually unchanged. Keep
-        // .size in sync too for any Latin runs in the selection.
-        var base = selection.font.sizeBidirectional || selection.font.size;
-        var resultSize = AshaarStyles.computeEmphasisSize(base, bumpPt);
+        // the bump on sizeBidirectional (fall back to the Latin size / 12).
+        var base = selection.font.sizeBidirectional || selection.font.size || 12;
+        resultSize = AshaarStyles.computeEmphasisSize(base, bumpPt);
+        // Apply the character style FIRST and commit it, so the size below lands
+        // as direct formatting on top — applying a style in the same batch as the
+        // size write was resetting the run's size (the "bump didn't work" bug).
         selection.style = AshaarStyles.STYLE_NAME.emphasis;
+        return context.sync();
+      }).then(function () {
         selection.font.color = color;
+        // Set both: sizeBidirectional drives Arabic text, size drives Latin runs.
         selection.font.size = resultSize;
         selection.font.sizeBidirectional = resultSize;
         return context.sync();
@@ -325,7 +337,7 @@
     });
   }
 
-  var ASHAAR_NORMAL_NAME = "Ashaar Normal";
+  var ASHAAR_NORMAL_NAME = AshaarStyles.NORMAL_STYLE_NAME;
 
   // PROTOTYPE (needs live-Word verification): merge a bidi-carrying "Ashaar
   // Normal" style into the open document. The Office.js Style API cannot set a
