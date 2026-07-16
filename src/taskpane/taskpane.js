@@ -16,6 +16,7 @@
   // use poetry formatting.
   var settingsPanel = document.getElementById("settings-panel");
   var justifyActions = document.getElementById("justify-actions");
+  var fontsStrip = document.getElementById("fonts-strip");
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
   var layoutPreset = document.getElementById("layout-preset");
@@ -338,6 +339,7 @@
     var poetryMode = isTable || isConvert;
     if (settingsPanel) settingsPanel.hidden = !poetryMode;
     if (justifyActions) justifyActions.hidden = !poetryMode;
+    if (fontsStrip) fontsStrip.hidden = !poetryMode;
     setMessage(isTable ? "Table input mode: draw a blank grid, then type in Word."
       : isConvert ? "Ashaar.js conversion mode: paste source text, then insert a converted table."
       : isBooklet ? "Booklet mode: impose the open document into a print-ready booklet."
