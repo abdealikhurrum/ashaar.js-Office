@@ -23,7 +23,7 @@ const AshaarStyles = require("../src/taskpane/word-styles");
 {
   const g = AshaarStyles.defaultGroup("General");
   assert.equal(g.name, "General");
-  assert.equal(g.heading1.font, "Marjaan");
+  assert.equal(g.heading1.font, "Kanz al-Marjaan");
   assert.equal(typeof g.heading1.sizePt, "number");
   assert.ok(g.heading1.sizePt > g.heading2.sizePt, "heading1 larger than heading2");
   assert.ok(g.heading2.sizePt > g.heading3.sizePt, "heading2 larger than heading3");
@@ -60,7 +60,7 @@ const AshaarStyles = require("../src/taskpane/word-styles");
   const g = AshaarStyles.normalizeGroup({ name: "Partial", heading1: { sizePt: 30 } });
   assert.equal(g.name, "Partial");
   assert.equal(g.heading1.sizePt, 30, "keeps provided field");
-  assert.equal(g.heading1.font, "Marjaan", "fills missing field from default");
+  assert.equal(g.heading1.font, "Kanz al-Marjaan", "fills missing field from default");
   assert.ok(g.quote && typeof g.quote.indentPt === "number", "fills entirely-missing role");
 }
 

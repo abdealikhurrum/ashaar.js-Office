@@ -124,8 +124,13 @@
       style.paragraphFormat.alignment = Word.Alignment.centered;
     } else if (role === "emphasis") {
       style.font.color = recipe.color;
-      // No absolute size here — Emphasis's bump is computed live per
-      // instance in Task 8 (computeEmphasisSize), not stored as a style size.
+      // Word's built-in "Emphasis" (our basedOn) is ITALIC, and italic does not
+      // render in Arabic-script fonts — cancel it explicitly. Emphasis's signal
+      // is red + a live per-instance size bump (applyEmphasis), not slant.
+      style.font.italic = false;
+      style.font.italicBidirectional = false;
+      // No absolute size here — the bump is computed live per instance
+      // (computeEmphasisSize) and written to sizeBidirectional in applyEmphasis.
     } else if (role === "quote") {
       style.paragraphFormat.leftIndent = AshaarStyles.clampIndentPt(recipe.indentPt);
       style.paragraphFormat.rightIndent = AshaarStyles.clampIndentPt(recipe.indentPt);
@@ -258,12 +263,18 @@
     var color = byId("styles-emphasis-color").value;
     Word.run(function (context) {
       var selection = context.document.getSelection();
-      selection.font.load("size");
+      selection.font.load("size, sizeBidirectional");
       return context.sync().then(function () {
-        var resultSize = AshaarStyles.computeEmphasisSize(selection.font.size, bumpPt);
+        // Arabic-script text renders at the complex-script size (szCs), so base
+        // the bump on sizeBidirectional and write it back there — writing only
+        // .size (the Latin size) leaves Arabic text visually unchanged. Keep
+        // .size in sync too for any Latin runs in the selection.
+        var base = selection.font.sizeBidirectional || selection.font.size;
+        var resultSize = AshaarStyles.computeEmphasisSize(base, bumpPt);
         selection.style = AshaarStyles.STYLE_NAME.emphasis;
         selection.font.color = color;
         selection.font.size = resultSize;
+        selection.font.sizeBidirectional = resultSize;
         return context.sync();
       });
     }).catch(function (e) {
