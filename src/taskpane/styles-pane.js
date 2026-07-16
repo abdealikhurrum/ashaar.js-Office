@@ -132,6 +132,12 @@
       // No absolute size here — the bump is computed live per instance
       // (computeEmphasisSize) and written to sizeBidirectional in applyEmphasis.
     } else if (role === "quote") {
+      // Word's built-in "Quote" (our basedOn) is ITALIC; italic doesn't render
+      // in Arabic-script fonts, so cancel it here — and Quran Quote (basedOn
+      // Ashaar Quote) cancels it too, since Office.js materializes the base's
+      // italic into each derived style at creation.
+      style.font.italic = false;
+      style.font.italicBidirectional = false;
       style.paragraphFormat.leftIndent = AshaarStyles.clampIndentPt(recipe.indentPt);
       style.paragraphFormat.rightIndent = AshaarStyles.clampIndentPt(recipe.indentPt);
       var leftBorder = style.borders.getByLocation(Word.BorderLocation.left);
@@ -145,6 +151,10 @@
     } else if (role === "quranQuote") {
       style.font.nameAscii = recipe.font;
       style.font.nameBidirectional = recipe.font;
+      // basedOn Ashaar Quote (italic), so cancel italic on this style's own
+      // rPr too — Office.js materialized the parent's italic in at creation.
+      style.font.italic = false;
+      style.font.italicBidirectional = false;
       // lineSpacing has no clean "reset to Word auto" value in the object
       // model, so switching a group FROM a set line height back to null
       // (auto) will leave the previous numeric value in place rather than
