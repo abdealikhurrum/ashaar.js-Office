@@ -174,6 +174,43 @@
     return chain.then(function () { return styleObjs; });
   }
 
+  // Reads current field values into a group recipe (Task 7-8).
+  function readFieldsIntoGroup(name) {
+    return {
+      name: name,
+      heading1: { font: byId("styles-h1-font").value, sizePt: Number(byId("styles-h1-size").value) },
+      heading2: { font: byId("styles-h2-font").value, sizePt: Number(byId("styles-h2-size").value) },
+      heading3: { font: byId("styles-h3-font").value, sizePt: Number(byId("styles-h3-size").value) },
+      emphasis: { color: byId("styles-emphasis-color").value, bumpPt: Number(byId("styles-emphasis-bump").value) },
+      quote: {
+        borderColor: byId("styles-quote-color").value,
+        borderWidth: byId("styles-quote-width").value,
+        indentPt: Number(byId("styles-quote-indent").value)
+      },
+      quranQuote: {
+        font: byId("styles-quranquote-font").value,
+        lineHeightPt: byId("styles-quranquote-lh").value === "" ? null : Number(byId("styles-quranquote-lh").value)
+      }
+    };
+  }
+
+  // Populates fields from a group recipe (Task 7-8).
+  function populateFieldsFromGroup(group) {
+    byId("styles-h1-font").value = group.heading1.font;
+    byId("styles-h1-size").value = group.heading1.sizePt;
+    byId("styles-h2-font").value = group.heading2.font;
+    byId("styles-h2-size").value = group.heading2.sizePt;
+    byId("styles-h3-font").value = group.heading3.font;
+    byId("styles-h3-size").value = group.heading3.sizePt;
+    byId("styles-emphasis-color").value = group.emphasis.color;
+    byId("styles-emphasis-bump").value = group.emphasis.bumpPt;
+    byId("styles-quote-color").value = group.quote.borderColor;
+    byId("styles-quote-width").value = group.quote.borderWidth;
+    byId("styles-quote-indent").value = group.quote.indentPt;
+    byId("styles-quranquote-font").value = group.quranQuote.font;
+    byId("styles-quranquote-lh").value = group.quranQuote.lineHeightPt == null ? "" : group.quranQuote.lineHeightPt;
+  }
+
   // Public: called when the Styles tab is first shown (Task 4's onTabShown
   // hook) and again whenever the group picker changes (Task 6).
   function onTabShown() {
@@ -190,12 +227,33 @@
     groupStore = loadGroupStore();
     activeGroupName = loadActiveGroupName();
     populateGroupPicker();
+    byId("styles-group-saveas").addEventListener("click", function () {
+      byId("styles-saveas-row").hidden = false;
+      byId("styles-saveas-name").value = "";
+      byId("styles-saveas-name").focus();
+    });
+    byId("styles-saveas-cancel").addEventListener("click", function () {
+      byId("styles-saveas-row").hidden = true;
+    });
+    byId("styles-saveas-ok").addEventListener("click", function () {
+      var name = String(byId("styles-saveas-name").value || "").trim();
+      if (!name) return;
+      groupStore[name] = readFieldsIntoGroup(name);
+      saveGroupStore(groupStore, function () {
+        byId("styles-saveas-row").hidden = true;
+        activeGroupName = name;
+        saveActiveGroupName(activeGroupName);
+        populateGroupPicker();
+      });
+    });
     byId("styles-group-select").addEventListener("change", function (e) {
       activeGroupName = e.target.value;
       saveActiveGroupName(activeGroupName);
+      populateFieldsFromGroup(activeGroup());
       applyActiveGroupToDocument();
     });
     applyActiveGroupToDocument();
+    populateFieldsFromGroup(activeGroup());
   }
 
   function cacheEls() {
