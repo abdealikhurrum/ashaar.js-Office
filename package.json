@@ -25,5 +25,8 @@
   "dependencies": {
     "office-addin-debugging": "^6.1.1",
     "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "adm-zip": "^0.5.18"
   }
 }
