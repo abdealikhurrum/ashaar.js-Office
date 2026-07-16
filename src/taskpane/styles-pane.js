@@ -403,8 +403,12 @@
             an.font.sizeBidirectional = csSize;
             an.paragraphFormat.alignment = Word.Alignment.right;
             if (!footnote.isNullObject) {
+              // Footnotes read smaller than body text — 10pt, but never larger
+              // than the body size if that's set below 10.
+              var footnoteSize = Math.min(10, csSize);
               footnote.font.nameBidirectional = csFont;
-              footnote.font.sizeBidirectional = csSize;
+              footnote.font.size = footnoteSize;
+              footnote.font.sizeBidirectional = footnoteSize;
               footnote.paragraphFormat.alignment = Word.Alignment.right;
             }
             section.pageSetup.sectionDirection = Word.SectionDirection.rightToLeft;
