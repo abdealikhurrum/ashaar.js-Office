@@ -6,9 +6,11 @@
   var modeTable = document.getElementById("mode-table");
   var modeConvert = document.getElementById("mode-convert");
   var modeBooklet = document.getElementById("mode-booklet");
+  var modeStyles = document.getElementById("mode-styles");
   var tablePanel = document.getElementById("table-mode-panel");
   var convertPanel = document.getElementById("convert-mode-panel");
   var bookletPanel = document.getElementById("booklet-mode-panel");
+  var stylesPanel = document.getElementById("styles-mode-panel");
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
   var layoutPreset = document.getElementById("layout-preset");
@@ -310,21 +312,27 @@
     var isTable = mode === "table";
     var isConvert = mode === "convert";
     var isBooklet = mode === "booklet";
+    var isStyles = mode === "styles";
     modeTable.classList.toggle("is-active", isTable);
     modeConvert.classList.toggle("is-active", isConvert);
     modeBooklet.classList.toggle("is-active", isBooklet);
+    modeStyles.classList.toggle("is-active", isStyles);
     modeTable.setAttribute("aria-selected", String(isTable));
     modeConvert.setAttribute("aria-selected", String(isConvert));
     modeBooklet.setAttribute("aria-selected", String(isBooklet));
+    modeStyles.setAttribute("aria-selected", String(isStyles));
     tablePanel.classList.toggle("is-active", isTable);
     convertPanel.classList.toggle("is-active", isConvert);
     bookletPanel.classList.toggle("is-active", isBooklet);
+    stylesPanel.classList.toggle("is-active", isStyles);
     tablePanel.hidden = !isTable;
     convertPanel.hidden = !isConvert;
     bookletPanel.hidden = !isBooklet;
+    stylesPanel.hidden = !isStyles;
     setMessage(isTable ? "Table input mode: draw a blank grid, then type in Word."
       : isConvert ? "Ashaar.js conversion mode: paste source text, then insert a converted table."
-      : "Booklet mode: impose the open document into a print-ready booklet.");
+      : isBooklet ? "Booklet mode: impose the open document into a print-ready booklet."
+      : "Styles mode: apply named heading/quote/emphasis styles, grouped by document use case.");
   }
 
   function renderPreview() {
@@ -4915,6 +4923,12 @@
     modeBooklet.addEventListener("click", function () {
       setMode("booklet");
       if (window.BookletPane) window.BookletPane.onShow();
+    });
+    modeStyles.addEventListener("click", function () {
+      setMode("styles");
+      if (typeof AshaarStylesPane !== "undefined" && AshaarStylesPane.onTabShown) {
+        AshaarStylesPane.onTabShown();
+      }
     });
     document.getElementById("insert-structure").addEventListener("click", insertStructure);
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
