@@ -11,7 +11,74 @@
   var activeGroupName = "General";
   var groupStore = {}; // name -> group recipe (built-ins + custom, merged at load time)
 
+  var GROUP_STORE_KEY = "ashaar-style-groups"; // custom groups only, keyed by name
+  var ACTIVE_GROUP_KEY = "ashaar-style-active-group";
+
   function byId(id) { return document.getElementById(id); }
+
+  function loadGroupStore() {
+    try {
+      var raw = Office.context.document.settings.get(GROUP_STORE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+
+  function saveGroupStore(store, done) {
+    Office.context.document.settings.set(GROUP_STORE_KEY, JSON.stringify(store || {}));
+    Office.context.document.settings.saveAsync(function () { if (done) done(); });
+  }
+
+  function loadActiveGroupName() {
+    var raw = Office.context.document.settings.get(ACTIVE_GROUP_KEY);
+    return (typeof raw === "string" && raw) ? raw : "General";
+  }
+
+  function saveActiveGroupName(name, done) {
+    Office.context.document.settings.set(ACTIVE_GROUP_KEY, name);
+    Office.context.document.settings.saveAsync(function () { if (done) done(); });
+  }
+
+  // All group names available in the picker: built-ins first, then custom
+  // (custom groups can shadow a built-in name; custom wins).
+  function allGroups() {
+    var out = {};
+    Object.keys(AshaarStyles.BUILTIN_GROUPS).forEach(function (k) { out[k] = AshaarStyles.BUILTIN_GROUPS[k]; });
+    Object.keys(groupStore).forEach(function (k) { out[k] = AshaarStyles.normalizeGroup(groupStore[k]); });
+    return out;
+  }
+
+  function activeGroup() {
+    var groups = allGroups();
+    return groups[activeGroupName] || AshaarStyles.BUILTIN_GROUPS.General;
+  }
+
+  function populateGroupPicker() {
+    var select = byId("styles-group-select");
+    if (!select) return;
+    select.innerHTML = "";
+    var groups = allGroups();
+    Object.keys(groups).sort().forEach(function (name) {
+      var opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      if (name === activeGroupName) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+
+  // Re-syncs Word's actual style definitions to match the active group, then
+  // re-populates form fields from it (Task 7/8 read these same fields).
+  function applyActiveGroupToDocument(then) {
+    Word.run(function (context) {
+      return AshaarStylesPane.ensureAshaarStyles(context, activeGroup()).then(function () {
+        return context.sync();
+      });
+    }).then(function () {
+      if (then) then();
+    }).catch(function (e) {
+      setStatus(byId("styles-rtl-status"), "Error applying style group: " + (e.message || String(e)), true);
+    });
+  }
 
   function setStatus(el, msg, warn) {
     if (!el) return;
@@ -118,6 +185,17 @@
     }
     els.unsupported.hidden = true;
     els.body.hidden = false;
+    if (bound) return;
+    bound = true;
+    groupStore = loadGroupStore();
+    activeGroupName = loadActiveGroupName();
+    populateGroupPicker();
+    byId("styles-group-select").addEventListener("change", function (e) {
+      activeGroupName = e.target.value;
+      saveActiveGroupName(activeGroupName);
+      applyActiveGroupToDocument();
+    });
+    applyActiveGroupToDocument();
   }
 
   function cacheEls() {
