@@ -481,6 +481,9 @@ button:disabled:hover {
   flex-direction: column;
   gap: 8px;
 }
+.adopt-check[hidden] {
+  display: none;
+}
 .adopt-check {
   display: flex;
   align-items: center;

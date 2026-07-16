@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260715-booklet-mini";
+      window.ASHAAR_ASSET_VERSION = "20260715-booklet-fixes";
     </script>
     <script>
       (function (v) {
@@ -391,9 +391,15 @@
           little booklet. Prints single-sided — the double-sided controls above don't apply here.
         </p>
 
+        <label class="adopt-check" id="booklet-reverse-line" hidden>
+          <input type="checkbox" id="booklet-reverse">
+          Backs in reverse order (use if your printer stacks pages face up / reversed)
+        </label>
+
         <p class="adopt-hint" id="booklet-status"></p>
         <section class="actions" aria-label="Booklet output">
-          <button id="booklet-make" type="button" disabled>Make booklet PDF</button>
+          <button id="booklet-make" type="button">Make booklet PDF</button>
+          <button id="booklet-download-backs" type="button" hidden>Download backs</button>
         </section>
       </section>
 

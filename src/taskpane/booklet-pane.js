@@ -11,6 +11,12 @@
   var docBytes = null;
   var pageCount = 0;
   var bound = false;
+  // Stashed from the last "Make booklet PDF" run in manual-duplex mode, so
+  // the separate "Download backs" click (a fresh user gesture — required
+  // because Word's embedded webview blocks a second auto-triggered download
+  // from the same click) reimposes the SAME document state, not a possibly
+  // newer one.
+  var pendingBacks = null;
 
   function setStatus(msg, warn) {
     els.status.textContent = msg;
@@ -28,6 +34,7 @@
       flip: els.flip.value,
       duplex: els.duplex.value,
       paperSize: els.paperSize.value,
+      reverse: els.reverse.checked,
     };
   }
 
@@ -38,10 +45,11 @@
     els.flipField.hidden = !withBack;
     els.zineNote.hidden = withBack;
     if (!withBack) els.duplex.value = "auto";
+    syncDuplexUi();
   }
 
-  function sleep(ms) {
-    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  function syncDuplexUi() {
+    els.reverseLine.hidden = els.duplex.value !== "manual";
   }
 
   function download(bytes, name) {
@@ -119,19 +127,26 @@
       (p.sheets.length === 1 ? "" : "s") + ", " + p.paddedCount + " sides" + blankNote + ".");
   }
 
+  // Reads the document fresh and updates the cached docBytes/pageCount.
+  // Called by BOTH "Get current document" (a preview) and "Make booklet PDF"
+  // (the real thing) — Make never trusts a possibly-stale previous read, so
+  // editing the document and clicking Make again always reflects the edit,
+  // with no separate "refresh" step to remember.
+  async function refreshDocument() {
+    var bytes = await getDocumentAsPdfBytes();
+    if (!bytes.length) throw new Error("The document appears to be empty.");
+    var doc = await PDFLib.PDFDocument.load(bytes);
+    docBytes = bytes;
+    pageCount = doc.getPageCount();
+    setDocStatus(pageCount + " page" + (pageCount === 1 ? "" : "s") + " loaded from the open document.");
+    renderPlan();
+  }
+
   async function getCurrentDocument() {
     els.getDoc.disabled = true;
-    els.make.disabled = true;
     setDocStatus("Reading the open document as PDF…");
     try {
-      var bytes = await getDocumentAsPdfBytes();
-      if (!bytes.length) throw new Error("The document appears to be empty.");
-      var doc = await PDFLib.PDFDocument.load(bytes);
-      docBytes = bytes;
-      pageCount = doc.getPageCount();
-      els.make.disabled = false;
-      setDocStatus(pageCount + " page" + (pageCount === 1 ? "" : "s") + " loaded from the open document.");
-      renderPlan();
+      await refreshDocument();
     } catch (e) {
       console.error(e);
       docBytes = null;
@@ -143,31 +158,50 @@
   }
 
   async function makeBooklet() {
-    if (!docBytes) return;
     els.make.disabled = true;
-    setStatus("Imposing…");
+    els.downloadBacks.hidden = true;
+    setStatus("Reading the open document…");
     try {
+      await refreshDocument();
+      setStatus(els.status.textContent + " Imposing…");
       var o = opts();
       o.pdfLib = PDFLib;
       if (o.duplex === "manual") {
         var fronts = await ImposePdf.imposePdf(docBytes, Object.assign({}, o, { faces: "fronts", reverse: false }));
-        var backs = await ImposePdf.imposePdf(docBytes, Object.assign({}, o, { faces: "backs" }));
         download(fronts, "booklet-1-fronts.pdf");
-        await sleep(500);
-        download(backs, "booklet-2-backs.pdf");
-        renderPlan();
-        setStatus(els.status.textContent + " Two files downloaded: print the fronts file, reinsert the stack, then print the backs file.");
+        pendingBacks = { docBytes: docBytes, opts: o };
+        els.downloadBacks.hidden = false;
+        els.downloadBacks.disabled = false;
+        setStatus(els.status.textContent + ' Fronts downloaded — print them, reinsert the stack, then click "Download backs".');
       } else {
         var out = await ImposePdf.imposePdf(docBytes, o);
         download(out, "booklet.pdf");
-        renderPlan();
         setStatus(els.status.textContent + " Booklet PDF downloaded.");
       }
     } catch (e) {
       console.error(e);
-      setStatus("Imposition failed: " + (e.message || e), true);
+      setStatus("Couldn’t make the booklet: " + (e.message || e), true);
     } finally {
       els.make.disabled = false;
+    }
+  }
+
+  // A separate click (not auto-triggered after fronts) because Word's
+  // embedded webview blocks a second programmatic download fired from the
+  // same click handler — each file needs its own genuine user gesture.
+  async function downloadBackFaces() {
+    if (!pendingBacks) return;
+    els.downloadBacks.disabled = true;
+    try {
+      var backs = await ImposePdf.imposePdf(pendingBacks.docBytes,
+        Object.assign({}, pendingBacks.opts, { faces: "backs" }));
+      download(backs, "booklet-2-backs.pdf");
+      setStatus(els.status.textContent + " Backs downloaded.");
+    } catch (e) {
+      console.error(e);
+      setStatus("Couldn’t make the backs file: " + (e.message || e), true);
+    } finally {
+      els.downloadBacks.disabled = false;
     }
   }
 
@@ -184,9 +218,13 @@
     els.docStatus = document.getElementById("booklet-doc-status");
     els.getDoc = document.getElementById("booklet-get-doc");
     els.make = document.getElementById("booklet-make");
+    els.downloadBacks = document.getElementById("booklet-download-backs");
+    els.reverse = document.getElementById("booklet-reverse");
+    els.reverseLine = document.getElementById("booklet-reverse-line");
 
     els.getDoc.addEventListener("click", getCurrentDocument);
     els.make.addEventListener("click", makeBooklet);
+    els.downloadBacks.addEventListener("click", downloadBackFaces);
     ["scheme", "direction", "flip", "duplex"].forEach(function (key) {
       els[key].addEventListener("change", function () {
         syncSchemeUi();
