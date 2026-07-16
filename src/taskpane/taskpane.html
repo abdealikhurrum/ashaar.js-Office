@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260716-styles-hide-fonts";
+      window.ASHAAR_ASSET_VERSION = "20260716-styles-color-pickers";
     </script>
     <script>
       (function (v) {
@@ -470,7 +470,7 @@
           <details class="import-panel" open>
             <summary>Emphasis</summary>
             <div class="field"><label for="styles-emphasis-color">Color</label>
-              <input id="styles-emphasis-color" type="text" value="#FF0000"></div>
+              <input id="styles-emphasis-color" type="color" value="#FF0000"></div>
             <div class="field"><label for="styles-emphasis-bump">Size bump (pt)</label>
               <input id="styles-emphasis-bump" type="number" min="0" max="20" value="3"></div>
             <button id="styles-emphasis-update" type="button" class="button--secondary">Update style</button>
@@ -480,7 +480,7 @@
           <details class="import-panel" open>
             <summary>Quote</summary>
             <div class="field"><label for="styles-quote-color">Border color</label>
-              <input id="styles-quote-color" type="text" value="#000000"></div>
+              <input id="styles-quote-color" type="color" value="#000000"></div>
             <div class="field"><label for="styles-quote-width">Border width</label>
               <select id="styles-quote-width">
                 <option value="Pt025">0.25pt</option>
