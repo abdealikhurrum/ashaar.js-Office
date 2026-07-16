@@ -98,6 +98,27 @@
     })
   };
 
+  // Emphasis has no style-level absolute size — only a bump amount. The
+  // resulting absolute size is computed live from whatever the selection's
+  // own base size already is (see §2 of the design spec).
+  function computeEmphasisSize(baseSizePt, bumpPt) {
+    var base = (typeof baseSizePt === "number" && baseSizePt > 0) ? baseSizePt : 12;
+    var bump = (typeof bumpPt === "number") ? bumpPt : 0;
+    return base + bump;
+  }
+
+  function clampIndentPt(pt) {
+    var n = (typeof pt === "number" && !isNaN(pt)) ? pt : 0;
+    return Math.max(0, Math.min(200, n));
+  }
+
+  // null means "Word auto" and must pass through unclamped.
+  function clampLineHeightPt(pt) {
+    if (pt == null) return null;
+    var n = (typeof pt === "number" && !isNaN(pt)) ? pt : 0;
+    return Math.max(6, Math.min(200, n));
+  }
+
   return {
     ROLES: ROLES,
     STYLE_NAME: STYLE_NAME,
@@ -106,6 +127,9 @@
     defaultGroup: defaultGroup,
     mergeGroup: mergeGroup,
     normalizeGroup: normalizeGroup,
-    BUILTIN_GROUPS: BUILTIN_GROUPS
+    BUILTIN_GROUPS: BUILTIN_GROUPS,
+    computeEmphasisSize: computeEmphasisSize,
+    clampIndentPt: clampIndentPt,
+    clampLineHeightPt: clampLineHeightPt
   };
 }));

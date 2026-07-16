@@ -78,4 +78,29 @@ const AshaarStyles = require("../src/taskpane/word-styles");
   });
 }
 
+// ── computeEmphasisSize ───────────────────────────────────────────────────────
+
+{
+  assert.equal(AshaarStyles.computeEmphasisSize(12, 3), 15);
+  assert.equal(AshaarStyles.computeEmphasisSize(10.5, 2.5), 13);
+  assert.equal(AshaarStyles.computeEmphasisSize(null, 3), 15,
+    "missing base size falls back to 12pt (Word's own default)");
+  assert.equal(AshaarStyles.computeEmphasisSize(12, null), 12,
+    "missing bump behaves as +0");
+}
+
+// ── clampIndentPt / clampLineHeightPt ────────────────────────────────────────
+
+{
+  assert.equal(AshaarStyles.clampIndentPt(18), 18);
+  assert.equal(AshaarStyles.clampIndentPt(-5), 0, "negative indent clamps to 0");
+  assert.equal(AshaarStyles.clampIndentPt(500), 200, "clamps to a 200pt ceiling");
+  assert.equal(AshaarStyles.clampIndentPt(null), 0);
+
+  assert.equal(AshaarStyles.clampLineHeightPt(null), null, "null (auto) passes through");
+  assert.equal(AshaarStyles.clampLineHeightPt(24), 24);
+  assert.equal(AshaarStyles.clampLineHeightPt(2), 6, "clamps to a 6pt floor");
+  assert.equal(AshaarStyles.clampLineHeightPt(500), 200, "clamps to a 200pt ceiling");
+}
+
 console.log("word-styles.test.js: all assertions passed");
