@@ -36,6 +36,7 @@
         <button id="mode-table" class="mode-button is-active" type="button" role="tab" aria-selected="true" aria-controls="table-mode-panel">Table Input</button>
         <button id="mode-convert" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="convert-mode-panel">Ashaar.js Convert</button>
         <button id="mode-booklet" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="booklet-mode-panel">Booklet</button>
+        <button id="mode-styles" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="styles-mode-panel">Styles</button>
       </div>
 
       <section id="settings-panel" class="controls settings-panel" aria-label="Settings">
@@ -403,6 +404,119 @@
         </section>
       </section>
 
+      <section id="styles-mode-panel" class="mode-panel" role="tabpanel" aria-labelledby="mode-styles" hidden>
+        <div class="section-title">
+          <h2>Styles</h2>
+          <p>Named Word styles for prose documents — headings, emphasis, block quotes, and Quran quotes — grouped by use case. Requires desktop Word (Windows/Mac).</p>
+        </div>
+        <p id="styles-unsupported" class="adopt-hint" hidden>This add-in's Styles tab requires desktop Word (Windows or Mac) — it isn't available on Word for the web.</p>
+
+        <div id="styles-body">
+          <section class="sp-profile-row">
+            <label for="styles-group-select">Style group</label>
+            <select id="styles-group-select"></select>
+            <button id="styles-group-saveas" type="button" class="button--secondary">Save as new group&hellip;</button>
+          </section>
+          <div id="styles-saveas-row" class="sp-profile-row" hidden>
+            <label for="styles-saveas-name">Name</label>
+            <input id="styles-saveas-name" type="text" class="template-name-input" placeholder="New group name">
+            <button id="styles-saveas-ok" type="button">Save</button>
+            <button id="styles-saveas-cancel" type="button" class="button--secondary">Cancel</button>
+          </div>
+
+          <details class="import-panel" open>
+            <summary>Heading 1</summary>
+            <div class="field"><label for="styles-h1-font">Font</label>
+              <input id="styles-h1-font" type="text" value="Marjaan"></div>
+            <div class="field"><label for="styles-h1-size">Size (pt)</label>
+              <input id="styles-h1-size" type="number" min="6" max="72" value="18"></div>
+            <button id="styles-h1-update" type="button" class="button--secondary">Update style</button>
+            <button id="styles-h1-apply" type="button">Apply to selection</button>
+          </details>
+
+          <details class="import-panel">
+            <summary>Heading 2</summary>
+            <div class="field"><label for="styles-h2-font">Font</label>
+              <input id="styles-h2-font" type="text" value="Marjaan"></div>
+            <div class="field"><label for="styles-h2-size">Size (pt)</label>
+              <input id="styles-h2-size" type="number" min="6" max="72" value="16"></div>
+            <button id="styles-h2-update" type="button" class="button--secondary">Update style</button>
+            <button id="styles-h2-apply" type="button">Apply to selection</button>
+          </details>
+
+          <details class="import-panel">
+            <summary>Heading 3</summary>
+            <div class="field"><label for="styles-h3-font">Font</label>
+              <input id="styles-h3-font" type="text" value="Marjaan"></div>
+            <div class="field"><label for="styles-h3-size">Size (pt)</label>
+              <input id="styles-h3-size" type="number" min="6" max="72" value="14"></div>
+            <button id="styles-h3-update" type="button" class="button--secondary">Update style</button>
+            <button id="styles-h3-apply" type="button">Apply to selection</button>
+          </details>
+
+          <details class="import-panel">
+            <summary>Emphasis</summary>
+            <div class="field"><label for="styles-emphasis-color">Color</label>
+              <input id="styles-emphasis-color" type="text" value="#FF0000"></div>
+            <div class="field"><label for="styles-emphasis-bump">Size bump (pt)</label>
+              <input id="styles-emphasis-bump" type="number" min="0" max="20" value="3"></div>
+            <button id="styles-emphasis-update" type="button" class="button--secondary">Update style</button>
+            <button id="styles-emphasis-apply" type="button">Apply to selection</button>
+          </details>
+
+          <details class="import-panel">
+            <summary>Quote</summary>
+            <div class="field"><label for="styles-quote-color">Border color</label>
+              <input id="styles-quote-color" type="text" value="#000000"></div>
+            <div class="field"><label for="styles-quote-width">Border width</label>
+              <select id="styles-quote-width">
+                <option value="Pt025">0.25pt</option>
+                <option value="Pt050" selected>0.5pt</option>
+                <option value="Pt075">0.75pt</option>
+                <option value="Pt100">1pt</option>
+                <option value="Pt150">1.5pt</option>
+              </select></div>
+            <div class="field"><label for="styles-quote-indent">Default indent (pt)</label>
+              <input id="styles-quote-indent" type="number" min="0" max="200" value="0"></div>
+            <button id="styles-quote-update" type="button" class="button--secondary">Update style</button>
+            <button id="styles-quote-apply" type="button">Apply to selection</button>
+            <div class="field"><label for="styles-quote-indent-override">This selection's indent (pt)</label>
+              <input id="styles-quote-indent-override" type="number" min="0" max="200" placeholder="leave blank to use default"></div>
+            <button id="styles-quote-override-apply" type="button" class="button--secondary">Apply indent to this selection</button>
+          </details>
+
+          <details class="import-panel">
+            <summary>Quran Quote</summary>
+            <div class="field"><label for="styles-quranquote-font">Font</label>
+              <input id="styles-quranquote-font" type="text" value="Amiri Quran" list="styles-quranquote-font-list">
+              <datalist id="styles-quranquote-font-list">
+                <option value="Amiri Quran">
+                <option value="KFGQPC Uthman Taha Naskh">
+              </datalist></div>
+            <div class="field"><label for="styles-quranquote-lh">Default line height (pt, blank = Word auto)</label>
+              <input id="styles-quranquote-lh" type="number" min="6" max="200" placeholder="auto"></div>
+            <button id="styles-quranquote-update" type="button" class="button--secondary">Update style</button>
+            <button id="styles-quranquote-apply" type="button">Apply to selection</button>
+            <div class="field"><label for="styles-quranquote-lh-override">This selection's line height (pt)</label>
+              <input id="styles-quranquote-lh-override" type="number" min="6" max="200" placeholder="leave blank to use default"></div>
+            <button id="styles-quranquote-override-apply" type="button" class="button--secondary">Apply line height to this selection</button>
+          </details>
+
+          <details class="import-panel">
+            <summary>RTL document setup</summary>
+            <p id="styles-rtl-status" class="adopt-hint">Not yet applied in this document.</p>
+            <div class="field"><label for="styles-rtl-latin-font">Latin font</label>
+              <input id="styles-rtl-latin-font" type="text" value="Times New Roman"></div>
+            <div class="field"><label for="styles-rtl-cs-font">Complex-script font</label>
+              <input id="styles-rtl-cs-font" type="text" value="Fatemi Maqala"></div>
+            <div class="field"><label for="styles-rtl-cs-size">Complex-script size (pt)</label>
+              <input id="styles-rtl-cs-size" type="number" min="6" max="72" value="12"></div>
+            <button id="styles-rtl-apply" type="button">Set up RTL document</button>
+            <p class="adopt-hint">Note: Word's automatic RTL detection handles paragraph direction for typed Arabic/Urdu/Persian text. Office.js has no supported way to force Normal-style paragraph direction (a VBA-only capability) — if a blank paragraph's cursor/list behavior looks wrong, use Word's own Layout &rarr; Paragraph Direction control.</p>
+          </details>
+        </div>
+      </section>
+
       <section class="actions" aria-label="Justification actions">
         <button id="reset-justification" type="button" class="button--secondary">Reset (clear kashida &amp; spaces)</button>
         <button id="show-cell-map" type="button" class="button--secondary">Show cell structure</button>
@@ -444,6 +558,8 @@
           "./impose-core.js",
           "./impose-pdf.js",
           "./booklet-pane.js",
+          "./word-styles.js",
+          "./styles-pane.js",
           "./taskpane.js"
         ];
         // Parser-inserted, non-async document.write preserves load+exec order —
