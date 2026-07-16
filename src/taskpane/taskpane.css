@@ -213,6 +213,13 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+/* The explicit display above overrides the UA [hidden] rule, so the hidden
+   attribute alone won't hide .controls / .actions (e.g. hiding the poetry
+   settings panel + justify actions in Styles/Booklet modes). Restore it. */
+.controls[hidden],
+.actions[hidden] {
+  display: none !important;
+}
 
 .field[hidden] {
   display: none;
