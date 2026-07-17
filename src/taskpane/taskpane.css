@@ -213,6 +213,13 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+/* The explicit display above overrides the UA [hidden] rule, so the hidden
+   attribute alone won't hide .controls / .actions (e.g. hiding the poetry
+   settings panel + justify actions in Styles/Booklet modes). Restore it. */
+.controls[hidden],
+.actions[hidden] {
+  display: none !important;
+}
 
 .field[hidden] {
   display: none;
@@ -752,3 +759,16 @@ input[type="range"][disabled] { opacity: 0.45; }
 /* The hidden attribute must beat the display rules above (sp-chips is
    display:flex), or hidden panel parts render at boot. */
 .settings-panel [hidden] { display: none !important; }
+
+/* ── Convert tab ─────────────────────────────────────────────────────────── */
+.conv-actions { display: flex; gap: 8px; margin: 8px 0; }
+.conv-actions button { flex: 1; }
+.conv-scope { border: 1px solid #d8d8d8; border-radius: 4px; padding: 6px 10px; margin: 8px 0; }
+.conv-scope legend { font-weight: 600; padding: 0 4px; }
+.conv-scope label { display: inline-flex; align-items: center; gap: 4px; margin-right: 14px; }
+#conv-checklist { margin-top: 8px; }
+.conv-group { border: 1px solid #d8d8d8; border-radius: 4px; padding: 6px 10px; margin: 8px 0; }
+.conv-group legend { font-weight: 600; padding: 0 4px; display: inline-flex; align-items: center; gap: 6px; }
+.conv-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.conv-row label { font-family: inherit; }
+.conv-lossy { color: #b25b00; cursor: help; font-weight: 700; }
