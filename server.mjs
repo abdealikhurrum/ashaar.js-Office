@@ -36,16 +36,20 @@ function proxyToZotero(req, res, target, search) {
     res.writeHead(upstreamRes.statusCode || 502, {
       "Content-Type": upstreamRes.headers["content-type"] || "application/octet-stream"
     });
+    upstreamRes.on("error", () => {
+      if (!res.writableEnded) res.destroy();
+    });
     upstreamRes.pipe(res);
   });
   upstreamReq.on("error", (err) => {
-    if (res.headersSent) {
+    if (res.headersSent || res.writableEnded) {
       res.end();
       return;
     }
     res.writeHead(502, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "zotero-unreachable", detail: err.message }));
   });
+  req.on("error", () => upstreamReq.destroy());
   req.pipe(upstreamReq);
 }
 
