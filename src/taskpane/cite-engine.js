@@ -51,9 +51,17 @@
 
     return {
       raw: engine,
-      cite: function (itemKeys) {
-        var citationItems = (itemKeys || []).map(function (id) { return { id: id }; });
-        return engine.makeCitationCluster(citationItems);
+      cite: function (citationItems) {
+        var items = (citationItems || []).map(function (c) {
+          if (typeof c === "string") { return { id: c }; }
+          var out = { id: c.id };
+          if (c.locator !== undefined && c.locator !== null && String(c.locator) !== "") {
+            out.locator = String(c.locator);
+          }
+          if (c.label) { out.label = c.label; }
+          return out;
+        });
+        return engine.makeCitationCluster(items);
       },
       bibliography: function () {
         return joinBibliography(engine.makeBibliography());

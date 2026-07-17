@@ -75,3 +75,23 @@ const apaParent = CiteEngine.build({ styleXml: read("csl-styles/apa.csl"), local
 const apaFatemi = CiteEngine.build({ styleXml: read("csl-styles/apa-fatemi.csl"), locales, items, lang: "en-US" });
 assert.strictEqual(apaFatemi.bibliography(), apaParent.bibliography(), "APA Fatemi style equals parent when genre absent");
 console.log("cite-engine (apa fatemi parity) test passed");
+
+// --- locators (SP-A Task 1) ---
+// Reuse the existing engines: `chicago` (en-US) and `chicagoAr` (ar), and a
+// real fixture id from `items`.
+const enEngine = chicago;
+const arEngine = chicagoAr;
+const someId = "en-book";
+const withPage = enEngine.cite([{ id: someId, locator: "42", label: "page" }]);
+const noLoc = enEngine.cite([{ id: someId }]);
+assert.ok(withPage.indexOf("42") !== -1, "page locator value appears in the citation");
+assert.ok(noLoc.indexOf("42") === -1, "no locator ⇒ value absent (locator plumbing is real)");
+// label-term plumbing: a chapter locator renders the localized 'chap.' term (en)
+const withChap = enEngine.cite([{ id: someId, locator: "3", label: "chapter" }]);
+assert.ok(/chap/i.test(withChap), "chapter label renders the 'chap.' term (en)");
+// bare-string back-compat still works
+assert.ok(typeof enEngine.cite([someId]) === "string", "cite() still accepts bare id strings");
+// locale-independent plumbing: value also present under the ar engine
+const arWithPage = arEngine.cite([{ id: someId, locator: "42", label: "page" }]);
+assert.ok(arWithPage.indexOf("42") !== -1, "locator value appears under the ar locale too");
+console.log("cite locators test passed");
