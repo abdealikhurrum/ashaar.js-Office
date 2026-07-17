@@ -54,13 +54,19 @@ Everything below needs a real Word host (desktop Word recommended: Windows/Mac).
 2. Check **دعائم الإسلام (ar-book)** (optionally also en-book to see a mixed cluster).
 3. Preview container is right-aligned (`dir="rtl"`) and shows the Arabic title.
 4. Click **Insert citation**. Expected: a footnote is created; the Arabic title renders;
-   **the footnote paragraph is right-aligned** (this is the RTL treatment).
-5. **KNOWN LIMITATION — read carefully.** Office.js exposes **no paragraph
-   reading-order (bidi) setter** — only `paragraph.alignment`. So this add-in applies
-   **right-alignment** as the practical RTL treatment; it does **not** set true RTL
-   bidi paragraph direction. Punctuation/number ordering within a mixed line may not be
-   perfectly bidi. For true bidi, set it manually in Word: **Layout → Paragraph
-   Direction → Right-to-Left** (desktop Word). This is expected, not a bug.
+   the parentheses, comma and period around the Arabic run sit in the **correct
+   positions** — e.g. `(دار المعارف، 1951).`, NOT `)دار المعارف, ).1951` — and the
+   in-run commas are **Arabic commas ،** (verified live in Word, 2026-07-16).
+5. **How the bidi correctness is achieved / its boundary.** citeproc emits plain
+   mixed-direction text with no directional markup, so each maximal Arabic run is
+   wrapped in `<span dir="rtl">` (mapped by Word to an RTL run) — this fixes the
+   neutral-punctuation ordering *within* the run, and ASCII comma/semicolon inside the
+   run are localized to `،`/`؛` (CSL locales cannot localize inter-element delimiters).
+   Separately, Office.js exposes **no paragraph reading-order setter** — only
+   `paragraph.alignment` — so the whole footnote paragraph is **right-aligned** rather
+   than set to true RTL paragraph direction. Per-run direction (the span) is what makes
+   the punctuation correct; the paragraph-level right-to-left flag, if wanted, is still a
+   manual step: **Layout → Paragraph Direction → Right-to-Left** (desktop Word).
 
 ### E. APA (author-date form)
 1. Style = **APA (author-date)**, Locale = English, Output form = **Inline** (author-date
@@ -91,7 +97,11 @@ Everything below needs a real Word host (desktop Word recommended: Windows/Mac).
 
 - All inserted HTML is passed through `CiteWord.sanitize` first — only
   `i b em strong span sup sub br` survive, with all attributes stripped — so no CSL
-  markup can inject styles/scripts into the document.
-- RTL is alignment-only (see D5); document this expectation to end users.
+  markup can inject styles/scripts into the document. `CiteWord.wrapRtlRuns` then runs
+  *after* sanitize and adds our own trusted `<span dir="rtl">` around Arabic runs, so
+  the only attribute in the final HTML is that controlled `dir`.
+- RTL correctness = per-run `dir="rtl"` spans (fixes punctuation ordering) + Arabic
+  in-run comma/semicolon + paragraph right-alignment; true paragraph-level RTL flag is
+  the one manual step (see D5); document this to end users.
 - The bibliography content-control tag (`AshaarBibliography`) is the anchor a future
   "refresh bibliography" / re-cite feature would key on.
