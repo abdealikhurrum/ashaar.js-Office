@@ -20,10 +20,33 @@ const bib = CiteWord.buildBibliographyPayload({ html: "<div>x</div>", rtl: false
 assert.strictEqual(bib.tag, "AshaarBibliography");
 assert.strictEqual(bib.direction, "Ltr");
 
-// citation tag round-trip
-const tag = CiteWord.citationTag(["en-book", "en-article"], "chicago-notes-bibliography");
-assert.deepStrictEqual(CiteWord.parseCitationTag(tag), { style: "chicago-notes-bibliography", itemKeys: ["en-book", "en-article"] });
-assert.strictEqual(CiteWord.parseCitationTag("Nope"), null);
+// --- hardened tags (SP-A) ---
+const tag = CiteWord.buildCitationTag({
+  style: "chicago-notes-bibliography",
+  locale: "ar",
+  items: [{ id: "Key:With:Colons", locator: "42", label: "page" }, { id: "Second" }]
+});
+assert.ok(tag.indexOf("AshaarCite:") === 0, "citation tag is namespaced");
+const parsed = CiteWord.parseCitationTag(tag);
+assert.strictEqual(parsed.style, "chicago-notes-bibliography");
+assert.strictEqual(parsed.locale, "ar");
+assert.strictEqual(parsed.keys.length, 2);
+assert.strictEqual(parsed.keys[0].id, "Key:With:Colons", "colons in id survive (no delimiter collision)");
+assert.strictEqual(parsed.keys[0].locator, "42");
+assert.strictEqual(parsed.keys[0].label, "page");
+assert.strictEqual(parsed.keys[1].id, "Second");
+// non-ASCII (Arabic) values survive the base64 round-trip
+const arTag = CiteWord.buildCitationTag({ style: "s", locale: "ar", items: [{ id: "كتاب", locator: "٤٢", label: "page" }] });
+assert.strictEqual(CiteWord.parseCitationTag(arTag).keys[0].id, "كتاب");
+assert.strictEqual(CiteWord.parseCitationTag(arTag).keys[0].locator, "٤٢");
+// non-Ashaar / corrupt tags → null
+assert.strictEqual(CiteWord.parseCitationTag("AshaarBibliography"), null);
+assert.strictEqual(CiteWord.parseCitationTag("AshaarCite:@@@not-base64@@@"), null);
+assert.strictEqual(CiteWord.parseCitationTag(""), null);
+// bibliography tag round-trips {style, locale}
+const bibTag = CiteWord.buildBibliographyTag({ style: "apa", locale: "en-US" });
+assert.ok(bibTag.indexOf("AshaarBib:") === 0);
+console.log("hardened tags test passed");
 // --- bidi run wrapping: give Word directional guidance for neutral punctuation ---
 // citeproc emits plain mixed-direction text with no dir info; in an LTR paragraph
 // Word's bidi algorithm mis-places the neutral (),.-, around Arabic runs. wrapRtlRuns

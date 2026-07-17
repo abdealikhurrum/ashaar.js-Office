@@ -95,14 +95,40 @@
     return { html: wrapRtlRuns(sanitize(o.html)), direction: direction(o.rtl), tag: o.tag || "AshaarBibliography" };
   }
 
-  function citationTag(itemKeys, style) {
-    return "AshaarCite:" + style + ":" + (itemKeys || []).join(",");
+  // UTF-8-safe base64 that works in Node (Buffer) and the Word WebView (btoa).
+  function b64encode(str) {
+    if (typeof Buffer !== "undefined") { return Buffer.from(str, "utf8").toString("base64"); }
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+  function b64decode(b64) {
+    if (typeof Buffer !== "undefined") { return Buffer.from(b64, "base64").toString("utf8"); }
+    return decodeURIComponent(escape(atob(b64)));
+  }
+
+  function buildCitationTag(o) {
+    var payload = {
+      v: 1,
+      style: o.style,
+      locale: o.locale,
+      keys: (o.items || []).map(function (i) {
+        return { id: i.id, locator: i.locator || null, label: i.label || null };
+      })
+    };
+    return "AshaarCite:" + b64encode(JSON.stringify(payload));
   }
 
   function parseCitationTag(tag) {
-    var m = /^AshaarCite:([^:]*):(.*)$/.exec(tag || "");
-    if (!m) { return null; }
-    return { style: m[1], itemKeys: m[2] ? m[2].split(",") : [] };
+    var s = String(tag || "");
+    if (s.indexOf("AshaarCite:") !== 0) { return null; }
+    try {
+      var obj = JSON.parse(b64decode(s.slice("AshaarCite:".length)));
+      if (!obj || !Array.isArray(obj.keys)) { return null; }
+      return obj;
+    } catch (e) { return null; }
+  }
+
+  function buildBibliographyTag(o) {
+    return "AshaarBib:" + b64encode(JSON.stringify({ v: 1, style: o.style, locale: o.locale }));
   }
 
   return {
@@ -110,7 +136,8 @@
     wrapRtlRuns: wrapRtlRuns,
     buildNotePayload: buildNotePayload,
     buildBibliographyPayload: buildBibliographyPayload,
-    citationTag: citationTag,
-    parseCitationTag: parseCitationTag
+    buildCitationTag: buildCitationTag,
+    parseCitationTag: parseCitationTag,
+    buildBibliographyTag: buildBibliographyTag
   };
 }));
