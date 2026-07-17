@@ -291,12 +291,17 @@
   // else it inserts sanitized/RTL-run-wrapped HTML. Shared by insertCitation's
   // footnote/endnote branch and refreshCitations() so both paths format a
   // citation identically.
-  function renderCitationInto(ctx, range, items, styleFile, lang) {
+  // `csFont` is optional: pass a pre-resolved complex-script font (read once by
+  // a caller that's iterating many ranges, e.g. refreshCitations()) to skip the
+  // per-call readDocCsFont() sync; omitted, it reads it itself (insertCitation's
+  // single-CC path — unchanged behavior).
+  function renderCitationInto(ctx, range, items, styleFile, lang, csFont) {
     var engine = buildEngine(styleFile, lang);
     if (isRtlLang(lang)) {
-      return readDocCsFont(ctx, range).then(function (csFont) {
+      var csFontPromise = csFont ? Promise.resolve(csFont) : readDocCsFont(ctx, range);
+      return csFontPromise.then(function (resolvedCsFont) {
         var pkg = AshaarTabStop.wrapOoxml(
-          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.cite(items)), { csFont: csFont }));
+          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.cite(items)), { csFont: resolvedCsFont }));
         return range.insertOoxml(pkg, Word.InsertLocation.replace);
       });
     }
@@ -307,13 +312,15 @@
   // Same render strategy as renderCitationInto, but for the whole-library
   // bibliography (engine.bibliography() takes no items). Only used by
   // refreshCitations() — insertBibliography() has its own payload/CC-title
-  // handling that isn't otherwise shared.
-  function renderBibliographyInto(ctx, range, styleFile, lang) {
+  // handling that isn't otherwise shared. `csFont` is optional — see
+  // renderCitationInto's comment.
+  function renderBibliographyInto(ctx, range, styleFile, lang, csFont) {
     var engine = buildEngine(styleFile, lang);
     if (isRtlLang(lang)) {
-      return readDocCsFont(ctx, range).then(function (csFont) {
+      var csFontPromise = csFont ? Promise.resolve(csFont) : readDocCsFont(ctx, range);
+      return csFontPromise.then(function (resolvedCsFont) {
         var pkg = AshaarTabStop.wrapOoxml(
-          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.bibliography()), { csFont: csFont }));
+          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.bibliography()), { csFont: resolvedCsFont }));
         return range.insertOoxml(pkg, Word.InsertLocation.replace);
       });
     }
@@ -498,35 +505,52 @@
               ccs = ccs.concat(b.contentControls.items);
             });
 
-            var ops = [];
-            ccs.forEach(function (cc) {
-              var tagStr = String(cc.tag || "");
-              try {
-                if (tagStr.indexOf("AshaarCite:") === 0) {
-                  var parsed = CiteWord.parseCitationTag(cc.tag);
-                  if (!parsed) { return; } // malformed despite the prefix — not really ours
-                  var items = CiteWord.citationItemsFromTag(parsed);
-                  var allResolved = items.every(function (it) {
-                    return cache.items && Object.prototype.hasOwnProperty.call(cache.items, it.id);
-                  });
-                  if (!allResolved) { counts.unresolved++; return; }
-                  var range = cc.getRange();
-                  ops.push(renderCitationInto(ctx, range, items, styleFile, lang).then(function () {
-                    cc.tag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
-                    counts.refreshed++;
-                  }).catch(function () { counts.failed++; }));
-                } else if (tagStr.indexOf("AshaarBib:") === 0) {
-                  var bibRange = cc.getRange();
-                  ops.push(renderBibliographyInto(ctx, bibRange, styleFile, lang).then(function () {
-                    cc.tag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang });
-                    counts.bibs++;
-                  }).catch(function () { counts.failed++; }));
-                }
-                // else: not one of ours — leave untouched
-              } catch (e) { counts.failed++; }
-            });
+            // The complex-script font is a document-level property (Ashaar
+            // Normal style / doc-body bidi font), not per-citation — read it
+            // ONCE here instead of once per CC (readDocCsFont issues its own
+            // ctx.sync(), so per-CC reads would mean one extra sync per Arabic
+            // CC). Only needed at all for rtl locales.
+            var rtl = isRtlLang(lang);
+            var csFontPromise = rtl
+              ? readDocCsFont(ctx, ctx.document.body.getRange())
+              : Promise.resolve(undefined);
 
-            return Promise.all(ops).then(function () { return ctx.sync(); });
+            return csFontPromise.then(function (csFont) {
+              var ops = [];
+              ccs.forEach(function (cc) {
+                var tagStr = String(cc.tag || "");
+                try {
+                  if (tagStr.indexOf("AshaarCite:") === 0) {
+                    var parsed = CiteWord.parseCitationTag(cc.tag);
+                    if (!parsed) { return; } // malformed despite the prefix — not really ours
+                    var items = CiteWord.citationItemsFromTag(parsed);
+                    var allResolved = items.every(function (it) {
+                      return cache.items && Object.prototype.hasOwnProperty.call(cache.items, it.id);
+                    });
+                    if (!allResolved) { counts.unresolved++; return; }
+                    // Content (not whole-control) range: insertOoxml/insertHtml
+                    // "Replace" on a content control's WHOLE range throws
+                    // GeneralException and can orphan the control. Set the tag
+                    // BEFORE the body replace so it sticks regardless of how
+                    // the range op reshapes the control.
+                    var range = cc.getRange("Content");
+                    cc.tag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
+                    ops.push(renderCitationInto(ctx, range, items, styleFile, lang, csFont).then(function () {
+                      counts.refreshed++;
+                    }).catch(function () { counts.failed++; }));
+                  } else if (tagStr.indexOf("AshaarBib:") === 0) {
+                    var bibRange = cc.getRange("Content");
+                    cc.tag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang });
+                    ops.push(renderBibliographyInto(ctx, bibRange, styleFile, lang, csFont).then(function () {
+                      counts.bibs++;
+                    }).catch(function () { counts.failed++; }));
+                  }
+                  // else: not one of ours — leave untouched
+                } catch (e) { counts.failed++; }
+              });
+
+              return Promise.all(ops).then(function () { return ctx.sync(); });
+            });
           });
         });
       }).then(function () {
