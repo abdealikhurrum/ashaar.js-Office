@@ -101,6 +101,75 @@
     return out;
   }
 
+  // --- migration converter (used only by scripts/migrate-mlzsync-to-cne.mjs) ---
+
+  function parseMlzsync(text) {
+    var s = String(text || "");
+    var at = s.indexOf("mlzsync1:");
+    if (at === -1) { return null; }
+    var rest = s.slice(at + "mlzsync1:".length);
+    // 4-digit zero-padded length prefix, then JSON of that length.
+    var m = /^(\d{4})/.exec(rest);
+    if (!m) { return null; }
+    var len = parseInt(m[1], 10);
+    var json = rest.slice(4, 4 + len);
+    var blob;
+    try { blob = JSON.parse(json); } catch (e) {
+      try { blob = JSON.parse(rest.slice(4)); } catch (e2) { return null; }
+    }
+    var out = { fields: {}, creators: {} };
+    var mf = (blob && blob.multifields && blob.multifields._keys) || {};
+    for (var f in mf) {
+      if (!Object.prototype.hasOwnProperty.call(mf, f)) { continue; }
+      out.fields[f] = {};
+      for (var tag in mf[f]) {
+        if (Object.prototype.hasOwnProperty.call(mf[f], tag)) { out.fields[f][tag] = stripBidi(mf[f][tag]); }
+      }
+    }
+    var mc = (blob && blob.multicreators) || {};
+    for (var idx in mc) {
+      if (!Object.prototype.hasOwnProperty.call(mc, idx)) { continue; }
+      var keyObj = mc[idx]._key || {};
+      out.creators[idx] = {};
+      for (var t in keyObj) {
+        if (!Object.prototype.hasOwnProperty.call(keyObj, t)) { continue; }
+        var nm = keyObj[t];
+        var v = {};
+        if (nm.lastName) { v.family = stripBidi(nm.lastName); }
+        if (nm.firstName) { v.given = stripBidi(nm.firstName); }
+        out.creators[idx][t] = v;
+      }
+    }
+    return out;
+  }
+
+  function mlzsyncToCneLines(parsed, creators) {
+    var lines = [];
+    if (!parsed) { return lines; }
+    // fields: any source tag -> romanized (mlzsync 'en' holds transliteration)
+    var fnames = Object.keys(parsed.fields).sort();
+    fnames.forEach(function (f) {
+      var byTag = parsed.fields[f];
+      var tags = Object.keys(byTag).sort();
+      if (tags.length) { lines.push("cne-" + f + "-romanized: " + byTag[tags[0]]); }
+    });
+    // creators: resolve flat index -> creatorType + within-type index
+    var typeCount = {};
+    (creators || []).forEach(function (c, flat) {
+      var type = (c && c.creatorType) || "author";
+      var within = typeCount[type] || 0;
+      typeCount[type] = within + 1;
+      var byTag = parsed.creators[String(flat)];
+      if (!byTag) { return; }
+      var tags = Object.keys(byTag).sort();
+      if (!tags.length) { return; }
+      var nm = byTag[tags[0]];
+      if (nm.family) { lines.push("cne-" + type + "-" + within + "-last-romanized: " + nm.family); }
+      if (nm.given) { lines.push("cne-" + type + "-" + within + "-first-romanized: " + nm.given); }
+    });
+    return lines;
+  }
+
   var SEGMENTS = ["persons", "institutions", "titles", "journals", "publishers", "places", "number", "title-short"];
 
   function variantToLangPrefs(variant) {
@@ -126,6 +195,8 @@
     stripBidi: stripBidi,
     applyVariantsToItem: applyVariantsToItem,
     enrichItemMap: enrichItemMap,
-    variantToLangPrefs: variantToLangPrefs
+    variantToLangPrefs: variantToLangPrefs,
+    parseMlzsync: parseMlzsync,
+    mlzsyncToCneLines: mlzsyncToCneLines
   };
 }));

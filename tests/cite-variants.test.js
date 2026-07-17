@@ -96,3 +96,30 @@ assert.deepStrictEqual(lpB.titles, ["orig", "translit"], "both titles");
 // unknown => treated as orig
 assert.strictEqual(CV.variantToLangPrefs("nonsense"), null, "unknown => null");
 console.log("cite-variants variantToLangPrefs test passed");
+
+// --- parseMlzsync + mlzsyncToCneLines (migration) ---
+const fs = require("fs");
+const path = require("path");
+const mlzMap = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "cite-mlzsync.json"), "utf8"));
+const real = mlzMap["mlz-1"];
+
+const pm = CV.parseMlzsync(real.note);
+assert.deepStrictEqual(pm.fields.title, { en: "Uyun al-Akhbar Vol. 4" }, "mlzsync title (bidi stripped)");
+assert.deepStrictEqual(
+  pm.creators["0"].en,
+  { family: "al-Dai al-Ajal Syedna Idris Imaduddin RA" },
+  "mlzsync creator literal -> family (lastName)"
+);
+
+// no prefix -> null
+assert.strictEqual(CV.parseMlzsync("cne-title-romanized: x"), null, "no mlzsync prefix => null");
+assert.strictEqual(CV.parseMlzsync("mlzsync1:9999{bad json"), null, "malformed => null (no throw)");
+
+// converter: needs native creators for type resolution
+const nativeCreators = [{ creatorType: "author", name: "…" }];
+const lines = CV.mlzsyncToCneLines(pm, nativeCreators);
+assert.ok(lines.indexOf("cne-title-romanized: Uyun al-Akhbar Vol. 4") !== -1, "emits title line");
+assert.ok(lines.indexOf("cne-author-0-last-romanized: al-Dai al-Ajal Syedna Idris Imaduddin RA") !== -1, "emits author line");
+// idempotent
+assert.deepStrictEqual(CV.mlzsyncToCneLines(pm, nativeCreators), lines, "stable output");
+console.log("cite-variants mlzsync test passed");
