@@ -79,6 +79,15 @@ const T = C.TATWEEL;
     "protect سس→سـس must run before ے→سس");
 }
 
+// ── mark tier: sukun ⇄ khari zabar (lossy) ──
+{
+  const sukun = C.MAPPINGS.find(m => m.id === "sukun-kharizabar");
+  assert.ok(sukun && sukun.category === "mark" && sukun.lossy === true,
+    "sukun→khari zabar is a lossy mark row");
+  assert.equal(C.convert("مْن", C.DIRECTIONS.TO_MODERN), "مٰن", "U+0652 → U+0670");
+  assert.equal(C.convert("مٰن", C.DIRECTIONS.TO_LEGACY), "مْن", "U+0670 → U+0652");
+}
+
 // ── groupsForUi ──
 {
   const groups = C.groupsForUi();

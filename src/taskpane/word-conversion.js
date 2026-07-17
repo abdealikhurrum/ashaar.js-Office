@@ -27,8 +27,16 @@
     { id: "rreh-re",        category: "letter", legacy: "رٌ", modern: "ڑ",    label: "ڑ rreh (rā+dammatan)",  wholeWord: false, lossy: false },
     { id: "ddal-dal",       category: "letter", legacy: "دٌ", modern: "ڈ",    label: "ڈ ddal (dāl+dammatan)", wholeWord: false, lossy: false },
     { id: "peh-theh",       category: "letter", legacy: "ثث", modern: "پ",    label: "پ peh",                 wholeWord: false, lossy: false },
-    { id: "chhay-semicolon",category: "letter", legacy: "؛",  modern: "چھے", label: "چھے ⇄ ؛ (semicolon)",   wholeWord: true,  lossy: false }
-    // >>> GENERATED mark/symbol rows (scripts/generate-conversion-table.mjs) — do not edit by hand
+    { id: "chhay-semicolon",category: "letter", legacy: "؛",  modern: "چھے", label: "چھے ⇄ ؛ (semicolon)",   wholeWord: true,  lossy: false },
+
+    // ── mark tier: legacy Arabic-101 keyboard repurposings (confirmed rows) ──
+    // Shift+X emitted sukun (U+0652) but the old font drew it as khari zabar /
+    // dagger alef (U+0670). LOSSY: a genuine sukun would be reinterpreted.
+    { id: "sukun-kharizabar", category: "mark", legacy: "ْ", modern: "ٰ", label: "khari zabar / dagger alef (was sukun)", wholeWord: false, lossy: true }
+    // >>> GENERATED symbol rows (scripts/generate-conversion-table.mjs) — do not edit by hand.
+    // Also pending: high jeem (modern U+06DA) and high noon (modern U+06E8) mark
+    // rows — modern targets confirmed from features.fea, legacy Shift+C/Shift+V
+    // source characters await confirmation.
     // <<< GENERATED
   ];
 
