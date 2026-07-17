@@ -89,3 +89,28 @@ assert.strictEqual(CiteWord.wrapRtlRuns(enOnly).indexOf("،"), -1, "pure-LTR cit
 const notePayload = CiteWord.buildNotePayload({ html: arOnly, rtl: true });
 assert.ok(notePayload.html.indexOf('<span dir="rtl">') !== -1, "note payload html is bidi-wrapped");
 console.log("cite-word test passed");
+
+// --- htmlToOoxmlRuns (Arabic OOXML) ---
+var AR = "كتاب"; // كتاب
+var runs = CiteWord.htmlToOoxmlRuns("<i>" + AR + "</i>", { csFont: "Amiri" });
+assert.ok(runs.indexOf("<w:rtl/>") !== -1, "Arabic run is rtl");
+assert.ok(runs.indexOf('<w:rFonts w:cs="Amiri"/>') !== -1, "Arabic run uses the cs font");
+assert.ok(runs.indexOf("<w:i/>") === -1, "italic is SUPPRESSED on the Arabic run (the squares fix)");
+// Latin italic keeps <w:i/>, no rtl/cs
+var lat = CiteWord.htmlToOoxmlRuns("<i>Daftary</i>", { csFont: "Amiri" });
+assert.ok(lat.indexOf("<w:i/>") !== -1 && lat.indexOf("<w:rtl/>") === -1 && lat.indexOf("w:cs") === -1,
+  "Latin italic run keeps <w:i/> and is not rtl/cs");
+// mixed → distinct runs (both an rtl run and a latin run present)
+var mixedOoxml = CiteWord.htmlToOoxmlRuns(AR + " Daftary", { csFont: "Amiri" });
+assert.ok(mixedOoxml.indexOf("<w:rtl/>") !== -1 && /<w:r>(?!.*<w:rtl\/>).*Daftary/.test(mixedOoxml.replace(/\n/g,"")),
+  "mixed content yields both an rtl run and a non-rtl Latin run");
+// xml-escape
+assert.ok(CiteWord.htmlToOoxmlRuns("A &amp; B", {}).indexOf("A &amp; B") !== -1, "ampersand stays escaped");
+assert.ok(CiteWord.htmlToOoxmlRuns("a < b", {}).indexOf("&lt;") !== -1, "raw < is escaped");
+// superscript
+assert.ok(CiteWord.htmlToOoxmlRuns("<sup>1</sup>", {}).indexOf('<w:vertAlign w:val="superscript"/>') !== -1);
+// paragraph wrapper
+var para = CiteWord.buildCitationParagraphOoxml(AR, { csFont: "Amiri" });
+assert.ok(para.indexOf("<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/></w:pPr>") === 0, "RTL paragraph wrapper");
+assert.ok(para.lastIndexOf("</w:p>") === para.length - "</w:p>".length, "paragraph closed");
+console.log("htmlToOoxmlRuns test passed");

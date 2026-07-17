@@ -131,6 +131,92 @@
     return "AshaarBib:" + b64encode(JSON.stringify({ v: 1, style: o.style, locale: o.locale }));
   }
 
+  function xmlEsc(s) {
+    return String(s).replace(/&(?!amp;|lt;|gt;)/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // Tokenise into HTML tags (opaque) and single characters — same shape wrapRtlRuns uses.
+  function tokenizeHtml(html) {
+    var items = [], re = /<[^>]*>|[\s\S]/g, m;
+    while ((m = re.exec(html || ""))) {
+      var tok = m[0];
+      if (tok.charAt(0) === "<" && tok.charAt(tok.length - 1) === ">") { items.push({ tag: tok }); }
+      else { items.push({ ch: tok }); }
+    }
+    return items;
+  }
+
+  // Per-char RTL-run membership, mirroring wrapRtlRuns: an Arabic char plus the
+  // trailing digits/neutrals/tags up to (but not including) the next Latin letter.
+  function computeRtlFlags(items) {
+    var n = items.length, flags = [], i;
+    for (i = 0; i < n; i++) { flags[i] = false; }
+    i = 0;
+    while (i < n) {
+      if (!items[i].tag && RTL_CHAR.test(items[i].ch)) {
+        var start = i, lastRtl = i, k = i + 1;
+        while (k < n) {
+          var t = items[k];
+          if (t.tag) { k++; continue; }
+          if (LTR_CHAR.test(t.ch)) { break; }
+          if (RTL_CHAR.test(t.ch)) { lastRtl = k; }
+          k++;
+        }
+        var end = k;
+        if (k < n) { while (end - 1 > lastRtl && !items[end - 1].tag && /\s/.test(items[end - 1].ch)) { end--; } }
+        for (var j = start; j < end; j++) { if (!items[j].tag) { flags[j] = true; } }
+        i = end;
+      } else { i++; }
+    }
+    return flags;
+  }
+
+  function emitRun(text, sig, csFont) {
+    var rpr = "<w:rPr>";
+    if (sig.rtl) { rpr += "<w:rtl/>"; if (csFont) { rpr += '<w:rFonts w:cs="' + csFont + '"/>'; } }
+    if (sig.b) { rpr += "<w:b/>"; if (sig.rtl) { rpr += "<w:bCs/>"; } }
+    if (sig.i && !sig.rtl) { rpr += "<w:i/>"; } // italic suppressed on Arabic runs
+    if (sig.sup) { rpr += '<w:vertAlign w:val="superscript"/>'; }
+    rpr += "</w:rPr>";
+    return "<w:r>" + rpr + '<w:t xml:space="preserve">' + xmlEsc(text) + "</w:t></w:r>";
+  }
+
+  function htmlToOoxmlRuns(html, opts) {
+    var csFont = (opts && opts.csFont) || "";
+    var items = tokenizeHtml(html);
+    var rtl = computeRtlFlags(items);
+    var out = [], buf = "", cur = null, fmt = { i: 0, b: 0, sup: 0 };
+    function flush() { if (buf !== "" && cur) { out.push(emitRun(buf, cur, csFont)); } buf = ""; }
+    for (var idx = 0; idx < items.length; idx++) {
+      var it = items[idx];
+      if (it.tag) {
+        var tg = it.tag.toLowerCase().replace(/\s+/g, "");
+        if (/^<(i|em)>$/.test(tg)) { flush(); fmt.i++; }
+        else if (/^<\/(i|em)>$/.test(tg)) { flush(); fmt.i = Math.max(0, fmt.i - 1); }
+        else if (/^<(b|strong)>$/.test(tg)) { flush(); fmt.b++; }
+        else if (/^<\/(b|strong)>$/.test(tg)) { flush(); fmt.b = Math.max(0, fmt.b - 1); }
+        else if (/^<sup>$/.test(tg)) { flush(); fmt.sup++; }
+        else if (/^<\/sup>$/.test(tg)) { flush(); fmt.sup = Math.max(0, fmt.sup - 1); }
+        else if (/^<br\/?>$/.test(tg)) { flush(); out.push("<w:r><w:br/></w:r>"); }
+        // span/sub and any other tag: transparent (no format change)
+        continue;
+      }
+      var sig = { rtl: rtl[idx], i: fmt.i > 0, b: fmt.b > 0, sup: fmt.sup > 0 };
+      if (!cur || cur.rtl !== sig.rtl || cur.i !== sig.i || cur.b !== sig.b || cur.sup !== sig.sup) {
+        flush(); cur = sig;
+      }
+      var ch = it.ch;
+      if (sig.rtl && AR_PUNCT[ch]) { ch = AR_PUNCT[ch]; }
+      buf += ch;
+    }
+    flush();
+    return out.join("");
+  }
+
+  function buildCitationParagraphOoxml(html, opts) {
+    return '<w:p><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr>' + htmlToOoxmlRuns(html, opts) + "</w:p>";
+  }
+
   return {
     sanitize: sanitize,
     wrapRtlRuns: wrapRtlRuns,
@@ -138,6 +224,8 @@
     buildBibliographyPayload: buildBibliographyPayload,
     buildCitationTag: buildCitationTag,
     parseCitationTag: parseCitationTag,
-    buildBibliographyTag: buildBibliographyTag
+    buildBibliographyTag: buildBibliographyTag,
+    htmlToOoxmlRuns: htmlToOoxmlRuns,
+    buildCitationParagraphOoxml: buildCitationParagraphOoxml
   };
 }));
