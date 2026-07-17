@@ -104,6 +104,45 @@
       lbl.appendChild(idSpan);
       li.appendChild(cb);
       li.appendChild(lbl);
+
+      // remove (x) button
+      var rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "cite-item-remove";
+      rm.setAttribute("aria-label", "Remove " + title);
+      rm.textContent = "×";
+      rm.addEventListener("click", function () { removeItem(id); });
+      li.appendChild(rm);
+
+      // locator row (type + value), shown only when the item is checked
+      var loc = document.createElement("div");
+      loc.className = "cite-locator-row";
+      loc.hidden = !cb.checked;
+      var prefix = document.createElement("span");
+      prefix.className = "cite-locator-prefix";
+      prefix.textContent = "cite at:";
+      var sel = document.createElement("select");
+      sel.className = "cite-locator-type";
+      sel.setAttribute("data-cite-loc-type", id);
+      ["page", "chapter", "section", "verse"].forEach(function (t) {
+        var opt = document.createElement("option");
+        opt.value = t; opt.textContent = t;
+        sel.appendChild(opt);
+      });
+      var val = document.createElement("input");
+      val.type = "text";
+      val.className = "cite-locator-value";
+      val.setAttribute("data-cite-loc-value", id);
+      val.placeholder = "e.g. 42";
+      val.addEventListener("input", renderPreview);
+      sel.addEventListener("change", renderPreview);
+      loc.appendChild(prefix); loc.appendChild(sel); loc.appendChild(val);
+      li.appendChild(loc);
+
+      // toggle the locator row + refresh preview when checked state changes
+      // (in addition to the renderPreview binding above — both handlers fire)
+      cb.addEventListener("change", function () { loc.hidden = !cb.checked; });
+
       host.appendChild(li);
     });
     itemsPopulated = true;
@@ -116,6 +155,30 @@
       if (boxes[i].checked) { ids.push(boxes[i].getAttribute("data-cite-id")); }
     }
     return ids;
+  }
+
+  function removeItem(id) {
+    if (cache.items && cache.items[id]) { delete cache.items[id]; }
+    itemsPopulated = false;
+    populateItems(true);
+    renderPreview();
+  }
+
+  // Checked items + their locator inputs -> [{id, locator, label}] for cite().
+  function selectedCitationItems() {
+    var out = [];
+    var boxes = document.querySelectorAll("#cite-items input[data-cite-id]");
+    for (var i = 0; i < boxes.length; i++) {
+      if (!boxes[i].checked) { continue; }
+      var id = boxes[i].getAttribute("data-cite-id");
+      var esc = (window.CSS && CSS.escape) ? CSS.escape(id) : id;
+      var vEl = document.querySelector('[data-cite-loc-value="' + esc + '"]');
+      var tEl = document.querySelector('[data-cite-loc-type="' + esc + '"]');
+      var item = { id: id };
+      if (vEl && vEl.value.trim()) { item.locator = vEl.value.trim(); item.label = (tEl && tEl.value) || "page"; }
+      out.push(item);
+    }
+    return out;
   }
 
   function block(labelText, bodyHtml) {
@@ -135,9 +198,9 @@
     return ensureAssets(styleFile).then(function () {
       populateItems();
       var engine = buildEngine(styleFile, lang);
-      var ids = selectedIds();
-      var citeHtml = ids.length
-        ? CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(ids)))
+      var items = selectedCitationItems();
+      var citeHtml = items.length
+        ? CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(items)))
         : "<em>Select one or more items to preview a citation.</em>";
       var bibHtml = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.bibliography())) || "<em>No bibliography.</em>";
       var rtl = isRtlLang(lang);
@@ -170,10 +233,11 @@
     var form = currentForm();
     var rtl = isRtlLang(lang);
     ensureAssets(styleFile).then(function () {
-      var ids = selectedIds();
-      if (!ids.length) { setStatus("Select at least one item to cite.", true); return; }
+      var items = selectedCitationItems();
+      if (!items.length) { setStatus("Select at least one item to cite.", true); return; }
       var engine = buildEngine(styleFile, lang);
-      var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(ids)));
+      var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(items)));
+      var citeTag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
       if (typeof Word === "undefined" || !Word.run) {
         setStatus("Word isn't available — this is preview-only in a browser.", true);
         return;
@@ -194,6 +258,9 @@
           range = sel.insertHtml(html, Word.InsertLocation.replace);
           fellBack = true;
         }
+        var cc = range.insertContentControl();
+        cc.tag = citeTag;
+        cc.title = "Ashaar Citation";
         var paras = range.paragraphs;
         paras.load("items");
         return ctx.sync().then(function () {
@@ -204,6 +271,11 @@
         setStatus(fellBack
           ? "Word < 1.5: footnotes/endnotes unavailable — inserted inline instead."
           : "Inserted " + form + " citation.");
+        // Clear locator inputs (not the checkboxes) so the same item can be
+        // re-cited immediately with a different locator.
+        var vals = document.querySelectorAll("#cite-items .cite-locator-value");
+        for (var i = 0; i < vals.length; i++) { vals[i].value = ""; }
+        renderPreview();
       }).catch(function (e) {
         setStatus("Insert failed: " + (e && e.message ? e.message : String(e)), true);
       });
@@ -219,6 +291,7 @@
     ensureAssets(styleFile).then(function () {
       var engine = buildEngine(styleFile, lang);
       var payload = CiteWord.buildBibliographyPayload({ html: engine.bibliography(), rtl: rtl });
+      var bibTag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang });
       if (typeof Word === "undefined" || !Word.run) {
         setStatus("Word isn't available — this is preview-only in a browser.", true);
         return;
@@ -226,7 +299,7 @@
       Word.run(function (ctx) {
         var range = ctx.document.getSelection().insertHtml(payload.html, Word.InsertLocation.after);
         var cc = range.insertContentControl();
-        cc.tag = payload.tag;
+        cc.tag = bibTag;
         cc.title = "Ashaar Bibliography";
         var paras = range.paragraphs;
         paras.load("items");
@@ -235,7 +308,7 @@
           return ctx.sync();
         });
       }).then(function () {
-        setStatus("Inserted bibliography (tagged \"" + payload.tag + "\").");
+        setStatus("Inserted bibliography.");
       }).catch(function (e) {
         setStatus("Insert failed: " + (e && e.message ? e.message : String(e)), true);
       });
@@ -264,11 +337,15 @@
       return;
     }
     setStatus("Picking in Zotero…");
-    CiteZotero.caywPick().then(function (citekeys) {
-      if (!citekeys || !citekeys.length) {
+    // caywPick() resolves [{citekey, locator?, label?}] — fetchCslJson still
+    // wants bare citekeys, so map those out; the objects themselves carry the
+    // locator info used to pre-fill the per-item locator inputs below.
+    CiteZotero.caywPick().then(function (picks) {
+      if (!picks || !picks.length) {
         setStatus(""); // cancelled — no-op
         return;
       }
+      var citekeys = picks.map(function (p) { return p.citekey; });
       return CiteZotero.fetchCslJson(citekeys).then(function (items) {
         if (!cache.items) { cache.items = {}; }
         // Capture already-checked boxes BEFORE the rebuild below wipes them —
@@ -287,6 +364,21 @@
         previouslySelected.concat(citekeys).forEach(function (id) {
           var cb = byId("cite-item-" + id);
           if (cb) { cb.checked = true; }
+        });
+        // Pre-fill the locator row for picks that carried a page/chapter/etc.
+        // from the CAYW popup, and make sure that row is visible.
+        picks.forEach(function (p) {
+          var cb = byId("cite-item-" + p.citekey);
+          if (!cb) { return; }
+          var row = cb.parentNode ? cb.parentNode.querySelector(".cite-locator-row") : null;
+          if (row) { row.hidden = false; }
+          if (p.locator) {
+            var esc = (window.CSS && CSS.escape) ? CSS.escape(p.citekey) : p.citekey;
+            var vEl = document.querySelector('[data-cite-loc-value="' + esc + '"]');
+            var tEl = document.querySelector('[data-cite-loc-type="' + esc + '"]');
+            if (vEl) { vEl.value = p.locator; }
+            if (tEl && p.label) { tEl.value = p.label; }
+          }
         });
         // Sequence the "Added…" status after renderPreview()'s own
         // setStatus("") settles, so it isn't immediately overwritten.

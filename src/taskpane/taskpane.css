@@ -775,10 +775,33 @@ input[type="range"][disabled] { opacity: 0.45; }
 
 /* ── Cite tab ────────────────────────────────────────────────────────────── */
 .cite-items { list-style: none; margin: 4px 0; padding: 0; border: 1px solid #d8d8d8; border-radius: 4px; }
-.cite-items li { display: flex; align-items: flex-start; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #eee; }
+.cite-items li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #eee; }
 .cite-items li:last-child { border-bottom: none; }
 .cite-items label { font-family: inherit; }
 .cite-item-id { font-size: 11px; opacity: 0.6; }
+.cite-item-remove {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: #9a9a9a;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.cite-item-remove:hover, .cite-item-remove:focus { color: #b3261e; background: #f3f3f3; }
+.cite-locator-row {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0 22px;
+}
+.cite-locator-row[hidden] { display: none; }
+.cite-locator-prefix { font-size: 11px; opacity: 0.6; }
+.cite-locator-type { font-size: 12px; padding: 2px 4px; }
+.cite-locator-value { font-size: 12px; padding: 2px 6px; width: 80px; flex: 0 0 auto; }
 .cite-preview { border: 1px solid #d8d8d8; border-radius: 4px; padding: 10px; min-height: 3em; background: var(--panel); }
 .cite-preview .cite-preview-block { margin-bottom: 12px; }
 .cite-preview .cite-preview-block:last-child { margin-bottom: 0; }
