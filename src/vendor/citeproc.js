@@ -25033,4 +25033,4 @@ CSL.parseParticles = (function(){
 }());
 
 
-module.exports = CSL
+if (typeof module !== "undefined" && module.exports) { module.exports = CSL; }

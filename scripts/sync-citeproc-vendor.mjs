@@ -4,9 +4,30 @@
 // for a trailing `module.exports = CSL` line, and printed `object function` as expected, so
 // it is the file vendored here (as src/vendor/citeproc.js) for both Node (require) and
 // browser (global `var CSL = {...}` declared at top level of the same file) use.
+//
+// That trailing `module.exports = CSL` is bare/unguarded, so loading the vendored file as a
+// plain browser <script> throws `ReferenceError: module is not defined` (no `module` global
+// there). `var CSL = {` at line 60 of the bundle already makes CSL a browser global in a
+// classic script, so the only fix needed is to guard the export line so it's a no-op outside
+// Node. This post-processing step rewrites that trailing statement after copying.
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+
+// Guard so `module.exports = CSL` only runs under Node (CommonJS); a no-op under a browser
+// <script> tag, where `module` is undefined and CSL is already the global set at bundle top.
+const GUARDED_EXPORT = 'if (typeof module !== "undefined" && module.exports) { module.exports = CSL; }';
+const BARE_EXPORT_RE = /module\.exports\s*=\s*CSL;?\s*$/;
+
+function guardModuleExports(source) {
+  if (source.includes(GUARDED_EXPORT)) {
+    return source; // already guarded (idempotent re-sync)
+  }
+  if (!BARE_EXPORT_RE.test(source)) {
+    throw new Error("citeproc bundle: expected trailing `module.exports = CSL` not found — upstream format changed, update guardModuleExports()");
+  }
+  return source.replace(BARE_EXPORT_RE, GUARDED_EXPORT);
+}
 
 const root = process.cwd();
 const engineRepo = join(root, "vendor", "citeproc-js");
@@ -30,7 +51,8 @@ function git(dir, args) {
 await mkdir(localesDest, { recursive: true });
 await mkdir(stylesDest, { recursive: true });
 
-await copyFile(join(engineRepo, engineFile[0]), join(dest, engineFile[1]));
+const engineSource = await readFile(join(engineRepo, engineFile[0]), "utf8");
+await writeFile(join(dest, engineFile[1]), guardModuleExports(engineSource));
 for (const name of locales) {
   await copyFile(join(localesRepo, name), join(localesDest, name));
 }
