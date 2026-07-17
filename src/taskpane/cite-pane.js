@@ -133,9 +133,9 @@
       var engine = buildEngine(styleFile, lang);
       var ids = selectedIds();
       var citeHtml = ids.length
-        ? CiteWord.sanitize(engine.cite(ids))
+        ? CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(ids)))
         : "<em>Select one or more items to preview a citation.</em>";
-      var bibHtml = CiteWord.sanitize(engine.bibliography()) || "<em>No bibliography.</em>";
+      var bibHtml = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.bibliography())) || "<em>No bibliography.</em>";
       var rtl = isRtlLang(lang);
       preview.setAttribute("dir", rtl ? "rtl" : "ltr");
       preview.innerHTML =
@@ -169,7 +169,7 @@
       var ids = selectedIds();
       if (!ids.length) { setStatus("Select at least one item to cite.", true); return; }
       var engine = buildEngine(styleFile, lang);
-      var html = CiteWord.sanitize(engine.cite(ids));
+      var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(ids)));
       if (typeof Word === "undefined" || !Word.run) {
         setStatus("Word isn't available — this is preview-only in a browser.", true);
         return;
