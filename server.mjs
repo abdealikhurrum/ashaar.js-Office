@@ -45,12 +45,19 @@ function proxyToZotero(req, res, target, search) {
     upstreamRes.pipe(res);
   });
   upstreamReq.on("error", (err) => {
-    if (res.headersSent || res.writableEnded) {
+    if (res.headersSent || res.writableEnded || !res.writable) {
       res.end();
       return;
     }
     res.writeHead(502, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "zotero-unreachable", detail: err.message }));
+  });
+  // If the client (pane) disconnects before the upstream response completes —
+  // e.g. the user cancels a CAYW pick or navigates away mid long-poll — abort
+  // the upstream request so Zotero releases its integration transaction instead
+  // of leaving it open ("transaction is already in progress" on the next pick).
+  res.on("close", () => {
+    if (!res.writableEnded) upstreamReq.destroy();
   });
   req.on("error", () => upstreamReq.destroy());
   req.pipe(upstreamReq);

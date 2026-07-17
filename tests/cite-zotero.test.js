@@ -75,6 +75,9 @@ assert.deepStrictEqual(CiteZotero.parseCaywResult(undefined), []);
 assert.deepStrictEqual(CiteZotero.parseCaywResult("{@YaumulMabasUyun}"), ["YaumulMabasUyun"]);
 assert.deepStrictEqual(CiteZotero.parseCaywResult("[@YaumulMabasUyun, @IsraaWalMiraaj]"), ["YaumulMabasUyun", "IsraaWalMiraaj"]);
 assert.deepStrictEqual(CiteZotero.parseCaywResult("@YaumulMabasUyun; @IsraaWalMiraaj"), ["YaumulMabasUyun", "IsraaWalMiraaj"]);
+// The real BBT pandoc format: single pick `[@key]` and multi-pick `[@a; @b]`.
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@YaumulMabasUyun]"), ["YaumulMabasUyun"]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@YaumulMabasUyun; @IsraaWalMiraaj]"), ["YaumulMabasUyun", "IsraaWalMiraaj"]);
 console.log("parseCaywResult test passed");
 
 // --- ping: resolves true/false, never rejects ---
@@ -90,16 +93,16 @@ console.log("parseCaywResult test passed");
   console.log("ping test passed");
 })();
 
-// --- caywPick: GET /zotero/cayw?format=citekeys, parses text via parseCaywResult ---
+// --- caywPick: GET /zotero/cayw?format=pandoc, parses pandoc text via parseCaywResult ---
 (async () => {
   let calledUrl = null;
   const fake = async (url) => {
     calledUrl = url;
-    return { ok: true, text: async () => "YaumulMabasUyun,IsraaWalMiraaj" };
+    return { ok: true, text: async () => "[@YaumulMabasUyun; @IsraaWalMiraaj]" };
   };
   const keys = await CiteZotero.caywPick(fake);
   assert.deepStrictEqual(keys, ["YaumulMabasUyun", "IsraaWalMiraaj"]);
-  assert.strictEqual(calledUrl, "/zotero/cayw?format=citekeys", "caywPick fetches the same-origin cayw route");
+  assert.strictEqual(calledUrl, "/zotero/cayw?format=pandoc", "caywPick fetches the same-origin cayw route with the pandoc format");
   console.log("caywPick test passed");
 })();
 

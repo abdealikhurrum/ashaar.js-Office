@@ -90,8 +90,11 @@
 
   function caywPick(fetchImpl) {
     var f = fetchImpl || (typeof fetch !== "undefined" ? fetch : undefined);
+    // BBT CAYW has no "citekeys" format; the pandoc format returns the picked
+    // items as `[@citekey1; @citekey2]`, which parseCaywResult unwraps to bare
+    // citekeys (strips the brackets, the `@`, and splits on `;`/`,`/space).
     return Promise.resolve()
-      .then(function () { return f("/zotero/cayw?format=citekeys"); })
+      .then(function () { return f("/zotero/cayw?format=pandoc"); })
       .then(function (res) {
         if (!res.ok) { throw new Error("cayw HTTP " + res.status); }
         return res.text();
