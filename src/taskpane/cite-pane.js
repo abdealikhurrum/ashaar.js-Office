@@ -159,8 +159,27 @@
 
   function removeItem(id) {
     if (cache.items && cache.items[id]) { delete cache.items[id]; }
+    // Snapshot the OTHER checked rows' checkbox + locator state BEFORE the
+    // rebuild below wipes every row back to unchecked/empty — mirrors the
+    // capture/restore pattern addFromZotero() uses. Without this, removing
+    // one item silently discards every other in-progress checked row.
+    var preserved = selectedCitationItems().filter(function (it) { return it.id !== id; });
     itemsPopulated = false;
     populateItems(true);
+    preserved.forEach(function (it) {
+      var cb = byId("cite-item-" + it.id);
+      if (!cb) { return; }
+      cb.checked = true;
+      var row = cb.parentNode ? cb.parentNode.querySelector(".cite-locator-row") : null;
+      if (row) { row.hidden = false; }
+      if (it.locator) {
+        var esc = (window.CSS && CSS.escape) ? CSS.escape(it.id) : it.id;
+        var vEl = document.querySelector('[data-cite-loc-value="' + esc + '"]');
+        var tEl = document.querySelector('[data-cite-loc-type="' + esc + '"]');
+        if (vEl) { vEl.value = it.locator; }
+        if (tEl && it.label) { tEl.value = it.label; }
+      }
+    });
     renderPreview();
   }
 
@@ -275,6 +294,11 @@
         // re-cited immediately with a different locator.
         var vals = document.querySelectorAll("#cite-items .cite-locator-value");
         for (var i = 0; i < vals.length; i++) { vals[i].value = ""; }
+        // Reset the locator type selects back to "page" too, so a fresh
+        // per-insertion citation starts clean rather than keeping whatever
+        // type was left over from the citation just inserted.
+        var types = document.querySelectorAll("#cite-items .cite-locator-type");
+        for (var j = 0; j < types.length; j++) { types[j].value = "page"; }
         renderPreview();
       }).catch(function (e) {
         setStatus("Insert failed: " + (e && e.message ? e.message : String(e)), true);
