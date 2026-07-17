@@ -38,6 +38,9 @@
       },
       bibliography: function () {
         return joinBibliography(engine.makeBibliography());
+      },
+      isRTL: function () {
+        return /^ar\b/i.test(opts.lang || "");
       }
     };
   }

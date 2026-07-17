@@ -13,5 +13,12 @@
     "container-title": "Journal of Islamic Studies",
     "volume": "12", "issue": "2", "page": "145-170",
     "issued": { "date-parts": [[2001]] }
+  },
+  "ar-book": {
+    "id": "ar-book", "type": "book",
+    "title": "دعائم الإسلام",
+    "author": [{ "family": "القاضي النعمان" }],
+    "issued": { "date-parts": [[1951]] },
+    "publisher": "دار المعارف", "publisher-place": "القاهرة"
   }
 }

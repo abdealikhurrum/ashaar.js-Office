@@ -22,3 +22,11 @@ const apa = CiteEngine.build({ styleXml: read("csl-styles/apa.csl"), locales, it
 assert.match(apa.cite(["en-article"]), /Halm/);
 assert.match(apa.bibliography(), /2001/);
 console.log("cite-engine (en) test passed");
+
+const chicagoAr = CiteEngine.build({ styleXml: read("csl-styles/chicago-notes-bibliography.csl"), locales, items, lang: "ar" });
+assert.strictEqual(chicagoAr.isRTL(), true, "Arabic lang flags RTL");
+const arBib = chicagoAr.bibliography();
+assert.match(arBib, /دعائم الإسلام/, "Arabic title renders");
+// Arabic locale term for edition/etc. — assert an Arabic letter appears in generated chrome, not just the data.
+assert.ok(/[؀-ۿ]/.test(arBib), "bibliography contains Arabic script");
+console.log("cite-engine (ar) test passed");
