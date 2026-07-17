@@ -33,6 +33,20 @@ assert.ok(parsedNoId.SomeKey, "falls back to keying by requested citekey when it
 assert.strictEqual(parsedNoId.SomeKey.title, "No Id Item");
 console.log("parseExportResult (defensive fallback) test passed");
 
+// --- parseExportResult: fallback must NOT fabricate when lengths differ ---
+const shortArrayShaped = {
+  jsonrpc: "2.0",
+  result: JSON.stringify([{ id: "B", title: "Item B", type: "document" }]),
+  id: 1
+};
+const parsedShort = CiteZotero.parseExportResult(shortArrayShaped, ["A", "B"]);
+assert.ok(
+  !Object.prototype.hasOwnProperty.call(parsedShort, "A"),
+  "must NOT fabricate an 'A' entry via positional fallback when array length != citekeys length"
+);
+assert.strictEqual(parsedShort.B.title, "Item B", "correctly-id'd 'B' entry is still present");
+console.log("parseExportResult (no-fabrication on length mismatch) test passed");
+
 // --- parseExportResult: error ---
 assert.throws(
   () => CiteZotero.parseExportResult({ jsonrpc: "2.0", error: { code: -32603, message: "boom" }, id: null }, ["x"]),
@@ -124,10 +138,27 @@ console.log("parseCaywResult test passed");
   console.log("fetchCslJson (cache) test passed");
 })();
 
+// --- fetchCslJson([]): resolves to {} and issues zero network calls ---
+(async () => {
+  CiteZotero.clearCache();
+  let callCount = 0;
+  const fake = async (url, options) => {
+    callCount++;
+    return { ok: true, json: async () => ({ jsonrpc: "2.0", result: "[]", id: 1 }) };
+  };
+  const map = await CiteZotero.fetchCslJson([], fake);
+  assert.deepStrictEqual(map, {}, "fetchCslJson([]) resolves to {}");
+  assert.strictEqual(callCount, 0, "fetchCslJson([]) issues zero network calls");
+  console.log("fetchCslJson (empty citekeys) test passed");
+})();
+
 // --- no direct :23119 reference anywhere in the module source ---
 const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "..", "src", "taskpane", "cite-zotero.js"), "utf8");
 assert.ok(!/23119/.test(src), "module must never reference the Zotero port directly");
-assert.ok(!/document\./.test(src) && !/window\./.test(src) && !/Office\./.test(src), "module must have no DOM/Office.js usage");
+assert.ok(
+  !/document\./.test(src) && !/window\./.test(src) && !/Office\./.test(src) && !/navigator\./.test(src),
+  "module must have no DOM/Office.js usage"
+);
 console.log("no-:23119/no-DOM guard test passed");

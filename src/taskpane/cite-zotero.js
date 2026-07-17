@@ -41,11 +41,19 @@
     // there is a matching-index entry in the array, key that entry by the
     // requested citekey too (guards against a translator that doesn't set
     // id = citekey; "Better CSL JSON" already matches, this is belt & braces).
-    (citekeys || []).forEach(function (key, i) {
-      if (!Object.prototype.hasOwnProperty.call(map, key) && items[i]) {
-        map[key] = items[i];
-      }
-    });
+    // Only safe when the parsed array's length exactly matches the requested
+    // citekeys' length: only then does index i in items correspond to index i
+    // in citekeys. If lengths differ (e.g. Zotero silently dropped or
+    // reordered items), positional keying could alias a requested key onto
+    // the wrong item, which is worse than leaving it genuinely absent.
+    var keys = citekeys || [];
+    if (items.length === keys.length) {
+      keys.forEach(function (key, i) {
+        if (!Object.prototype.hasOwnProperty.call(map, key) && items[i]) {
+          map[key] = items[i];
+        }
+      });
+    }
     return map;
   }
 
@@ -79,7 +87,8 @@
 
   function caywPick(fetchImpl) {
     var f = fetchImpl || (typeof fetch !== "undefined" ? fetch : undefined);
-    return Promise.resolve(f("/zotero/cayw?format=citekeys"))
+    return Promise.resolve()
+      .then(function () { return f("/zotero/cayw?format=citekeys"); })
       .then(function (res) { return res.text(); })
       .then(function (text) { return parseCaywResult(text); });
   }
@@ -92,11 +101,14 @@
 
     var fetchStep = missing.length === 0
       ? Promise.resolve(null)
-      : Promise.resolve(f("/zotero/json-rpc", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildExportRequest(missing))
-        }))
+      : Promise.resolve()
+        .then(function () {
+          return f("/zotero/json-rpc", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildExportRequest(missing))
+          });
+        })
         .then(function (res) { return res.json(); })
         .then(function (rpcResponse) {
           var parsed = parseExportResult(rpcResponse, missing);
