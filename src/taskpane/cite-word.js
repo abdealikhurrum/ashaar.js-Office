@@ -92,7 +92,7 @@
   }
 
   function buildBibliographyPayload(o) {
-    return { html: wrapRtlRuns(sanitize(o.html)), direction: direction(o.rtl), tag: o.tag || "AshaarBibliography" };
+    return { html: wrapRtlRuns(sanitize(o.html)), direction: direction(o.rtl) };
   }
 
   // UTF-8-safe base64 that works in Node (Buffer) and the Word WebView (btoa).
@@ -129,6 +129,19 @@
 
   function buildBibliographyTag(o) {
     return "AshaarBib:" + b64encode(JSON.stringify({ v: 1, style: o.style, locale: o.locale }));
+  }
+
+  // Maps a parsed AshaarCite: tag's keys back to the {id, locator?, label?}
+  // shape engine.cite() expects, dropping null locator/label. Tolerates
+  // missing/null parsed input (returns []).
+  function citationItemsFromTag(parsed) {
+    var keys = (parsed && parsed.keys) || [];
+    return keys.map(function (k) {
+      var it = { id: k.id };
+      if (k.locator) { it.locator = k.locator; }
+      if (k.label) { it.label = k.label; }
+      return it;
+    });
   }
 
   function xmlEsc(s) {
@@ -225,6 +238,7 @@
     buildCitationTag: buildCitationTag,
     parseCitationTag: parseCitationTag,
     buildBibliographyTag: buildBibliographyTag,
+    citationItemsFromTag: citationItemsFromTag,
     htmlToOoxmlRuns: htmlToOoxmlRuns,
     buildCitationParagraphOoxml: buildCitationParagraphOoxml
   };

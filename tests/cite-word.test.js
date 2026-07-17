@@ -15,10 +15,11 @@ const note = CiteWord.buildNotePayload({ html: dirty, rtl: true });
 assert.strictEqual(note.direction, "Rtl");
 assert.ok(!/style=/.test(note.html), "note html is sanitized");
 
-// bibliography payload: default tag
+// bibliography payload: html/direction only (tag is vestigial — removed; insertBibliography
+// gets its content-control tag from buildBibliographyTag instead)
 const bib = CiteWord.buildBibliographyPayload({ html: "<div>x</div>", rtl: false });
-assert.strictEqual(bib.tag, "AshaarBibliography");
 assert.strictEqual(bib.direction, "Ltr");
+assert.deepStrictEqual(Object.keys(bib).sort(), ["direction", "html"], "bibliography payload has only html/direction");
 
 // --- hardened tags (SP-A) ---
 const tag = CiteWord.buildCitationTag({
@@ -114,3 +115,16 @@ var para = CiteWord.buildCitationParagraphOoxml(AR, { csFont: "Amiri" });
 assert.ok(para.indexOf("<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/></w:pPr>") === 0, "RTL paragraph wrapper");
 assert.ok(para.lastIndexOf("</w:p>") === para.length - "</w:p>".length, "paragraph closed");
 console.log("htmlToOoxmlRuns test passed");
+
+// --- citationItemsFromTag (SP-C) ---
+var parsedForItems = CiteWord.parseCitationTag(CiteWord.buildCitationTag({
+  style: "s", locale: "ar",
+  items: [{ id: "A", locator: "42", label: "page" }, { id: "B" }]
+}));
+assert.deepStrictEqual(CiteWord.citationItemsFromTag(parsedForItems),
+  [{ id: "A", locator: "42", label: "page" }, { id: "B" }],
+  "maps tag keys to cite items, dropping null locator/label");
+assert.deepStrictEqual(CiteWord.citationItemsFromTag({ keys: [] }), []);
+assert.deepStrictEqual(CiteWord.citationItemsFromTag({}), [], "missing keys → []");
+assert.deepStrictEqual(CiteWord.citationItemsFromTag(null), [], "null → []");
+console.log("citationItemsFromTag test passed");
