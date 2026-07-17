@@ -55,6 +55,14 @@ assert.throws(
 );
 console.log("parseExportResult (error) test passed");
 
+// --- parseExportResult: error is a plain string (e.g. proxy's 502 body) ---
+assert.throws(
+  () => CiteZotero.parseExportResult({ error: "boom" }, ["x"]),
+  /boom/,
+  "parseExportResult throws with the string error itself, not 'undefined'"
+);
+console.log("parseExportResult (string error) test passed");
+
 // --- parseCaywResult ---
 assert.deepStrictEqual(
   CiteZotero.parseCaywResult("YaumulMabasUyun,IsraaWalMiraaj"),
@@ -93,6 +101,32 @@ console.log("parseCaywResult test passed");
   assert.deepStrictEqual(keys, ["YaumulMabasUyun", "IsraaWalMiraaj"]);
   assert.strictEqual(calledUrl, "/zotero/cayw?format=citekeys", "caywPick fetches the same-origin cayw route");
   console.log("caywPick test passed");
+})();
+
+// --- caywPick: a genuine user cancel is an empty citekeys array from a 200 ---
+(async () => {
+  const fakeCancel = async () => ({ ok: true, text: async () => "" });
+  const keys = await CiteZotero.caywPick(fakeCancel);
+  assert.deepStrictEqual(keys, [], "caywPick resolves to [] on a genuine (200, empty-body) cancel");
+  console.log("caywPick (cancel) test passed");
+})();
+
+// --- caywPick: !res.ok (Zotero offline → proxy 502) must reject, not return garbage citekeys ---
+(async () => {
+  const fakeOffline = async () => ({
+    ok: false,
+    status: 502,
+    text: async () => JSON.stringify({ error: "zotero-unreachable" })
+  });
+  let rejected = false;
+  try {
+    await CiteZotero.caywPick(fakeOffline);
+  } catch (e) {
+    rejected = true;
+    assert.ok(/502/.test(e.message), "caywPick error message includes the HTTP status");
+  }
+  assert.ok(rejected, "caywPick must reject when res.ok is false");
+  console.log("caywPick (!res.ok) test passed");
 })();
 
 // --- fetchCslJson: same-origin RPC route, no :23119, correct shape for CiteEngine.build({items}) ---
@@ -150,6 +184,28 @@ console.log("parseCaywResult test passed");
   assert.deepStrictEqual(map, {}, "fetchCslJson([]) resolves to {}");
   assert.strictEqual(callCount, 0, "fetchCslJson([]) issues zero network calls");
   console.log("fetchCslJson (empty citekeys) test passed");
+})();
+
+// --- fetchCslJson: !res.ok (Zotero offline → proxy 502) must reject, not parse the error body ---
+// NOTE: deliberately does NOT call clearCache() and uses a citekey unique to
+// this test — other IIFEs in this file run concurrently (none are awaited at
+// the top level) and also touch the shared module-level cache; a clearCache()
+// here could race between another test's cache write and its subsequent read.
+(async () => {
+  const fakeOffline = async () => ({
+    ok: false,
+    status: 502,
+    json: async () => ({ error: "zotero-unreachable" })
+  });
+  let rejected = false;
+  try {
+    await CiteZotero.fetchCslJson(["OfflineProbeKey"], fakeOffline);
+  } catch (e) {
+    rejected = true;
+    assert.ok(/502/.test(e.message), "fetchCslJson error message includes the HTTP status");
+  }
+  assert.ok(rejected, "fetchCslJson must reject when res.ok is false");
+  console.log("fetchCslJson (!res.ok) test passed");
 })();
 
 // --- no direct :23119 reference anywhere in the module source ---

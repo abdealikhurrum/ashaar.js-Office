@@ -28,7 +28,10 @@
 
   function parseExportResult(rpcResponse, citekeys) {
     if (rpcResponse && rpcResponse.error) {
-      throw new Error(rpcResponse.error.message);
+      var err = rpcResponse.error;
+      var message = (err && err.message) ? err.message
+        : (typeof err === "string" ? err : JSON.stringify(err));
+      throw new Error(message);
     }
     var items = JSON.parse(rpcResponse.result) || [];
     var map = {};
@@ -89,7 +92,10 @@
     var f = fetchImpl || (typeof fetch !== "undefined" ? fetch : undefined);
     return Promise.resolve()
       .then(function () { return f("/zotero/cayw?format=citekeys"); })
-      .then(function (res) { return res.text(); })
+      .then(function (res) {
+        if (!res.ok) { throw new Error("cayw HTTP " + res.status); }
+        return res.text();
+      })
       .then(function (text) { return parseCaywResult(text); });
   }
 
@@ -109,7 +115,10 @@
             body: JSON.stringify(buildExportRequest(missing))
           });
         })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (!res.ok) { throw new Error("json-rpc HTTP " + res.status); }
+          return res.json();
+        })
         .then(function (rpcResponse) {
           var parsed = parseExportResult(rpcResponse, missing);
           Object.keys(parsed).forEach(function (key) {

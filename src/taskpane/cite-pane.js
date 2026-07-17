@@ -79,7 +79,7 @@
     });
   }
 
-  function populateItems() {
+  function populateItems(skipSeed) {
     if (itemsPopulated || !cache.items) { return; }
     var host = byId("cite-items");
     if (!host) { return; }
@@ -91,7 +91,7 @@
       cb.type = "checkbox";
       cb.id = "cite-item-" + id;
       cb.setAttribute("data-cite-id", id);
-      if (idx === 0) { cb.checked = true; } // seed a non-empty preview
+      if (idx === 0 && !skipSeed) { cb.checked = true; } // seed a non-empty preview
       cb.addEventListener("change", renderPreview);
       var lbl = document.createElement("label");
       lbl.setAttribute("for", cb.id);
@@ -272,7 +272,8 @@
       return CiteZotero.fetchCslJson(citekeys).then(function (items) {
         if (!cache.items) { cache.items = {}; }
         // Capture already-checked boxes BEFORE the rebuild below wipes them —
-        // populateItems() only re-seeds index 0 plus whatever we re-check here.
+        // populateItems(true) below skips the index-0 seed, so re-checking
+        // relies entirely on previouslySelected + citekeys below.
         var previouslySelected = selectedIds();
         Object.keys(items).forEach(function (id) {
           cache.items[id] = items[id];
@@ -282,7 +283,7 @@
         // added Zotero citekeys, so Insert still cites everything the user had
         // selected.
         itemsPopulated = false;
-        populateItems();
+        populateItems(true); // skipSeed: rely on previouslySelected+citekeys re-check below
         previouslySelected.concat(citekeys).forEach(function (id) {
           var cb = byId("cite-item-" + id);
           if (cb) { cb.checked = true; }
