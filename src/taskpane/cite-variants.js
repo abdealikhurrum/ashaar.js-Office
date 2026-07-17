@@ -61,5 +61,58 @@
     return seen ? out : null;
   }
 
-  return { parseCne: parseCne, stripBidi: stripBidi };
+  // Shallow clone + attach multi models from parsed cne-* variants.
+  function applyVariantsToItem(item) {
+    if (!item || typeof item !== "object") { return item; }
+    var parsed = parseCne(item.note);
+    if (!parsed) { return item; }
+
+    var out = {};
+    var k;
+    for (k in item) { if (Object.prototype.hasOwnProperty.call(item, k)) { out[k] = item[k]; } }
+
+    // fields
+    var keys = {};
+    var main = {};
+    for (var f in parsed.fields) {
+      if (Object.prototype.hasOwnProperty.call(parsed.fields, f)) {
+        keys[f] = parsed.fields[f];
+        main[f] = item.language || "ar";
+      }
+    }
+    if (Object.keys(keys).length) { out.multi = { main: main, _keys: keys }; }
+
+    // creators — clone the target creator array + entry before attaching multi
+    for (var cv in parsed.creators) {
+      if (!Object.prototype.hasOwnProperty.call(parsed.creators, cv)) { continue; }
+      if (!Array.isArray(out[cv])) { continue; }
+      out[cv] = out[cv].slice();
+      var byIdx = parsed.creators[cv];
+      for (var idx in byIdx) {
+        if (!Object.prototype.hasOwnProperty.call(byIdx, idx)) { continue; }
+        var i = parseInt(idx, 10);
+        if (!out[cv][i]) { continue; }
+        var c = {};
+        for (var ck in out[cv][i]) { if (Object.prototype.hasOwnProperty.call(out[cv][i], ck)) { c[ck] = out[cv][i][ck]; } }
+        c.multi = { main: item.language || "ar", _key: byIdx[idx] };
+        out[cv][i] = c;
+      }
+    }
+    return out;
+  }
+
+  function enrichItemMap(items) {
+    var out = {};
+    for (var id in items) {
+      if (Object.prototype.hasOwnProperty.call(items, id)) { out[id] = applyVariantsToItem(items[id]); }
+    }
+    return out;
+  }
+
+  return {
+    parseCne: parseCne,
+    stripBidi: stripBidi,
+    applyVariantsToItem: applyVariantsToItem,
+    enrichItemMap: enrichItemMap
+  };
 }));

@@ -44,3 +44,38 @@ const r6 = CV.parseCne("cne-title-romanized: ‫Uyun‬");
 assert.strictEqual(r6.fields.title["ar-Latn"], "Uyun", "bidi controls stripped");
 
 console.log("cite-variants parseCne test passed");
+
+// --- applyVariantsToItem ---
+const baseItem = {
+  id: "x", type: "book", language: "ar",
+  title: "عيون الأخبار ج/4",
+  author: [{ literal: "الداعي الأجل سيدنا إدريس عماد الدينؓ" }],
+  note: "cne-title-romanized: Uyun al-Akhbar Vol. 4\ncne-author-0-last-romanized: al-Dai al-Ajal Syedna Idris Imaduddin RA"
+};
+const enriched = CV.applyVariantsToItem(baseItem);
+assert.notStrictEqual(enriched, baseItem, "returns a new object");
+assert.strictEqual(baseItem.multi, undefined, "input not mutated");
+assert.deepStrictEqual(enriched.multi._keys.title, { "ar-Latn": "Uyun al-Akhbar Vol. 4" }, "title variant baked");
+assert.deepStrictEqual(
+  enriched.author[0].multi._key["ar-Latn"],
+  { family: "al-Dai al-Ajal Syedna Idris Imaduddin RA" },
+  "author variant baked"
+);
+// real fields preserved
+assert.strictEqual(enriched.title, "عيون الأخبار ج/4", "real title preserved");
+
+// no cne-* -> unchanged (same reference)
+const plain = { id: "p", type: "book", title: "T", note: "just a note" };
+assert.strictEqual(CV.applyVariantsToItem(plain), plain, "no variants => passthrough");
+
+// creator index mismatch -> skipped, no throw
+const mismatch = { id: "m", type: "book", author: [], note: "cne-author-3-last-romanized: Z" };
+const em = CV.applyVariantsToItem(mismatch);
+assert.ok(!(em.author && em.author[3]), "missing creator index skipped");
+
+// enrichItemMap
+const map = { x: baseItem, p: plain };
+const em2 = CV.enrichItemMap(map);
+assert.deepStrictEqual(em2.x.multi._keys.title, { "ar-Latn": "Uyun al-Akhbar Vol. 4" });
+assert.strictEqual(em2.p, plain, "passthrough item shared by reference");
+console.log("cite-variants applyVariantsToItem test passed");
