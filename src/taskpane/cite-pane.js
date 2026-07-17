@@ -134,7 +134,7 @@
       val.className = "cite-locator-value";
       val.setAttribute("data-cite-loc-value", id);
       val.placeholder = "e.g. 42";
-      val.addEventListener("input", renderPreview);
+      val.addEventListener("input", debouncedRenderPreview);
       sel.addEventListener("change", renderPreview);
       loc.appendChild(prefix); loc.appendChild(sel); loc.appendChild(val);
       li.appendChild(loc);
@@ -203,6 +203,15 @@
   function block(labelText, bodyHtml) {
     return '<div class="cite-preview-block"><div class="cite-preview-label">' + labelText +
       '</div><div class="cite-preview-body">' + bodyHtml + "</div></div>";
+  }
+
+  // Locator value fields fire on every keystroke; each renderPreview() rebuilds
+  // a fresh citeproc engine, so re-rendering per keystroke is noticeably slow.
+  // Debounce so we only re-render once typing pauses.
+  var previewTimer = null;
+  function debouncedRenderPreview() {
+    if (previewTimer) { clearTimeout(previewTimer); }
+    previewTimer = setTimeout(function () { previewTimer = null; renderPreview(); }, 200);
   }
 
   function renderPreview() {
