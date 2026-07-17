@@ -1,0 +1,24 @@
+"use strict";
+const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
+const CiteEngine = require("../src/taskpane/cite-engine");
+
+const V = path.join(__dirname, "..", "src", "vendor");
+const read = (p) => fs.readFileSync(path.join(V, p), "utf8");
+const items = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "cite-sample.json"), "utf8"));
+const locales = { "us": read("csl-locales/locales-en-US.xml"), "en-US": read("csl-locales/locales-en-US.xml"), "ar": read("csl-locales/locales-ar.xml") };
+
+const chicago = CiteEngine.build({ styleXml: read("csl-styles/chicago-notes-bibliography.csl"), locales, items, lang: "en-US" });
+const cite = chicago.cite(["en-book"]);
+assert.match(cite, /Daftary/, "citation names the author");
+assert.match(cite, /Fatimid Empire/, "citation names the title");
+
+const bib = chicago.bibliography();
+assert.match(bib, /Daftary/);
+assert.match(bib, /Edinburgh/);
+
+const apa = CiteEngine.build({ styleXml: read("csl-styles/apa.csl"), locales, items, lang: "en-US" });
+assert.match(apa.cite(["en-article"]), /Halm/);
+assert.match(apa.bibliography(), /2001/);
+console.log("cite-engine (en) test passed");
