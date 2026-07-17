@@ -1,0 +1,14 @@
+repo=https://github.com/Juris-M/citeproc-js.git
+commit=cc9153c45293af878de08cafddbefe6ea150c380
+date=2026-07-05T17:23:24-05:00
+subject=Merge pull request #281 from dstillman/restore-state-after-preview-error
+
+repo=https://github.com/citation-style-language/locales.git
+commit=bc0a222b4ca526126faf892c35b2b7b1215c10eb
+date=2026-06-30T14:24:44+02:00
+subject=Merge pull request #439 from citation-style-language/POBrien333-patch-3
+
+repo=https://github.com/citation-style-language/styles.git
+commit=439002f8dbcc44acd99e72c05fd6a6880c509d84
+date=2026-07-10T11:24:53+02:00
+subject=Merge pull request #8226 from Nannan-Liu/patch-5
