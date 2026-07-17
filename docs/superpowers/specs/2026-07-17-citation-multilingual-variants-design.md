@@ -8,31 +8,37 @@
 ## Summary
 
 Give the citation subsystem the ability to render an item's **original-script (Arabic),
-romanized (transliteration), or both** variants, sourced from the user's real reference library.
+romanized (transliteration), or both** variants, sourced from the user's real reference library —
+and consolidate all multilingual data onto a single **maintained** convention: **Cite Non-English
+(CNE)**, a Zotero plugin that stores variants as `cne-*` lines in the item's Extra field.
+
 The citeproc CSL-M *rendering* side already exists (`cite-engine.js` consumes `langPrefs` +
-citeproc's `multi` model, wired in SP-1). SP-3 adds the two pieces SP-1 explicitly deferred:
+citeproc's `multi` model, wired in SP-1). SP-3 has two components:
 
-1. **Sourcing** — a pure parser that reads variant data out of the two conventions the user's
-   library uses and normalizes it into the `multi` shape the engine already reads.
-2. **Policy UI** — a pane selector (Original / Romanized / Both) that chooses which variant slot
-   renders, persisted in the citation tag and re-applied on Refresh, exactly like style/locale.
+- **Component A — add-in variant model (the feature):** a pure parser that reads `cne-*` variant
+  data and normalizes it into the `multi` shape the engine already reads, plus a pane selector
+  (Original / Romanized / Both) that chooses which variant renders, persisted in the citation tag
+  and re-applied on Refresh, exactly like style/locale.
+- **Component B — one-time migration utility:** a dev-run script that converts the user's legacy
+  **Juris-M mlzsync** blobs into **CNE `cne-*`** lines and writes them back into the Zotero library
+  via the local API, so all multilinguality lives in the one maintained convention going forward.
 
-Nothing is offloaded to Zotero's internal citation pipeline (see "Why we keep our own engine").
+Rendering stays in our own client-side engine (see "Why we keep our own engine").
 
 ## Decisions fixed in brainstorming (2026-07-17)
 
-- **Variant source = both conventions.** The parser normalizes whichever is present per item:
-  - **Juris-M mlzsync** blob in the CSL-JSON `note` field (what the library has today), and
-  - **Cite Non-English (CNE)** `cne-*` key-value lines in the Zotero `Extra` field (cleaner,
-    actively maintained authoring UI; the user may migrate items to it gradually).
-  - When **both** are present on one item, **CNE wins** (newer/maintained convention).
-  - When **neither** is present, the item's real fields are used unchanged (current behavior).
+- **CNE is the single go-forward convention.** In Zotero 9 + Better BibTeX (no Juris-M installed),
+  the legacy **mlzsync** blob in Extra is *frozen*: nothing reads, edits, or regenerates it. CNE is
+  the only maintained way to author/maintain variants. Therefore the add-in's **runtime reads
+  `cne-*` only**; mlzsync is handled once, by the migration utility, not on the render path.
+- **CNE has no Juris-M importer** (confirmed against the CNE README) → we build the migration
+  utility ourselves (Component B).
 - **Output form = pane-selectable**, per insertion: **Original (ar) / Romanized / Both**.
 - **Granularity = single global policy** for v1 — one selector applies the same policy to all
-  segments (names, titles, publisher, …). A per-segment (names vs titles) split is deferred (YAGNI).
+  segments (names, titles, publisher, …). A per-segment split is deferred (YAGNI).
 - **Refresh uses the pane's current** variant policy (bulk re-format), consistent with how SP-C
-  already re-reads style/locale from the pane rather than freezing them per citation.
-- **Rendering stays in our own client-side engine** (see below).
+  re-reads style/locale from the pane rather than freezing them per citation.
+- **Rendering stays in our own client-side engine.**
 
 ### Why we keep our own engine (CNE does not offload rendering)
 
@@ -45,13 +51,15 @@ not yet implemented**. Our add-in reaches Zotero *only* through Better BibTeX (C
 CSL JSON" translator), so CNE cannot feed our pipeline. Even if it could, offloading rendering would
 discard everything SP-1/2/A/B/C already built and Word-verified: RTL/Arabic **OOXML** insertion,
 the Fatemi custom styles, in-place **Refresh**, content-control **tagging**, footnote/endnote
-insertion. So CNE (and Juris-M) are treated purely as upstream *authoring/storage* tools; SP-3
-consumes their stored data and our own engine renders.
+insertion. So CNE is treated purely as an upstream *authoring/storage* tool; SP-3 consumes its
+stored `cne-*` data and our own engine renders.
 
-## The data (real example)
+## The data
 
-The user's "Better CSL JSON" export carries the Arabic as the real fields and the Juris-M variants
-in the `note` field as a length-prefixed mlzsync blob:
+### Legacy source (input to the migration utility only)
+
+The user's "Better CSL JSON" export carries Arabic as the real fields and the Juris-M variants as a
+length-prefixed mlzsync blob in the Extra field (surfaced as `note` in CSL-JSON):
 
 ```json
 {
@@ -62,141 +70,178 @@ in the `note` field as a length-prefixed mlzsync blob:
 }
 ```
 
-Notes that shape the parser:
-- `mlzsync1:` + a **4-digit zero-padded length** + JSON. `multifields._keys[field][tag]` holds field
-  variants; `multicreators[i]._key[tag]` holds creator variants; `fieldMode:1` = literal/institutional.
-- The variant is tagged **`en`** but its content is **transliteration** ("Uyun al-Akhbar…"), so `en`
-  is registered as the *transliteration* slot (not translation). Easily reconfigurable per tag.
-- Strings carry embedded bidi control chars (U+202B RLE / U+202C PDF) that the parser strips from
-  variant values.
-- mlzsync creator fields are `lastName`/`firstName` (Zotero names) → map to CSL `family`/`given`;
-  `fieldMode:1` → `literal`.
+mlzsync shape: `mlzsync1:` + **4-digit zero-padded length** + JSON; `multifields._keys[field][tag]`
+holds field variants; `multicreators[i]._key[tag]` holds creator variants (`lastName`/`firstName`,
+`fieldMode:1` = literal/institutional). Values carry embedded bidi control chars (U+202B RLE /
+U+202C PDF). The variant tag is **`en`** but its content is **transliteration**, so it maps to the
+CNE **romanized** slot (not translated).
 
-CNE's convention (for the same item, were it authored in CNE):
+### Go-forward source (what the add-in reads)
+
+After migration, the same item's Extra carries CNE lines:
 ```
-Extra:
-  cne-title-romanized: Uyun al-Akhbar Vol. 4
-  cne-author-0-last-romanized: al-Dai al-Ajal Syedna Idris Imaduddin RA
+cne-title-romanized: Uyun al-Akhbar Vol. 4
+cne-author-0-last-romanized: al-Dai al-Ajal Syedna Idris Imaduddin RA
 ```
 CNE keys: `cne-<field>-<original|romanized|translated>` for simple fields
-(title, container-title, publisher, …) and `cne-<creator>-<index>-<last|first>-<variant>` for
-creators (e.g. `cne-author-0-last-romanized`).
+(title, container-title, publisher, …); `cne-<creator>-<index>-<last|first>-<variant>` for creators
+(e.g. `cne-author-0-last-romanized`). In CSL-JSON these Extra lines surface in `note` (as mlzsync
+did), which is where the add-in parser reads them.
 
-## Architecture & components
+> **Load-bearing verification (plan, early):** confirm Better BibTeX's "Better CSL JSON" passes
+> `cne-*` Extra lines through to `note` unmodified (they are non-CSL keys, so expected — but BBT may
+> treat some Extra lines as CSL-variable overrides). If BBT strips them, the add-in reads items via
+> the Zotero **local API** CSL-JSON instead, or reads the raw `data.extra` field directly.
+
+## Component A — add-in variant model
 
 ### New module: `src/taskpane/cite-variants.js` (UMD, Node-testable, pure — no Office.js)
 
-The entire sourcing layer. Functions:
-
-- `parseMlzsync(note)` → `null` if no `mlzsync1:` prefix; else inflate the length-prefixed JSON and
-  return a **normalized** intermediate:
+- `parseCne(noteOrExtra)` → parses `cne-*` lines → normalized intermediate:
   ```
   { fields:   { <cslField>: { <tag>: "value" } },
     creators: { <cslCreatorVar>: { <index>: { <tag>: {family?,given?,literal?} } } } }
   ```
-  Maps mlzsync `multifields._keys` → `fields`; `multicreators` → `creators` (lastName/firstName →
-  family/given; fieldMode 1 → literal). Strips bidi control chars from values.
-- `parseCne(extra)` → same normalized intermediate from `cne-*` Extra lines (or `null` if none).
-  Groups `cne-<field>-<variant>` and `cne-<creator>-<index>-<part>-<variant>`; maps CNE variant
-  names to tags (`romanized`→translit tag, `translated`→translation tag, `original`→ the real
-  script, used only if the real field is empty).
-- `applyVariantsToItem(item)` → returns a **new** item (does not mutate input). Chooses source:
-  CNE if `parseCne` non-null, else mlzsync. Writes:
-  - `item.multi = { main: {...}, _keys: { <field>: { <tag>: value } } }`
-  - for each creator in the CSL creator array at index *i*:
-    `item[creatorVar][i].multi = { _key: { <tag>: { family|given|literal } } }`
-  When neither source present, returns the item unchanged.
-- `enrichItemMap(items)` → maps `applyVariantsToItem` over an id→item map. This is the single call
-  site used by both the fixture load and SP-2's live fetch.
-- `LANG_TAGS` (or an options arg) declares which tags are transliteration vs translation, so the
-  pane can register them with the engine via the existing `langPrefs.translit` / `langPrefs.translat`
-  hooks. Default: `translit = ["en", ...cne romanized tag]`, `translat = [cne translated tag]`.
+  Maps CNE variant names to tags: `romanized`→translit tag, `translated`→translation tag,
+  `original`→used only if the real field is empty. Strips bidi control chars.
+- `applyVariantsToItem(item)` → returns a **new** item (no mutation) with
+  `item.multi = { main, _keys: { <field>: { <tag>: value } } }` and, per creator at index *i*,
+  `item[creatorVar][i].multi = { _key: { <tag>: { family|given|literal } } }`. No `cne-*` present →
+  item unchanged.
+- `enrichItemMap(items)` → maps `applyVariantsToItem` over an id→item map. Single call site for
+  both the fixture load and SP-2's live fetch.
+- `variantToLangPrefs(variant, tags)` → the `langPrefs` object for `CiteEngine.build`:
+  - `orig`     → no override (real fields render; current behavior).
+  - `translit` → all segment prefs `["translit"]` (fallback to real field when a variant is absent).
+  - `both`     → all segment prefs `["orig","translit"]` (orig + romanized; best-effort layout).
+  Sets segment keys uniformly (citeproc-js CSL-M `langPrefs` groups: `persons`, `institutions`,
+  `titles`, `journals`, `publishers`, `places`, `number`, `title-short`) and registers the
+  translit/translat tag lists via the engine's existing `setLangTagsForCsl*` hooks.
+- `parseMlzsync(note)` — a pure inflater kept here too, but **only the migration utility calls it**
+  (not the runtime path). Reuses the same normalized intermediate; lastName/firstName→family/given,
+  fieldMode 1→literal, bidi-strip. Co-locating it keeps all variant parsing + its tests in one
+  module.
 
 ### Wiring the source into the item map
 
-`cite-pane.js` builds `cache.items` at load (fixture) and SP-2 populates it from live Zotero via
-`fetchCslJson`. Both paths route the raw item map through `CiteVariants.enrichItemMap(...)` **before**
-it reaches `buildEngine`, so the engine sees `multi`-enriched items and needs **no change**.
+Both the fixture load and SP-2's `fetchCslJson` route the raw item map through
+`CiteVariants.enrichItemMap(...)` **before** `buildEngine`, so the engine sees `multi`-enriched
+items and needs **no change**.
 
 ### Pane: the Variant selector (`taskpane.html` / `cite-pane.js` / `taskpane.css`)
 
-- New `#cite-variant` dropdown alongside `#cite-style` / `#cite-locale`: **Original (ar)** (value
-  `orig`, default), **Romanized** (`translit`), **Both** (`both`).
+- New `#cite-variant` dropdown by `#cite-style` / `#cite-locale`: **Original (ar)** (`orig`, default),
+  **Romanized** (`translit`), **Both** (`both`).
 - `currentVariant()` reads it (default `orig`), mirroring `currentStyleFile()` / `currentLang()`.
-- A pure mapper `variantToLangPrefs(variant, tags)` → the `langPrefs` object passed to
-  `CiteEngine.build`. Presets:
-  - `orig`   → no langPrefs override (real fields render; current behavior).
-  - `translit` → all segment prefs = `["translit"]` (fallback to real field when a variant is absent).
-  - `both`   → all segment prefs = `["orig","translit"]` (orig + romanized; best-effort layout).
-  Segment keys set uniformly: `persons`, `institutions`, `titles`, `journals`, `publishers`,
-  `places`, `number`, `title-short` (per citeproc-js CSL-M `langPrefs` groups) + register
-  `translit`/`translat` tag lists.
-- `buildEngine(styleFile, lang)` gains the current variant's `langPrefs` (or `buildEngine` grows a
-  third arg). Applies to preview, insert, and refresh alike.
+- `buildEngine` gains the current variant's `langPrefs` (third arg or options); applies to preview,
+  insert, and refresh alike.
 
 ### Persistence, tag schema & Refresh
 
 - Citation tag payload **v:1 → v:2**: add `variant: "orig"|"translit"|"both"`.
-  `parseCitationTag` migrates read-time: missing `variant` → `"orig"` (matches today's output).
-  `buildCitationTag` / `buildBibliographyTag` write `variant` from the pane.
-- `refreshCitations()` already reads `currentStyleFile()`/`currentLang()` from the pane; it also
-  reads `currentVariant()` and passes its `langPrefs` into the per-CC re-render, and rewrites each
-  tag with the current `variant`. Bulk re-format semantics, consistent with SP-C.
+  `parseCitationTag` migrates read-time: missing → `"orig"`. `buildCitationTag` /
+  `buildBibliographyTag` write `variant` from the pane.
+- `refreshCitations()` reads `currentVariant()` alongside style/locale, passes its `langPrefs` into
+  the per-CC re-render, and rewrites each tag with the current `variant`. Bulk re-format, per SP-C.
+
+## Component B — migration utility: `scripts/migrate-mlzsync-to-cne.mjs`
+
+A one-time, dev-run Node script (not pane UI) that consolidates legacy data onto CNE.
+
+- **Read:** enumerate library items via the Zotero **local API** (`localhost:23119/api/…`, no auth);
+  for each, read the raw `data.extra` field.
+- **Convert:** `parseMlzsync(extra)` → for each field/creator variant, emit the corresponding
+  `cne-*` line(s). Mapping: mlzsync `en` field tag → `cne-<field>-romanized`; creator
+  `_key.en.lastName`/`firstName` → `cne-<creator>-<i>-last-romanized` / `-first-romanized`. Strip
+  bidi control chars. (The Arabic "original" already lives in the item's real fields; CNE reads that
+  as the original, so `-original` lines are emitted only if a real field is empty — confirmed in the
+  plan against CNE's read behavior.)
+- **Write:** merge the new `cne-*` lines into `extra` (preserving all other Extra lines, including
+  the mlzsync block) and **PATCH** the item via the local API with its current version
+  (`If-Unmodified-Since-Version`; on 412, re-fetch + retry).
+- **Safety (writing to the user's real library is hard to reverse):**
+  - **Dry-run by default** — prints a per-item diff of the `extra` changes; writes nothing.
+  - Requires explicit `--write` to PATCH.
+  - **Backs up** first — exports the affected items (JSON) to `scratch`/a dated file before any write.
+  - **Idempotent** — an item that already has the target `cne-*` lines is skipped (or overwritten
+    only with `--force`); safe to re-run.
+  - **Non-destructive** — leaves the mlzsync block in Extra unless `--strip-mlzsync` is passed
+    (after the user has verified the migration).
+  - Prints a summary (converted / skipped / failed) and never proceeds past a parse error on one
+    item (that item is reported and skipped).
+
+> **Load-bearing verification (plan, first gate):** confirm the user's Zotero build exposes local-API
+> **write** (PATCH) support (read is universal; write is version-dependent). If unavailable, fall
+> back to: emit an updated CSL-JSON/RDF the user re-imports, or emit per-item Extra text the user
+> pastes. Component A does not depend on this — it is testable against fixtures regardless.
 
 ## Data flow
 
 ```
-raw item map (fixture load OR SP-2 fetchCslJson)
-  → CiteVariants.enrichItemMap()            // mlzsync/cne-* → item.multi._keys / creator.multi._key
-  → cache.items
-Cite tab: user picks style + locale + VARIANT (orig/translit/both)
-  → variantToLangPrefs(variant) → langPrefs
-  → CiteEngine.build({..., langPrefs})       // engine already consumes langPrefs
+Migration (one-time):
+  Zotero local API (data.extra) → parseMlzsync → cne-* lines → merge into extra → PATCH item
+
+Runtime (the feature):
+  raw item map (fixture load OR SP-2 fetchCslJson, cne-* in note/extra)
+    → CiteVariants.enrichItemMap()          // cne-* → item.multi._keys / creator.multi._key
+    → cache.items
+  Cite tab: user picks style + locale + VARIANT (orig/translit/both)
+    → variantToLangPrefs(variant) → langPrefs → CiteEngine.build({..., langPrefs})
       → citation/bibliography HTML (variant-selected)
-      → cite-word insert (footnote/endnote/inline/bib), tag payload v2 {..., variant}
-Refresh: pane's current style+locale+variant re-applied to every tagged CC; tags rewritten v2
+      → cite-word insert; tag payload v2 {..., variant}
+  Refresh: pane's current style+locale+variant re-applied to every tagged CC; tags rewritten v2
 ```
 
 ## Error handling
 
-- Malformed mlzsync length prefix or JSON → `parseMlzsync` returns `null` (fall through to cne-* /
-  real fields); never throws into the render path.
-- CNE line with an unknown field/variant → ignored, other lines still parsed.
-- A creator index in the variant data with no matching creator in the CSL array → skipped.
-- Missing variant for the selected policy → citeproc `langPrefs` fallback renders the real field
-  (no blank output).
+- No `cne-*` on an item → real fields render (no blank output; citeproc `langPrefs` fallback).
+- Malformed `cne-*` line → ignored; other lines still parsed.
+- Creator index with no matching CSL creator → skipped.
+- Migration: parse error on one item → reported + skipped, run continues; PATCH 412 → re-fetch +
+  retry once, else report + skip.
 
 ## Testing (node-`assert`, added to the `npm test` chain)
 
 - `tests/cite-variants.test.js` (new):
-  - `parseMlzsync` on the user's **real exported item** → expected fields/creators + bidi stripped.
-  - `parseCne` on a `cne-*` Extra sample → same normalized shape.
-  - `applyVariantsToItem`: CNE-wins-when-both, mlzsync-only, cne-only, neither (passthrough),
-    literal vs family/given name mapping.
-  - `variantToLangPrefs`: orig/translit/both → expected langPrefs shape + tag registration.
-- `tests/cite-engine.test.js` (extend): a variant-enriched item rendered under each policy
-  (orig/translit/both) in `ar` and `en`, asserting the output HTML switches variants.
+  - `parseCne` on a `cne-*` sample → expected normalized shape; bidi stripped; unknown line ignored.
+  - `applyVariantsToItem`: cne present (fields + literal/family/given creators), cne absent
+    (passthrough), creator-index mismatch skip.
+  - `variantToLangPrefs`: orig/translit/both → expected langPrefs + tag registration.
+  - `parseMlzsync` on the user's **real exported item** → expected normalized shape (shared with
+    Component B).
+  - `mlzsyncToCneLines` (pure converter used by Component B) → expected `cne-*` lines for the real
+    item; idempotency (re-emit is stable); bidi stripped.
+- `tests/cite-engine.test.js` (extend): a variant-enriched item under each policy (orig/translit/
+  both) in `ar` + `en`, asserting the output HTML switches variants.
 - `tests/cite-word.test.js` (extend): tag payload v2 round-trip (`variant` written + parsed) and
   v1→v2 read migration (missing `variant` → `"orig"`).
-- Fixture: add one mlzsync item (the user's) and one cne-* item.
+- Fixture: add one cne-* item; keep the real mlzsync item as the migration-converter fixture.
+- The migration script's I/O (local-API read/PATCH) is exercised via the manual verification
+  checklist against the live library (dry-run diff reviewed before `--write`), not unit tests.
 
 ## Risks
 
-- **"Both" layout is style-dependent** — citeproc's bracketed-secondary rendering relies on the
-  style's multi affixes; may need per-style tuning. Mitigation: ship orig/translit as the reliable
-  core; treat "both" as best-effort and cover it with a rendering test to catch regressions.
-- **Tag registration semantics** — `en` currently means transliteration for this library; if some
-  items genuinely carry translations under a tag, the translit/translat mapping needs revisiting
-  (isolated in `LANG_TAGS`).
-- **CNE format drift** — CNE is young; its `cne-*` key scheme could change. Mitigation: parser is
-  pure + fully tested; a scheme change is a localized edit.
-- **Asset version** — bump the pane asset version when this ships (repo practice).
+- **Local-API write support** (Component B) is version-dependent — verified first; documented
+  fallbacks (re-import / paste) if absent.
+- **BBT passthrough of `cne-*`** to CSL-JSON `note` — verified early; fallback to local-API CSL-JSON
+  or raw `data.extra`.
+- **"Both" layout is style-dependent** — citeproc's bracketed-secondary rendering relies on style
+  multi affixes; ship orig/translit as the reliable core, "both" best-effort + covered by a test.
+- **CNE `-original` semantics** — whether CNE requires explicit `cne-*-original` or reads the real
+  field as original; pinned in the plan (affects the migration mapping only).
+- **CNE format drift** — CNE is young; the `cne-*` scheme could change. Parser is pure + tested; a
+  scheme change is a localized edit.
+- **Writing to the user's real library** — mitigated by dry-run default, backup, idempotency,
+  non-destructive default, and manual diff review before `--write`.
+- **Asset version** — bump the pane asset version when Component A ships (repo practice).
 
 ## Success criteria
 
-From the fixture and from the live Zotero library, a user can pick an item that has Arabic +
-romanized variants, choose **Romanized** (or **Both**) in the pane, and insert a footnote /
-bibliography that renders the selected variant — with the real Arabic fields as automatic fallback
-where a variant is absent; the choice is stored in the citation tag and reproduced on Refresh;
-items authored in either Juris-M (mlzsync) or CNE (`cne-*`) both work, CNE winning when both are
-present; and `npm test` passes including the new variant/engine/word tests.
+- **Component B:** running the migration in dry-run prints a correct `cne-*` diff for the user's
+  mlzsync items; with `--write`, the items' Extra fields gain the `cne-*` lines (verified in Zotero),
+  idempotently and non-destructively.
+- **Component A:** from the fixture and from the live (migrated) Zotero library, the user can pick an
+  item with Arabic + romanized variants, choose **Romanized** (or **Both**) in the pane, and insert a
+  footnote / bibliography rendering the selected variant — real Arabic fields as automatic fallback
+  where a variant is absent; the choice is stored in the v2 citation tag and reproduced on Refresh.
+- `npm test` passes including the new variant/engine/word tests.
