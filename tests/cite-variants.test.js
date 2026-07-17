@@ -79,3 +79,20 @@ const em2 = CV.enrichItemMap(map);
 assert.deepStrictEqual(em2.x.multi._keys.title, { "ar-Latn": "Uyun al-Akhbar Vol. 4" });
 assert.strictEqual(em2.p, plain, "passthrough item shared by reference");
 console.log("cite-variants applyVariantsToItem test passed");
+
+// --- variantToLangPrefs ---
+assert.strictEqual(CV.variantToLangPrefs("orig"), null, "orig => no override");
+
+const lpT = CV.variantToLangPrefs("translit");
+assert.deepStrictEqual(lpT.persons, ["translit"], "translit persons");
+assert.deepStrictEqual(lpT.titles, ["translit"], "translit titles");
+assert.deepStrictEqual(lpT.translit, ["ar-Latn"], "translit tag registered");
+assert.deepStrictEqual(lpT.translat, ["en"], "translat tag registered");
+
+const lpB = CV.variantToLangPrefs("both");
+assert.deepStrictEqual(lpB.persons, ["orig", "translit"], "both persons");
+assert.deepStrictEqual(lpB.titles, ["orig", "translit"], "both titles");
+
+// unknown => treated as orig
+assert.strictEqual(CV.variantToLangPrefs("nonsense"), null, "unknown => null");
+console.log("cite-variants variantToLangPrefs test passed");

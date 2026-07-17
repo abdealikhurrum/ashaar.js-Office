@@ -101,6 +101,18 @@
     return out;
   }
 
+  var SEGMENTS = ["persons", "institutions", "titles", "journals", "publishers", "places", "number", "title-short"];
+
+  function variantToLangPrefs(variant) {
+    var slots;
+    if (variant === "translit") { slots = ["translit"]; }
+    else if (variant === "both") { slots = ["orig", "translit"]; }
+    else { return null; } // orig / unknown -> no override
+    var lp = { translit: ["ar-Latn"], translat: ["en"] };
+    for (var i = 0; i < SEGMENTS.length; i++) { lp[SEGMENTS[i]] = slots.slice(); }
+    return lp;
+  }
+
   function enrichItemMap(items) {
     var out = {};
     for (var id in items) {
@@ -113,6 +125,7 @@
     parseCne: parseCne,
     stripBidi: stripBidi,
     applyVariantsToItem: applyVariantsToItem,
-    enrichItemMap: enrichItemMap
+    enrichItemMap: enrichItemMap,
+    variantToLangPrefs: variantToLangPrefs
   };
 }));
