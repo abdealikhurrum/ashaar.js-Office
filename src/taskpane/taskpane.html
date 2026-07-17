@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260716-convert-tab";
+      window.ASHAAR_ASSET_VERSION = "20260716-cite-tab";
     </script>
     <script>
       (function (v) {
@@ -38,6 +38,7 @@
         <button id="mode-booklet" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="booklet-mode-panel">Booklet</button>
         <button id="mode-styles" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="styles-mode-panel">Styles</button>
         <button id="mode-convert-text" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="convert-text-mode-panel">Convert</button>
+        <button id="mode-cite" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="cite-mode-panel">Cite</button>
       </div>
 
       <section id="settings-panel" class="controls settings-panel" aria-label="Settings">
@@ -552,6 +553,59 @@
         <div id="conv-checklist" aria-label="Conversions to run"></div>
       </section>
 
+      <section id="cite-mode-panel" class="mode-panel" role="tabpanel" aria-labelledby="mode-cite" hidden>
+        <div class="section-title">
+          <h2>Cite</h2>
+          <p>Insert CSL-formatted citations (footnote, endnote, or inline) and a bibliography from a sample library. Pick a style, locale, and output form; the preview updates live.</p>
+        </div>
+
+        <p id="cite-status" class="adopt-hint" aria-live="polite"></p>
+
+        <section class="controls" aria-label="Citation controls">
+          <div class="field">
+            <label for="cite-style">Style</label>
+            <select id="cite-style">
+              <option value="chicago-notes-bibliography" selected>Chicago (notes &amp; bibliography)</option>
+              <option value="apa">APA (author-date)</option>
+              <option value="chicago-notes-fatemi">Chicago — Fatemi</option>
+              <option value="apa-fatemi">APA — Fatemi</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="cite-locale">Locale</label>
+            <select id="cite-locale">
+              <option value="en-US" selected>English (en-US)</option>
+              <option value="ar">Arabic (ar)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="cite-form">Output form</label>
+            <select id="cite-form">
+              <option value="footnote" selected>Footnote</option>
+              <option value="endnote">Endnote</option>
+              <option value="inline">Inline</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="editor" aria-label="Citation items">
+          <label>Items</label>
+          <ul id="cite-items" class="cite-items"></ul>
+        </section>
+
+        <section class="actions two-col" aria-label="Citation actions">
+          <button id="cite-insert" type="button">Insert citation</button>
+          <button id="cite-insert-bib" type="button" class="button--secondary">Insert bibliography</button>
+        </section>
+
+        <section class="preview-shell">
+          <div class="preview-header">
+            <h2>Citation Preview</h2>
+          </div>
+          <div id="cite-preview" class="cite-preview"></div>
+        </section>
+      </section>
+
       <section id="justify-actions" class="actions" aria-label="Justification actions">
         <button id="reset-justification" type="button" class="button--secondary">Reset (clear kashida &amp; spaces)</button>
         <button id="show-cell-map" type="button" class="button--secondary">Show cell structure</button>
@@ -598,6 +652,10 @@
           "./styles-pane.js",
           "./word-conversion.js",
           "./conversion-pane.js",
+          "../vendor/citeproc.js",
+          "./cite-engine.js",
+          "./cite-word.js",
+          "./cite-pane.js",
           "./taskpane.js"
         ];
         // Parser-inserted, non-async document.write preserves load+exec order —

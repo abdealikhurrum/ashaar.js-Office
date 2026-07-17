@@ -772,3 +772,15 @@ input[type="range"][disabled] { opacity: 0.45; }
 .conv-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
 .conv-row label { font-family: inherit; }
 .conv-lossy { color: #b25b00; cursor: help; font-weight: 700; }
+
+/* ── Cite tab ────────────────────────────────────────────────────────────── */
+.cite-items { list-style: none; margin: 4px 0; padding: 0; border: 1px solid #d8d8d8; border-radius: 4px; }
+.cite-items li { display: flex; align-items: flex-start; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #eee; }
+.cite-items li:last-child { border-bottom: none; }
+.cite-items label { font-family: inherit; }
+.cite-item-id { font-size: 11px; opacity: 0.6; }
+.cite-preview { border: 1px solid #d8d8d8; border-radius: 4px; padding: 10px; min-height: 3em; background: var(--panel); }
+.cite-preview .cite-preview-block { margin-bottom: 12px; }
+.cite-preview .cite-preview-block:last-child { margin-bottom: 0; }
+.cite-preview .cite-preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.6; margin-bottom: 4px; }
+.cite-preview[dir="rtl"] .cite-preview-body { text-align: right; }
