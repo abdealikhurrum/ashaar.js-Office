@@ -30,6 +30,25 @@
     var allIds = Object.keys(items);
     engine.updateItems(allIds);
 
+    // CSL-M multilingual variant rendering (Task 4).
+    // langPrefs selects which language *slot* to render per segment
+    // (persons/titles/... -> "orig" | "translit" | "translat"), while
+    // langPrefs.translit/translat register the concrete language tags
+    // (e.g. "ar-Latn") that the engine treats as transliteration/translation
+    // when matching an item's multi._keys[field][tag] / creator.multi._key[tag].
+    if (opts.langPrefs) {
+      var lp = opts.langPrefs;
+      if (lp.translit && typeof engine.setLangTagsForCslTransliteration === "function") {
+        engine.setLangTagsForCslTransliteration(lp.translit);
+      }
+      if (lp.translat && typeof engine.setLangTagsForCslTranslation === "function") {
+        engine.setLangTagsForCslTranslation(lp.translat);
+      }
+      if (typeof engine.setLangPrefsForCites === "function") {
+        engine.setLangPrefsForCites(lp);
+      }
+    }
+
     return {
       raw: engine,
       cite: function (itemKeys) {

@@ -1,0 +1,29 @@
+{
+  "multi-1": {
+    "id": "multi-1",
+    "type": "book",
+    "title": "دعائم الإسلام",
+    "author": [
+      {
+        "family": "النعمان",
+        "given": "القاضي",
+        "multi": {
+          "main": "ar",
+          "_key": {
+            "ar-Latn": { "family": "al-Nuʿmān", "given": "al-Qāḍī" }
+          }
+        }
+      }
+    ],
+    "issued": { "date-parts": [[1951]] },
+    "publisher": "دار المعارف",
+    "publisher-place": "القاهرة",
+    "language": "ar",
+    "multi": {
+      "main": { "title": "ar" },
+      "_keys": {
+        "title": { "ar-Latn": "Daʿāʾim al-Islām" }
+      }
+    }
+  }
+}

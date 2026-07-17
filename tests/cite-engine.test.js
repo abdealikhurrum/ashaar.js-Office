@@ -40,3 +40,25 @@ const chromeBib = arChrome.bibliography();
 assert.ok(/[؀-ۿ]/.test(chromeBib),
   "Latin-only item under ar locale must contain Arabic locale chrome (proves retrieveLocale('ar') wiring)");
 console.log("cite-engine (ar) test passed");
+
+// --- Task 4: CSL-M multilingual variant rendering ---
+// The fixture carries an Arabic title + author that ALSO hold a Latin
+// transliteration variant (multi._keys.title["ar-Latn"] / author.multi._key["ar-Latn"]).
+// With langPrefs selecting the "translit" slot, the transliteration must render.
+const multi = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "cite-multi.json"), "utf8"));
+const mlEngine = CiteEngine.build({
+  styleXml: read("csl-styles/chicago-notes-bibliography.csl"),
+  locales, items: multi, lang: "en-US",
+  langPrefs: {
+    persons: ["translit"],
+    titles: ["translit"],
+    translit: ["ar-Latn"]
+  }
+});
+const mlBib = mlEngine.bibliography();
+// "Nuʿm" is a fragment of the author transliteration "al-Nuʿmān"; it appears
+// nowhere in the Arabic-script primary data nor in en-US locale chrome.
+assert.match(mlBib, /Nuʿm/, "author transliteration variant rendered");
+// "Islām" is a fragment of the title transliteration "Daʿāʾim al-Islām".
+assert.match(mlBib, /Islām/, "title transliteration variant rendered");
+console.log("cite-engine (multilingual) test passed");
