@@ -80,8 +80,8 @@
         ? CiteStore.loadRefs()
         : Promise.resolve({});
       jobs.push(loadRefs.then(function (saved) {
-        if (saved && Object.keys(saved).length) { cache.items = saved; return; }
-        return fetchText("fixtures/cite-sample.json").then(function (txt) { cache.items = JSON.parse(txt); });
+        if (saved && Object.keys(saved).length) { cache.items = enrich(saved); return; }
+        return fetchText("fixtures/cite-sample.json").then(function (txt) { cache.items = enrich(JSON.parse(txt)); });
       }));
     }
     if (!cache.styles[styleFile]) {
@@ -95,15 +95,25 @@
   function currentStyleFile() { return (byId("cite-style") || {}).value || "chicago-notes-bibliography"; }
   function currentLang() { return (byId("cite-locale") || {}).value || "en-US"; }
   function currentForm() { return (byId("cite-form") || {}).value || "footnote"; }
+  function currentVariant() { return (byId("cite-variant") || {}).value || "orig"; }
 
-  // Build a fresh engine for this style+locale. Cheap enough per render, and
-  // avoids citeproc citation-registry state leaking across selections.
+  // Bake cne-* variant data into an {id:item} map's multi model (no-op if the
+  // module is absent, e.g. in a stripped test harness).
+  function enrich(items) {
+    return (typeof CiteVariants !== "undefined") ? CiteVariants.enrichItemMap(items) : items;
+  }
+
+  // Build a fresh engine for this style+locale+variant. Cheap enough per render,
+  // and avoids citeproc citation-registry state leaking across selections.
   function buildEngine(styleFile, lang) {
     return CiteEngine.build({
       styleXml: cache.styles[styleFile],
       locales: cache.locales,
       items: cache.items,
-      lang: lang
+      lang: lang,
+      langPrefs: (typeof CiteVariants !== "undefined")
+        ? CiteVariants.variantToLangPrefs(currentVariant())
+        : null
     });
   }
 
@@ -338,7 +348,7 @@
       if (!items.length) { setStatus("Select at least one item to cite.", true); return; }
       var engine = buildEngine(styleFile, lang);
       var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(items)));
-      var citeTag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
+      var citeTag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, variant: currentVariant(), items: items });
       if (typeof Word === "undefined" || !Word.run) {
         setStatus("Word isn't available — this is preview-only in a browser.", true);
         return;
@@ -409,7 +419,7 @@
     ensureAssets(styleFile).then(function () {
       var engine = buildEngine(styleFile, lang);
       var payload = CiteWord.buildBibliographyPayload({ html: engine.bibliography(), rtl: rtl });
-      var bibTag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang });
+      var bibTag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang, variant: currentVariant() });
       // Arabic: wrap in a block <p dir="rtl"> for true RTL paragraph reading order.
       var bibHtml = rtl ? '<p dir="rtl">' + payload.html + "</p>" : payload.html;
       if (typeof Word === "undefined" || !Word.run) {
@@ -541,13 +551,13 @@
                     // BEFORE the body replace so it sticks regardless of how
                     // the range op reshapes the control.
                     var range = cc.getRange("Content");
-                    cc.tag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
+                    cc.tag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, variant: currentVariant(), items: items });
                     ops.push(renderCitationInto(ctx, range, items, styleFile, lang, csFont).then(function () {
                       counts.refreshed++;
                     }).catch(function () { counts.failed++; }));
                   } else if (tagStr.indexOf("AshaarBib:") === 0) {
                     var bibRange = cc.getRange("Content");
-                    cc.tag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang });
+                    cc.tag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang, variant: currentVariant() });
                     ops.push(renderBibliographyInto(ctx, bibRange, styleFile, lang, csFont).then(function () {
                       counts.bibs++;
                     }).catch(function () { counts.failed++; }));
@@ -616,8 +626,9 @@
         // populateItems(true) below skips the index-0 seed, so re-checking
         // relies entirely on previouslySelected + citekeys below.
         var previouslySelected = selectedIds();
-        Object.keys(items).forEach(function (id) {
-          cache.items[id] = items[id];
+        var enriched = enrich(items); // bake cne-* variants into the multi model
+        Object.keys(enriched).forEach(function (id) {
+          cache.items[id] = enriched[id];
         });
         persistRefs();
         // Force a full re-render of the item list so the new entries appear,
@@ -670,6 +681,8 @@
     styleSel.addEventListener("change", renderPreview);
     byId("cite-locale").addEventListener("change", renderPreview);
     byId("cite-form").addEventListener("change", renderPreview);
+    var variantSel = byId("cite-variant");
+    if (variantSel) { variantSel.addEventListener("change", renderPreview); }
     insertBtn.addEventListener("click", insertCitation);
     byId("cite-insert-bib").addEventListener("click", insertBibliography);
     var refreshBtn = byId("cite-refresh");

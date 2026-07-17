@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260717-cite-refresh";
+      window.ASHAAR_ASSET_VERSION = "20260717-cite-variants";
     </script>
     <script>
       (function (v) {
@@ -579,6 +579,14 @@
             </select>
           </div>
           <div class="field">
+            <label for="cite-variant">Variant</label>
+            <select id="cite-variant">
+              <option value="orig" selected>Original (ar)</option>
+              <option value="translit">Romanized</option>
+              <option value="both">Both (orig + romanized)</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="cite-form">Output form</label>
             <select id="cite-form">
               <option value="footnote" selected>Footnote</option>
@@ -662,6 +670,7 @@
           "./conversion-pane.js",
           "../vendor/citeproc.js",
           "./cite-engine.js",
+          "./cite-variants.js",
           "./cite-word.js",
           "./cite-zotero.js",
           "./cite-store.js",
