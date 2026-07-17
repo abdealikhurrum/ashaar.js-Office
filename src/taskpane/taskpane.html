@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260716-cite-bidi";
+      window.ASHAAR_ASSET_VERSION = "20260717-cite-zotero";
     </script>
     <script>
       (function (v) {
@@ -556,7 +556,7 @@
       <section id="cite-mode-panel" class="mode-panel" role="tabpanel" aria-labelledby="mode-cite" hidden>
         <div class="section-title">
           <h2>Cite</h2>
-          <p>Insert CSL-formatted citations (footnote, endnote, or inline) and a bibliography from a sample library. Pick a style, locale, and output form; the preview updates live.</p>
+          <p>Insert CSL-formatted citations (footnote, endnote, or inline) and a bibliography from a sample library, or add from your Zotero library. Pick a style, locale, and output form; the preview updates live.</p>
         </div>
 
         <p id="cite-status" class="adopt-hint" aria-live="polite"></p>
@@ -591,6 +591,10 @@
         <section class="editor" aria-label="Citation items">
           <label>Items</label>
           <ul id="cite-items" class="cite-items"></ul>
+        </section>
+
+        <section class="actions single-action" aria-label="Zotero actions">
+          <button id="cite-add-zotero" type="button" class="button--secondary">Add from Zotero</button>
         </section>
 
         <section class="actions two-col" aria-label="Citation actions">
@@ -655,6 +659,7 @@
           "../vendor/citeproc.js",
           "./cite-engine.js",
           "./cite-word.js",
+          "./cite-zotero.js",
           "./cite-pane.js",
           "./taskpane.js"
         ];

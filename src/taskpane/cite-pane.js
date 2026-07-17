@@ -127,8 +127,12 @@
     var styleFile = currentStyleFile();
     var lang = currentLang();
     var preview = byId("cite-preview");
-    if (!preview) { return; }
-    ensureAssets(styleFile).then(function () {
+    if (!preview) { return Promise.resolve(); }
+    // Returned (not fire-and-forget) so callers — e.g. addFromZotero(),
+    // pingZotero() — can sequence their own status message to land *after*
+    // this render's internal setStatus("") / setStatus(error) settles,
+    // instead of racing it.
+    return ensureAssets(styleFile).then(function () {
       populateItems();
       var engine = buildEngine(styleFile, lang);
       var ids = selectedIds();
@@ -240,6 +244,57 @@
     });
   }
 
+  var ZOTERO_HINT = "Start Zotero (with Better BibTeX) to cite from your library.";
+
+  // Availability ping, fired after the tab's own render settles (see
+  // renderPreview()'s comment) so a warn status here can't be clobbered by —
+  // and doesn't race — the fixture render's own status update. Guarded for
+  // cite-zotero.js being absent so the pane still works without it.
+  function pingZotero() {
+    if (typeof CiteZotero === "undefined") { return; }
+    CiteZotero.ping().then(function (ok) {
+      if (!ok) { setStatus(ZOTERO_HINT, true); }
+      // else: Zotero is reachable — do not disturb the existing preview/status.
+    });
+  }
+
+  function addFromZotero() {
+    if (typeof CiteZotero === "undefined") {
+      setStatus(ZOTERO_HINT, true);
+      return;
+    }
+    setStatus("Picking in Zotero…");
+    CiteZotero.caywPick().then(function (citekeys) {
+      if (!citekeys || !citekeys.length) {
+        setStatus(""); // cancelled — no-op
+        return;
+      }
+      return CiteZotero.fetchCslJson(citekeys).then(function (items) {
+        if (!cache.items) { cache.items = {}; }
+        Object.keys(items).forEach(function (id) {
+          cache.items[id] = items[id];
+        });
+        // Force a full re-render of the item list so the new entries appear,
+        // then check the freshly added citekeys' boxes.
+        itemsPopulated = false;
+        populateItems();
+        citekeys.forEach(function (id) {
+          var cb = byId("cite-item-" + id);
+          if (cb) { cb.checked = true; }
+        });
+        // Sequence the "Added…" status after renderPreview()'s own
+        // setStatus("") settles, so it isn't immediately overwritten.
+        return renderPreview().then(function () {
+          setStatus("Added " + citekeys.length + " item(s) from Zotero.");
+        });
+      });
+    }).catch(function () {
+      // Proxy 502 / JSON-RPC error / network failure — fixture items are
+      // untouched since we only merge after a successful fetch above.
+      setStatus(ZOTERO_HINT, true);
+    });
+  }
+
   function bind() {
     if (bound) { return; }
     var styleSel = byId("cite-style");
@@ -252,13 +307,15 @@
     byId("cite-form").addEventListener("change", renderPreview);
     insertBtn.addEventListener("click", insertCitation);
     byId("cite-insert-bib").addEventListener("click", insertBibliography);
+    var addZoteroBtn = byId("cite-add-zotero");
+    if (addZoteroBtn) { addZoteroBtn.addEventListener("click", addFromZotero); }
 
-    renderPreview();
+    renderPreview().then(pingZotero);
   }
 
   function onTabShown() {
     if (!bound) { bind(); return; }
-    renderPreview();
+    renderPreview().then(pingZotero);
   }
 
   window.CitePane = { bind: bind, onTabShown: onTabShown };
