@@ -30,6 +30,15 @@
     el.classList.toggle("warn", !!warn);
   }
 
+  // Fire-and-forget persistence of the reference set into the document; a save
+  // failure is a non-fatal hint (never blocks the UI). No-op without CiteStore/Office.
+  function persistRefs() {
+    if (typeof CiteStore === "undefined") { return; }
+    CiteStore.saveRefs(cache.items).catch(function () {
+      setStatus("Couldn't save your reference list to the document.", true);
+    });
+  }
+
   function isRtlLang(lang) { return /^ar\b/i.test(lang || ""); }
 
   var DEFAULT_AR_CS_FONT = "Arial"; // universally present, has Arabic coverage
@@ -67,8 +76,12 @@
       }));
     }
     if (!cache.items) {
-      jobs.push(fetchText("fixtures/cite-sample.json").then(function (txt) {
-        cache.items = JSON.parse(txt);
+      var loadRefs = (typeof CiteStore !== "undefined")
+        ? CiteStore.loadRefs()
+        : Promise.resolve({});
+      jobs.push(loadRefs.then(function (saved) {
+        if (saved && Object.keys(saved).length) { cache.items = saved; return; }
+        return fetchText("fixtures/cite-sample.json").then(function (txt) { cache.items = JSON.parse(txt); });
       }));
     }
     if (!cache.styles[styleFile]) {
@@ -174,6 +187,7 @@
 
   function removeItem(id) {
     if (cache.items && cache.items[id]) { delete cache.items[id]; }
+    persistRefs();
     // Snapshot the OTHER checked rows' checkbox + locator state BEFORE the
     // rebuild below wipes every row back to unchecked/empty — mirrors the
     // capture/restore pattern addFromZotero() uses. Without this, removing
@@ -436,6 +450,7 @@
         Object.keys(items).forEach(function (id) {
           cache.items[id] = items[id];
         });
+        persistRefs();
         // Force a full re-render of the item list so the new entries appear,
         // then re-check the union of previously-checked items and the freshly
         // added Zotero citekeys, so Insert still cites everything the user had
