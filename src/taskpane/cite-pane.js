@@ -284,6 +284,43 @@
     }
   }
 
+  // Build the citation body for a range and insert it, honoring RTL (OOXML) vs
+  // LTR (HTML). Returns a Promise<Word.Range> resolving to the inserted range.
+  // `ctx` + `range` are live Word objects. For rtl it reads the doc cs font and
+  // inserts OOXML (bidi + right-justified paragraph, non-italic Arabic runs);
+  // else it inserts sanitized/RTL-run-wrapped HTML. Shared by insertCitation's
+  // footnote/endnote branch and refreshCitations() so both paths format a
+  // citation identically.
+  function renderCitationInto(ctx, range, items, styleFile, lang) {
+    var engine = buildEngine(styleFile, lang);
+    if (isRtlLang(lang)) {
+      return readDocCsFont(ctx, range).then(function (csFont) {
+        var pkg = AshaarTabStop.wrapOoxml(
+          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.cite(items)), { csFont: csFont }));
+        return range.insertOoxml(pkg, Word.InsertLocation.replace);
+      });
+    }
+    var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(items)));
+    return Promise.resolve(range.insertHtml(html, Word.InsertLocation.replace));
+  }
+
+  // Same render strategy as renderCitationInto, but for the whole-library
+  // bibliography (engine.bibliography() takes no items). Only used by
+  // refreshCitations() — insertBibliography() has its own payload/CC-title
+  // handling that isn't otherwise shared.
+  function renderBibliographyInto(ctx, range, styleFile, lang) {
+    var engine = buildEngine(styleFile, lang);
+    if (isRtlLang(lang)) {
+      return readDocCsFont(ctx, range).then(function (csFont) {
+        var pkg = AshaarTabStop.wrapOoxml(
+          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.bibliography()), { csFont: csFont }));
+        return range.insertOoxml(pkg, Word.InsertLocation.replace);
+      });
+    }
+    var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.bibliography()));
+    return Promise.resolve(range.insertHtml(html, Word.InsertLocation.replace));
+  }
+
   function insertCitation() {
     var styleFile = currentStyleFile();
     var lang = currentLang();
@@ -295,11 +332,6 @@
       var engine = buildEngine(styleFile, lang);
       var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(items)));
       var citeTag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
-      // Arabic: wrap the note body in a block <p dir="rtl"> so Word's HTML
-      // importer promotes the whole footnote/endnote paragraph to right-to-left
-      // reading order (Office.js exposes no paragraph reading-order setter).
-      // Inline citations stay in the surrounding paragraph's flow — NOT wrapped.
-      var noteHtml = rtl ? '<p dir="rtl">' + html + "</p>" : html;
       if (typeof Word === "undefined" || !Word.run) {
         setStatus("Word isn't available — this is preview-only in a browser.", true);
         return;
@@ -314,25 +346,20 @@
         } else if (canNotes) {
           var note = form === "endnote" ? sel.insertEndnote() : sel.insertFootnote();
           var noteRange = note.body.getRange();
-          if (rtl) {
-            // Arabic footnote/endnote: insert as OOXML runs (not insertHtml) so
-            // the document's complex-script font is set and the Arabic title
-            // isn't left italic (Word renders italic Arabic as tofu squares in
-            // fonts lacking an italic style). The paragraph already carries
-            // <w:bidi/>, so no separate alignment pass is needed here.
-            return readDocCsFont(ctx, noteRange).then(function (csFont) {
-              var sanitized = CiteWord.sanitize(engine.cite(items));
-              var pkg = AshaarTabStop.wrapOoxml(CiteWord.buildCitationParagraphOoxml(sanitized, { csFont: csFont }));
-              var oRange = noteRange.insertOoxml(pkg, Word.InsertLocation.replace);
-              var occ = oRange.insertContentControl();
-              occ.tag = citeTag;
-              occ.title = "Ashaar Citation";
-              return ctx.sync();
-            });
-          }
-          // insertHtml(replace) returns the range of the newly inserted content —
-          // use it (not the pre-insert note range) so alignment hits real paragraphs.
-          range = noteRange.insertHtml(noteHtml, Word.InsertLocation.replace);
+          // Arabic footnote/endnote: renderCitationInto inserts OOXML runs (not
+          // insertHtml) so the document's complex-script font is set and the
+          // Arabic title isn't left italic (Word renders italic Arabic as tofu
+          // squares in fonts lacking an italic style). The paragraph already
+          // carries <w:bidi/>, so no separate alignment pass is needed for rtl.
+          return renderCitationInto(ctx, noteRange, items, styleFile, lang).then(function (insertedRange) {
+            var occ = insertedRange.insertContentControl();
+            occ.tag = citeTag;
+            occ.title = "Ashaar Citation";
+            if (rtl) { return ctx.sync(); }
+            var paras = insertedRange.paragraphs;
+            paras.load("items");
+            return ctx.sync();
+          });
         } else {
           range = sel.insertHtml(html, Word.InsertLocation.replace);
           fellBack = true;
@@ -409,6 +436,108 @@
       });
     }).catch(function (e) {
       setStatus("Couldn't load citation assets: " + (e && e.message ? e.message : String(e)), true);
+    });
+  }
+
+  // Scan the document for AshaarCite:/AshaarBib: tagged content controls and
+  // re-render each in place at the pane's CURRENT style/locale, rewriting the
+  // tag so the new style sticks. Reuses renderCitationInto/renderBibliographyInto
+  // (same body-building logic insertCitation/insertBibliography use) so a
+  // refreshed citation looks identical to a freshly-inserted one.
+  //
+  // document.contentControls only reaches the MAIN BODY story — footnote and
+  // endnote content lives in separate stories, so footnote/endnote citations
+  // are only reachable via document.body.footnotes / document.body.endnotes
+  // (Word.NoteItemCollection, WordApi 1.5) → each note's .body.contentControls.
+  // Confirmed against Microsoft Learn (Word.Body class): "footnotes"/"endnotes"
+  // are both WordApi 1.5 properties of Word.Body returning NoteItemCollection;
+  // each Word.NoteItem exposes a .body (Word.Body) that in turn has its own
+  // .contentControls. Wrapped in try/catch so an older Word build (< 1.5, or
+  // any host that doesn't expose these) still refreshes the main-body set.
+  function refreshCitations() {
+    if (typeof Word === "undefined" || !Word.run) { setStatus("Refresh needs Word.", true); return; }
+    var styleFile = currentStyleFile();
+    var lang = currentLang();
+    var counts = { refreshed: 0, bibs: 0, unresolved: 0, failed: 0 };
+    var notesReached = true;
+    var footnoteCcSeen = 0;
+    setStatus("Refreshing citations…");
+    ensureAssets(styleFile).then(function () {
+      return Word.run(function (ctx) {
+        var main = ctx.document.contentControls;
+        main.load("items/tag");
+
+        var footnotes = null, endnotes = null;
+        try {
+          footnotes = ctx.document.body.footnotes;
+          endnotes = ctx.document.body.endnotes;
+          footnotes.load("items");
+          endnotes.load("items");
+        } catch (e) {
+          notesReached = false;
+        }
+
+        return ctx.sync().then(function () {
+          var noteBodies = [];
+          if (notesReached) {
+            try {
+              var i;
+              for (i = 0; i < footnotes.items.length; i++) { noteBodies.push(footnotes.items[i].body); }
+              for (i = 0; i < endnotes.items.length; i++) { noteBodies.push(endnotes.items[i].body); }
+            } catch (e) {
+              notesReached = false;
+              noteBodies = [];
+            }
+          }
+          noteBodies.forEach(function (b) { b.contentControls.load("items/tag"); });
+
+          return ctx.sync().then(function () {
+            var ccs = main.items.slice();
+            noteBodies.forEach(function (b) {
+              footnoteCcSeen += b.contentControls.items.length;
+              ccs = ccs.concat(b.contentControls.items);
+            });
+
+            var ops = [];
+            ccs.forEach(function (cc) {
+              var tagStr = String(cc.tag || "");
+              try {
+                if (tagStr.indexOf("AshaarCite:") === 0) {
+                  var parsed = CiteWord.parseCitationTag(cc.tag);
+                  if (!parsed) { return; } // malformed despite the prefix — not really ours
+                  var items = CiteWord.citationItemsFromTag(parsed);
+                  var allResolved = items.every(function (it) {
+                    return cache.items && Object.prototype.hasOwnProperty.call(cache.items, it.id);
+                  });
+                  if (!allResolved) { counts.unresolved++; return; }
+                  var range = cc.getRange();
+                  ops.push(renderCitationInto(ctx, range, items, styleFile, lang).then(function () {
+                    cc.tag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
+                    counts.refreshed++;
+                  }).catch(function () { counts.failed++; }));
+                } else if (tagStr.indexOf("AshaarBib:") === 0) {
+                  var bibRange = cc.getRange();
+                  ops.push(renderBibliographyInto(ctx, bibRange, styleFile, lang).then(function () {
+                    cc.tag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang });
+                    counts.bibs++;
+                  }).catch(function () { counts.failed++; }));
+                }
+                // else: not one of ours — leave untouched
+              } catch (e) { counts.failed++; }
+            });
+
+            return Promise.all(ops).then(function () { return ctx.sync(); });
+          });
+        });
+      }).then(function () {
+        var msg = "Refreshed " + counts.refreshed + " citation(s), " + counts.bibs + " bibliography.";
+        if (counts.unresolved) { msg += " " + counts.unresolved + " unresolved (re-add from Zotero)."; }
+        if (counts.failed) { msg += " " + counts.failed + " failed."; }
+        if (!notesReached || footnoteCcSeen === 0) { msg += " No footnote citations reached."; }
+        setStatus(msg, !!(counts.unresolved || counts.failed));
+      });
+    }).catch(function (e) {
+      setStatus("Refresh failed: " + (e && e.message ? e.message : String(e)), true);
     });
   }
 
@@ -503,6 +632,8 @@
     byId("cite-form").addEventListener("change", renderPreview);
     insertBtn.addEventListener("click", insertCitation);
     byId("cite-insert-bib").addEventListener("click", insertBibliography);
+    var refreshBtn = byId("cite-refresh");
+    if (refreshBtn) { refreshBtn.addEventListener("click", refreshCitations); }
     var addZoteroBtn = byId("cite-add-zotero");
     if (addZoteroBtn) { addZoteroBtn.addEventListener("click", addFromZotero); }
 

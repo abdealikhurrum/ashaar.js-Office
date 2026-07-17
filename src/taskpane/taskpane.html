@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260717-cite-persist";
+      window.ASHAAR_ASSET_VERSION = "20260717-cite-refresh";
     </script>
     <script>
       (function (v) {
@@ -600,6 +600,10 @@
         <section class="actions two-col" aria-label="Citation actions">
           <button id="cite-insert" type="button">Insert citation</button>
           <button id="cite-insert-bib" type="button" class="button--secondary">Insert bibliography</button>
+        </section>
+
+        <section class="actions single-action" aria-label="Refresh citations">
+          <button id="cite-refresh" type="button" class="button--secondary">Refresh citations</button>
         </section>
 
         <section class="preview-shell">
