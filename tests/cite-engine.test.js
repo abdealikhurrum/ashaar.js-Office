@@ -29,4 +29,14 @@ const arBib = chicagoAr.bibliography();
 assert.match(arBib, /دعائم الإسلام/, "Arabic title renders");
 // Arabic locale term for edition/etc. — assert an Arabic letter appears in generated chrome, not just the data.
 assert.ok(/[؀-ۿ]/.test(arBib), "bibliography contains Arabic script");
+
+// Locale-chrome proof: a Latin-only item rendered under the ar locale can
+// only contain Arabic script if the engine emits Arabic locale terms.
+const arChrome = CiteEngine.build({
+  styleXml: read("csl-styles/chicago-notes-bibliography.csl"),
+  locales, items: { "en-article": items["en-article"] }, lang: "ar"
+});
+const chromeBib = arChrome.bibliography();
+assert.ok(/[؀-ۿ]/.test(chromeBib),
+  "Latin-only item under ar locale must contain Arabic locale chrome (proves retrieveLocale('ar') wiring)");
 console.log("cite-engine (ar) test passed");
