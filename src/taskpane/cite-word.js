@@ -107,9 +107,10 @@
 
   function buildCitationTag(o) {
     var payload = {
-      v: 1,
+      v: 2,
       style: o.style,
       locale: o.locale,
+      variant: o.variant || "orig",
       keys: (o.items || []).map(function (i) {
         return { id: i.id, locator: i.locator || null, label: i.label || null };
       })
@@ -123,12 +124,13 @@
     try {
       var obj = JSON.parse(b64decode(s.slice("AshaarCite:".length)));
       if (!obj || !Array.isArray(obj.keys)) { return null; }
+      if (!obj.variant) { obj.variant = "orig"; } // v1 migration
       return obj;
     } catch (e) { return null; }
   }
 
   function buildBibliographyTag(o) {
-    return "AshaarBib:" + b64encode(JSON.stringify({ v: 1, style: o.style, locale: o.locale }));
+    return "AshaarBib:" + b64encode(JSON.stringify({ v: 2, style: o.style, locale: o.locale, variant: o.variant || "orig" }));
   }
 
   // Maps a parsed AshaarCite: tag's keys back to the {id, locator?, label?}

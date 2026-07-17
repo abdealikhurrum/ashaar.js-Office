@@ -48,6 +48,27 @@ assert.strictEqual(CiteWord.parseCitationTag(""), null);
 const bibTag = CiteWord.buildBibliographyTag({ style: "apa", locale: "en-US" });
 assert.ok(bibTag.indexOf("AshaarBib:") === 0);
 console.log("hardened tags test passed");
+
+// --- SP-3: tag v2 variant field ---
+const v2 = CiteWord.buildCitationTag({ style: "s", locale: "en-US", variant: "translit", items: [{ id: "a" }] });
+const pv2 = CiteWord.parseCitationTag(v2);
+assert.strictEqual(pv2.v, 2, "new tags are v2");
+assert.strictEqual(pv2.variant, "translit", "variant round-trips");
+
+// default when omitted
+const vDef = CiteWord.parseCitationTag(CiteWord.buildCitationTag({ style: "s", locale: "en-US", items: [{ id: "a" }] }));
+assert.strictEqual(vDef.variant, "orig", "omitted variant defaults to orig");
+
+// v1 back-compat: hand-build a v1 payload (no variant) and confirm it reads as orig
+const b64v1 = Buffer.from(JSON.stringify({ v: 1, style: "s", locale: "en-US", keys: [{ id: "a", locator: null, label: null }] })).toString("base64");
+const v1parsed = CiteWord.parseCitationTag("AshaarCite:" + b64v1);
+assert.strictEqual(v1parsed.variant, "orig", "v1 tag migrates to orig");
+assert.strictEqual(v1parsed.keys[0].id, "a", "v1 keys still parse");
+
+// bibliography tag carries variant too
+const bibTagV = CiteWord.buildBibliographyTag({ style: "s", locale: "ar", variant: "both" });
+assert.strictEqual(bibTagV.indexOf("AshaarBib:"), 0, "bib tag prefix");
+console.log("cite-word tag v2 test passed");
 // --- bidi run wrapping: give Word directional guidance for neutral punctuation ---
 // citeproc emits plain mixed-direction text with no dir info; in an LTR paragraph
 // Word's bidi algorithm mis-places the neutral (),.-, around Arabic runs. wrapRtlRuns
