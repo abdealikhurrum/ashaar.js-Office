@@ -1,7 +1,9 @@
 import { createServer } from "node:https";
+import { request as httpRequest } from "node:http";
 import { readFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { extname, join, normalize } from "node:path";
+import zoteroProxy from "./zotero-proxy.js";
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 3000);
@@ -23,10 +25,41 @@ function filePathFor(url) {
   return filePath.startsWith(root) ? filePath : join(root, "src/taskpane/taskpane.html");
 }
 
+// Reverse-proxies /zotero/* to the local Zotero Better BibTeX HTTP server so the
+// (HTTPS-served) pane can reach it same-origin without a mixed-content error.
+// CAYW long-polls until the user finishes/cancels the picker, so no timeout is set.
+function proxyToZotero(req, res, target, search) {
+  const upstreamUrl = zoteroProxy.ZOTERO_BASE + target + (search || "");
+  const headers = {};
+  if (req.headers["content-type"]) headers["content-type"] = req.headers["content-type"];
+  const upstreamReq = httpRequest(upstreamUrl, { method: req.method, headers, timeout: 0 }, (upstreamRes) => {
+    res.writeHead(upstreamRes.statusCode || 502, {
+      "Content-Type": upstreamRes.headers["content-type"] || "application/octet-stream"
+    });
+    upstreamRes.pipe(res);
+  });
+  upstreamReq.on("error", (err) => {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+    res.writeHead(502, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "zotero-unreachable", detail: err.message }));
+  });
+  req.pipe(upstreamReq);
+}
+
 const server = createServer({
   cert: await readFile(join(root, "localhost.pem")),
   key: await readFile(join(root, "localhost-key.pem"))
 }, async (req, res) => {
+  const requestUrl = new URL(req.url || "/", `https://localhost:${port}`);
+  const target = zoteroProxy.zoteroProxyTarget(requestUrl.pathname);
+  if (target !== null) {
+    proxyToZotero(req, res, target, requestUrl.search);
+    return;
+  }
+
   const filePath = filePathFor(req.url || "/");
   const stream = createReadStream(filePath);
   stream.on("open", () => {
