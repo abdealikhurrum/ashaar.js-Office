@@ -257,6 +257,11 @@
       var engine = buildEngine(styleFile, lang);
       var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(items)));
       var citeTag = CiteWord.buildCitationTag({ style: styleFile, locale: lang, items: items });
+      // Arabic: wrap the note body in a block <p dir="rtl"> so Word's HTML
+      // importer promotes the whole footnote/endnote paragraph to right-to-left
+      // reading order (Office.js exposes no paragraph reading-order setter).
+      // Inline citations stay in the surrounding paragraph's flow — NOT wrapped.
+      var noteHtml = rtl ? '<p dir="rtl">' + html + "</p>" : html;
       if (typeof Word === "undefined" || !Word.run) {
         setStatus("Word isn't available — this is preview-only in a browser.", true);
         return;
@@ -272,7 +277,7 @@
           var note = form === "endnote" ? sel.insertEndnote() : sel.insertFootnote();
           // insertHtml(replace) returns the range of the newly inserted content —
           // use it (not the pre-insert note range) so alignment hits real paragraphs.
-          range = note.body.getRange().insertHtml(html, Word.InsertLocation.replace);
+          range = note.body.getRange().insertHtml(noteHtml, Word.InsertLocation.replace);
         } else {
           range = sel.insertHtml(html, Word.InsertLocation.replace);
           fellBack = true;
@@ -316,12 +321,14 @@
       var engine = buildEngine(styleFile, lang);
       var payload = CiteWord.buildBibliographyPayload({ html: engine.bibliography(), rtl: rtl });
       var bibTag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang });
+      // Arabic: wrap in a block <p dir="rtl"> for true RTL paragraph reading order.
+      var bibHtml = rtl ? '<p dir="rtl">' + payload.html + "</p>" : payload.html;
       if (typeof Word === "undefined" || !Word.run) {
         setStatus("Word isn't available — this is preview-only in a browser.", true);
         return;
       }
       Word.run(function (ctx) {
-        var range = ctx.document.getSelection().insertHtml(payload.html, Word.InsertLocation.after);
+        var range = ctx.document.getSelection().insertHtml(bibHtml, Word.InsertLocation.after);
         var cc = range.insertContentControl();
         cc.tag = bibTag;
         cc.title = "Ashaar Bibliography";
