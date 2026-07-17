@@ -32,6 +32,9 @@ function proxyToZotero(req, res, target, search) {
   const upstreamUrl = zoteroProxy.ZOTERO_BASE + target + (search || "");
   const headers = {};
   if (req.headers["content-type"]) headers["content-type"] = req.headers["content-type"];
+  // Zotero's connector rejects chunked/length-less POSTs ("Content-length not
+  // provided"); forward the incoming Content-Length since we pipe the body verbatim.
+  if (req.headers["content-length"]) headers["content-length"] = req.headers["content-length"];
   const upstreamReq = httpRequest(upstreamUrl, { method: req.method, headers, timeout: 0 }, (upstreamRes) => {
     res.writeHead(upstreamRes.statusCode || 502, {
       "Content-Type": upstreamRes.headers["content-type"] || "application/octet-stream"
