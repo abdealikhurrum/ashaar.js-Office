@@ -271,14 +271,19 @@
       }
       return CiteZotero.fetchCslJson(citekeys).then(function (items) {
         if (!cache.items) { cache.items = {}; }
+        // Capture already-checked boxes BEFORE the rebuild below wipes them —
+        // populateItems() only re-seeds index 0 plus whatever we re-check here.
+        var previouslySelected = selectedIds();
         Object.keys(items).forEach(function (id) {
           cache.items[id] = items[id];
         });
         // Force a full re-render of the item list so the new entries appear,
-        // then check the freshly added citekeys' boxes.
+        // then re-check the union of previously-checked items and the freshly
+        // added Zotero citekeys, so Insert still cites everything the user had
+        // selected.
         itemsPopulated = false;
         populateItems();
-        citekeys.forEach(function (id) {
+        previouslySelected.concat(citekeys).forEach(function (id) {
           var cb = byId("cite-item-" + id);
           if (cb) { cb.checked = true; }
         });
@@ -288,9 +293,11 @@
           setStatus("Added " + citekeys.length + " item(s) from Zotero.");
         });
       });
-    }).catch(function () {
-      // Proxy 502 / JSON-RPC error / network failure — fixture items are
-      // untouched since we only merge after a successful fetch above.
+    }).catch(function (e) {
+      // Proxy 502 / JSON-RPC error, network failure, or a post-merge rebuild
+      // error (populateItems()/renderPreview() above) all land here — the
+      // generic hint covers all of them; log the real error for debugging.
+      console.error("[CitePane] addFromZotero failed:", e);
       setStatus(ZOTERO_HINT, true);
     });
   }
