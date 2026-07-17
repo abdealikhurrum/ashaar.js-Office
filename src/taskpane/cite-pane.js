@@ -501,8 +501,15 @@
           return ctx.sync().then(function () {
             var ccs = main.items.slice();
             noteBodies.forEach(function (b) {
-              footnoteCcSeen += b.contentControls.items.length;
-              ccs = ccs.concat(b.contentControls.items);
+              // Only count OUR content controls (AshaarCite:/AshaarBib:) —
+              // an unrelated CC in a footnote/endnote body shouldn't suppress
+              // the "No footnote citations reached" hint below.
+              var items = b.contentControls.items;
+              for (var j = 0; j < items.length; j++) {
+                var t = String(items[j].tag || "");
+                if (t.indexOf("AshaarCite:") === 0 || t.indexOf("AshaarBib:") === 0) { footnoteCcSeen++; }
+              }
+              ccs = ccs.concat(items);
             });
 
             // The complex-script font is a document-level property (Ashaar
@@ -549,6 +556,15 @@
                 } catch (e) { counts.failed++; }
               });
 
+              // Office.js only QUEUES the insertOoxml/insertHtml calls above —
+              // nothing actually executes until the ctx.sync() below. So each
+              // op's .catch(counts.failed++) only catches synchronous/queueing
+              // errors; if a queued op fails at EXECUTION time, this ctx.sync()
+              // rejects for the whole batch (caught by the outer .catch, and
+              // Word rolls back the entire run) rather than surfacing on that
+              // op alone. refreshed/bibs/failed are therefore optimistic —
+              // they reflect intent, and are only trustworthy once this sync
+              // (and the run's outer promise) resolves without error.
               return Promise.all(ops).then(function () { return ctx.sync(); });
             });
           });
