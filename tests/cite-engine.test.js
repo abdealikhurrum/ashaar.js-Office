@@ -95,3 +95,35 @@ assert.ok(typeof enEngine.cite([someId]) === "string", "cite() still accepts bar
 const arWithPage = arEngine.cite([{ id: someId, locator: "42", label: "page" }]);
 assert.ok(arWithPage.indexOf("42") !== -1, "locator value appears under the ar locale too");
 console.log("cite locators test passed");
+
+// --- SP-3: variant policy end-to-end ---
+const CV = require("../src/taskpane/cite-variants");
+const cneItem = CV.applyVariantsToItem({
+  id: "cne-1", type: "book", language: "ar",
+  title: "دعائم الإسلام",
+  author: [{ family: "النعمان", given: "القاضي" }],
+  issued: { "date-parts": [[1951]] },
+  note: "cne-title-romanized: Daʿāʾim al-Islām\ncne-author-0-last-romanized: al-Nuʿmān\ncne-author-0-first-romanized: al-Qāḍī"
+});
+const cneMap = { "cne-1": cneItem };
+
+// translit policy -> romanized renders
+const tEngine = CiteEngine.build({
+  styleXml: read("csl-styles/chicago-notes-bibliography.csl"),
+  locales, items: cneMap, lang: "en-US",
+  langPrefs: CV.variantToLangPrefs("translit")
+});
+const tBib = tEngine.bibliography();
+assert.match(tBib, /Nuʿm/, "cne translit: author romanization renders");
+assert.match(tBib, /Islām/, "cne translit: title romanization renders");
+
+// orig policy -> Arabic renders (no romanization)
+const oEngine = CiteEngine.build({
+  styleXml: read("csl-styles/chicago-notes-bibliography.csl"),
+  locales, items: cneMap, lang: "ar",
+  langPrefs: CV.variantToLangPrefs("orig") // null
+});
+const oBib = oEngine.bibliography();
+assert.match(oBib, /دعائم الإسلام/, "cne orig: Arabic title renders");
+assert.ok(oBib.indexOf("Islām") === -1, "cne orig: no romanization");
+console.log("cite-engine (cne variant policy) test passed");
