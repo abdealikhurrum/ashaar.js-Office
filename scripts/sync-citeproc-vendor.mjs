@@ -11,7 +11,7 @@
 // classic script, so the only fix needed is to guard the export line so it's a no-op outside
 // Node. This post-processing step rewrites that trailing statement after copying.
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 // Guard so `module.exports = CSL` only runs under Node (CommonJS); a no-op under a browser
@@ -58,6 +58,15 @@ for (const name of locales) {
 }
 for (const name of stockStyles) {
   await copyFile(join(stylesRepo, name), join(stylesDest, name));
+}
+
+// Repo-owned styles (e.g. the Fatemi-aware Chicago/APA variants) live in src/styles/
+// and sync alongside the stock styles so the engine can load them by the same path.
+const ownStylesDir = join(root, "src", "styles");
+for (const name of await readdir(ownStylesDir)) {
+  if (name.endsWith(".csl")) {
+    await copyFile(join(ownStylesDir, name), join(stylesDest, name));
+  }
 }
 
 const stamp = [engineRepo, localesRepo, stylesRepo].map((dir) => {

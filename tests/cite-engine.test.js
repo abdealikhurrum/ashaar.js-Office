@@ -62,3 +62,16 @@ assert.match(mlBib, /Nuʿm/, "author transliteration variant rendered");
 // "Islām" is a fragment of the title transliteration "Daʿāʾim al-Islām".
 assert.match(mlBib, /Islām/, "title transliteration variant rendered");
 console.log("cite-engine (multilingual) test passed");
+
+// --- Task 6: repo-owned Fatemi-aware styles must be inert until SP-4 ---
+// The fixture items carry no `genre`, so the Fatemi styles' inert <choose>
+// branch never fires and their bibliography output must equal the stock parent.
+const parent = CiteEngine.build({ styleXml: read("csl-styles/chicago-notes-bibliography.csl"), locales, items, lang: "en-US" });
+const fatemi = CiteEngine.build({ styleXml: read("csl-styles/chicago-notes-fatemi.csl"), locales, items, lang: "en-US" });
+assert.strictEqual(fatemi.bibliography(), parent.bibliography(), "Fatemi style equals parent when genre absent");
+console.log("cite-engine (fatemi parity) test passed");
+
+const apaParent = CiteEngine.build({ styleXml: read("csl-styles/apa.csl"), locales, items, lang: "en-US" });
+const apaFatemi = CiteEngine.build({ styleXml: read("csl-styles/apa-fatemi.csl"), locales, items, lang: "en-US" });
+assert.strictEqual(apaFatemi.bibliography(), apaParent.bibliography(), "APA Fatemi style equals parent when genre absent");
+console.log("cite-engine (apa fatemi parity) test passed");
