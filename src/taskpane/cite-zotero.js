@@ -60,6 +60,39 @@
     return map;
   }
 
+  var LOC_LABELS = [
+    { re: /^(pp?\.?|pages?)$/i, label: "page" },
+    { re: /^(chap\.?|chapters?)$/i, label: "chapter" },
+    { re: /^(sec\.?|section|§)$/i, label: "section" },
+    { re: /^(vv?\.?|verses?)$/i, label: "verse" }
+  ];
+
+  // Parse one pandoc item body ("@key" or "@key, p. 42") → {citekey, locator?, label?}.
+  function parseCaywItem(body) {
+    var trimmed = body.trim();
+    if (trimmed.charAt(0) === "@") { trimmed = trimmed.slice(1); }
+    var comma = trimmed.indexOf(",");
+    if (comma === -1) {
+      var bareKey = trimmed.trim();
+      return bareKey ? { citekey: bareKey } : null;
+    }
+    var citekey = trimmed.slice(0, comma).trim();
+    if (!citekey) { return null; }
+    var suffix = trimmed.slice(comma + 1).trim();
+    // suffix forms: "p. 42" | "pp. 42-45" | "chap. 3" | "42"
+    var mLabel = /^([A-Za-z.§]+)\s*(.+)$/.exec(suffix);
+    if (mLabel) {
+      for (var i = 0; i < LOC_LABELS.length; i++) {
+        if (LOC_LABELS[i].re.test(mLabel[1])) {
+          return { citekey: citekey, locator: mLabel[2].trim(), label: LOC_LABELS[i].label };
+        }
+      }
+      return { citekey: citekey }; // unrecognized label ⇒ no locator
+    }
+    if (/^[0-9]/.test(suffix)) { return { citekey: citekey, locator: suffix, label: "page" }; }
+    return { citekey: citekey };
+  }
+
   function parseCaywResult(text) {
     if (text === null || text === undefined) { return []; }
     var trimmed = String(text).trim();
@@ -70,12 +103,9 @@
       trimmed = trimmed.slice(1, -1).trim();
     }
     if (trimmed === "") { return []; }
-    return trimmed
-      .split(/[\s,;]+/)
-      .map(function (tok) { return tok.trim(); })
-      .filter(function (tok) { return tok.length > 0; })
-      .map(function (tok) { return tok[0] === "@" ? tok.slice(1) : tok; })
-      .filter(function (tok) { return tok.length > 0; });
+    return trimmed.split(";")
+      .map(function (part) { return parseCaywItem(part); })
+      .filter(function (it) { return it && it.citekey; });
   }
 
   // --- I/O: talk only to same-origin /zotero/* routes ---
@@ -91,8 +121,9 @@
   function caywPick(fetchImpl) {
     var f = fetchImpl || (typeof fetch !== "undefined" ? fetch : undefined);
     // BBT CAYW has no "citekeys" format; the pandoc format returns the picked
-    // items as `[@citekey1; @citekey2]`, which parseCaywResult unwraps to bare
-    // citekeys (strips the brackets, the `@`, and splits on `;`/`,`/space).
+    // items as `[@citekey1; @citekey2]` (each optionally followed by a
+    // `, <label> <locator>` suffix), which parseCaywResult parses into
+    // `{citekey, locator?, label?}` objects.
     return Promise.resolve()
       .then(function () { return f("/zotero/cayw?format=pandoc"); })
       .then(function (res) {

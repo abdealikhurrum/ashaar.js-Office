@@ -63,21 +63,23 @@ assert.throws(
 );
 console.log("parseExportResult (string error) test passed");
 
-// --- parseCaywResult ---
-assert.deepStrictEqual(
-  CiteZotero.parseCaywResult("YaumulMabasUyun,IsraaWalMiraaj"),
-  ["YaumulMabasUyun", "IsraaWalMiraaj"]
-);
+// --- parseCaywResult → [{citekey, locator, label}] (SP-A) ---
 assert.deepStrictEqual(CiteZotero.parseCaywResult(""), []);
 assert.deepStrictEqual(CiteZotero.parseCaywResult("   "), []);
 assert.deepStrictEqual(CiteZotero.parseCaywResult(null), []);
-assert.deepStrictEqual(CiteZotero.parseCaywResult(undefined), []);
-assert.deepStrictEqual(CiteZotero.parseCaywResult("{@YaumulMabasUyun}"), ["YaumulMabasUyun"]);
-assert.deepStrictEqual(CiteZotero.parseCaywResult("[@YaumulMabasUyun, @IsraaWalMiraaj]"), ["YaumulMabasUyun", "IsraaWalMiraaj"]);
-assert.deepStrictEqual(CiteZotero.parseCaywResult("@YaumulMabasUyun; @IsraaWalMiraaj"), ["YaumulMabasUyun", "IsraaWalMiraaj"]);
-// The real BBT pandoc format: single pick `[@key]` and multi-pick `[@a; @b]`.
-assert.deepStrictEqual(CiteZotero.parseCaywResult("[@YaumulMabasUyun]"), ["YaumulMabasUyun"]);
-assert.deepStrictEqual(CiteZotero.parseCaywResult("[@YaumulMabasUyun; @IsraaWalMiraaj]"), ["YaumulMabasUyun", "IsraaWalMiraaj"]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("@YaumulMabasUyun"), [{ citekey: "YaumulMabasUyun" }]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@YaumulMabasUyun]"), [{ citekey: "YaumulMabasUyun" }]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@Key, p. 42]"), [{ citekey: "Key", locator: "42", label: "page" }]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@Key, pp. 42-45]"), [{ citekey: "Key", locator: "42-45", label: "page" }]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@Key, chap. 3]"), [{ citekey: "Key", locator: "3", label: "chapter" }]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@Key, sec. 2]"), [{ citekey: "Key", locator: "2", label: "section" }]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@Key, v. 7]"), [{ citekey: "Key", locator: "7", label: "verse" }]);
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@Key, 99]"), [{ citekey: "Key", locator: "99", label: "page" }], "bare number ⇒ page");
+assert.deepStrictEqual(CiteZotero.parseCaywResult("[@Key, mumble]"), [{ citekey: "Key" }], "unrecognized suffix ⇒ no locator");
+assert.deepStrictEqual(
+  CiteZotero.parseCaywResult("[@K1, p. 1; @K2]"),
+  [{ citekey: "K1", locator: "1", label: "page" }, { citekey: "K2" }]
+);
 console.log("parseCaywResult test passed");
 
 // --- ping: resolves true/false, never rejects ---
@@ -101,7 +103,7 @@ console.log("parseCaywResult test passed");
     return { ok: true, text: async () => "[@YaumulMabasUyun; @IsraaWalMiraaj]" };
   };
   const keys = await CiteZotero.caywPick(fake);
-  assert.deepStrictEqual(keys, ["YaumulMabasUyun", "IsraaWalMiraaj"]);
+  assert.deepStrictEqual(keys, [{ citekey: "YaumulMabasUyun" }, { citekey: "IsraaWalMiraaj" }]);
   assert.strictEqual(calledUrl, "/zotero/cayw?format=pandoc", "caywPick fetches the same-origin cayw route with the pandoc format");
   console.log("caywPick test passed");
 })();
