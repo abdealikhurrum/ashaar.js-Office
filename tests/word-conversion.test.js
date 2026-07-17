@@ -88,6 +88,31 @@ const T = C.TATWEEL;
   assert.equal(C.convert("مٰن", C.DIRECTIONS.TO_LEGACY), "مْن", "U+0670 → U+0652");
 }
 
+// ── symbol / honorific tier (AL-KANZ ⇄ Fatemi !phrase!) ──
+{
+  const bayyin = C.MAPPINGS.find(m => m.id === "bayyin");
+  assert.ok(bayyin && bayyin.category === "symbol" && bayyin.lossy === true,
+    "symbol rows are lossy (repurposed printable ASCII)");
+  assert.equal(C.convert("/", C.DIRECTIONS.TO_MODERN), "!بين!", "/ → !بين!");
+  assert.equal(C.convert("!بين!", C.DIRECTIONS.TO_LEGACY), "/", "!بين! → /");
+  // longest-first ordering keeps the nested title phrases distinct
+  assert.equal(C.convert("×", C.DIRECTIONS.TO_MODERN), "!بص!", "× → bhaisaheb");
+  assert.equal(C.convert("!بص!", C.DIRECTIONS.TO_LEGACY), "×", "bhaisaheb → ×");
+  assert.equal(C.convert("÷", C.DIRECTIONS.TO_MODERN), "!بههص!", "÷ → shehzada");
+  assert.equal(C.convert("!بههص!", C.DIRECTIONS.TO_LEGACY), "÷",
+    "shehzada collapses whole (not partially matched as bhaisaheb/bhai)");
+  assert.equal(C.convert("]", C.DIRECTIONS.TO_MODERN), "!ماذا!", "] → mazaa");
+}
+
+// ── high jeem / high noon marks ──
+{
+  assert.equal(C.convert("{", C.DIRECTIONS.TO_MODERN), "ۚ", "{ → U+06DA small high jeem");
+  assert.equal(C.convert("}", C.DIRECTIONS.TO_MODERN), "ۨ", "} → U+06E8 small high noon");
+  assert.equal(C.convert("ۚ", C.DIRECTIONS.TO_LEGACY), "{");
+  assert.ok(C.MAPPINGS.filter(m => m.category === "symbol").length >= 12,
+    "full honorific/symbol set present");
+}
+
 // ── groupsForUi ──
 {
   const groups = C.groupsForUi();

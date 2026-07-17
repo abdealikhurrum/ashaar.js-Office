@@ -32,12 +32,34 @@
     // ── mark tier: legacy Arabic-101 keyboard repurposings (confirmed rows) ──
     // Shift+X emitted sukun (U+0652) but the old font drew it as khari zabar /
     // dagger alef (U+0670). LOSSY: a genuine sukun would be reinterpreted.
-    { id: "sukun-kharizabar", category: "mark", legacy: "ْ", modern: "ٰ", label: "khari zabar / dagger alef (was sukun)", wholeWord: false, lossy: true }
-    // >>> GENERATED symbol rows (scripts/generate-conversion-table.mjs) — do not edit by hand.
-    // Also pending: high jeem (modern U+06DA) and high noon (modern U+06E8) mark
-    // rows — modern targets confirmed from features.fea, legacy Shift+C/Shift+V
-    // source characters await confirmation.
-    // <<< GENERATED
+    { id: "sukun-kharizabar", category: "mark", legacy: "ْ", modern: "ٰ", label: "khari zabar / dagger alef (was sukun)", wholeWord: false, lossy: true },
+
+    // Shift+V / Shift+C on the Arabic-101 layout emitted { / } which the old
+    // font drew as small-high jeem / noon. LOSSY: braces have independent meaning.
+    { id: "high-jeem", category: "mark", legacy: "{", modern: "ۚ", label: "small high jeem (was { )", wholeWord: false, lossy: true },
+    { id: "high-noon", category: "mark", legacy: "}", modern: "ۨ", label: "small high noon (was } )", wholeWord: false, lossy: true },
+
+    // ── symbol / honorific tier ──────────────────────────────────────────────
+    // Derived from Al-Kanz for Windows.ttf ⇄ FatemiMaqala-Regular.ttf (glyphs
+    // pixel-identical; AL-KANZ repurposes printable ASCII, Fatemi uses !phrase!
+    // ligature inputs). ALL lossy: the legacy char has an independent meaning in
+    // ordinary text, so the row is ⚠-flagged and unchecked for non-legacy docs.
+    { id: "mazaa",     category: "symbol", legacy: "]",  modern: "!ماذا!",  label: "mazaa (what)",              wholeWord: false, lossy: true },
+    { id: "limaazaa",  category: "symbol", legacy: "[",  modern: "!لماذا!", label: "limaazaa (why)",            wholeWord: false, lossy: true },
+    { id: "ma-huwa",   category: "symbol", legacy: "%",  modern: "!ماهو!",  label: "ma huwa (what is it, m.)",  wholeWord: false, lossy: true },
+    { id: "maa-hiya",  category: "symbol", legacy: "_",  modern: "!ماهي!",  label: "maa hiya (what is it, f.)", wholeWord: false, lossy: true },
+    { id: "hall",      category: "symbol", legacy: "&",  modern: "!هل!",    label: "hal (is/does)",             wholeWord: false, lossy: true },
+    { id: "kaifa",     category: "symbol", legacy: "$",  modern: "!كيف!",   label: "kaifa (how)",               wholeWord: false, lossy: true },
+    { id: "uktub",     category: "symbol", legacy: "#",  modern: "!اكتب!",  label: "uktub (write)",             wholeWord: false, lossy: true },
+    { id: "uzkur",     category: "symbol", legacy: "+",  modern: "!اذكر!",  label: "uzkur (mention)",           wholeWord: false, lossy: true },
+    { id: "bayyin",    category: "symbol", legacy: "/",  modern: "!بين!",   label: "bayyin (clarify)",          wholeWord: false, lossy: true },
+    { id: "fabayyin",  category: "symbol", legacy: "\\", modern: "!فبين!",  label: "fabayyin (so clarify)",     wholeWord: false, lossy: true },
+    { id: "wabayyin",  category: "symbol", legacy: "|",  modern: "!وبين!",  label: "wabayyin (and clarify)",    wholeWord: false, lossy: true },
+    { id: "awdih",     category: "symbol", legacy: "^",  modern: "!اوضح!",  label: "awdih (explain)",           wholeWord: false, lossy: true },
+    { id: "bhai",       category: "symbol", legacy: "<",       modern: "!ب!",    label: "bhai (title)",        wholeWord: false, lossy: true },
+    { id: "qasre-aali", category: "symbol", legacy: ">",       modern: "!بهص!",  label: "Qasr-e Aali (title)", wholeWord: false, lossy: true },
+    { id: "bhaisaheb",  category: "symbol", legacy: "×", modern: "!بص!",   label: "Bhaisaheb (title)",   wholeWord: false, lossy: true },
+    { id: "shehzada",   category: "symbol", legacy: "÷", modern: "!بههص!", label: "Shehzada (title)",    wholeWord: false, lossy: true }
   ];
 
   function isDoubledConsonant(m) {
