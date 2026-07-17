@@ -32,6 +32,21 @@
 
   function isRtlLang(lang) { return /^ar\b/i.test(lang || ""); }
 
+  var DEFAULT_AR_CS_FONT = "Arial"; // universally present, has Arabic coverage
+  // Read the document's complex-script font inside a Word.run: prefer the
+  // "Ashaar Normal" style (created by the Styles-tab RTL setup), else the target
+  // range's bidi font, else the default. Returns a Promise<string>.
+  function readDocCsFont(ctx, range) {
+    var style = ctx.document.getStyles().getByNameOrNullObject("Ashaar Normal");
+    style.load("isNullObject,font/nameBidirectional");
+    range.font.load("nameBidirectional");
+    return ctx.sync().then(function () {
+      if (!style.isNullObject && style.font.nameBidirectional) { return style.font.nameBidirectional; }
+      if (range.font.nameBidirectional) { return range.font.nameBidirectional; }
+      return DEFAULT_AR_CS_FONT;
+    });
+  }
+
   function fetchText(url) {
     return fetch(url).then(function (r) {
       if (!r.ok) { throw new Error(url + " → HTTP " + r.status); }
@@ -284,9 +299,26 @@
           range = sel.insertHtml(html, Word.InsertLocation.replace);
         } else if (canNotes) {
           var note = form === "endnote" ? sel.insertEndnote() : sel.insertFootnote();
+          var noteRange = note.body.getRange();
+          if (rtl) {
+            // Arabic footnote/endnote: insert as OOXML runs (not insertHtml) so
+            // the document's complex-script font is set and the Arabic title
+            // isn't left italic (Word renders italic Arabic as tofu squares in
+            // fonts lacking an italic style). The paragraph already carries
+            // <w:bidi/>, so no separate alignment pass is needed here.
+            return readDocCsFont(ctx, noteRange).then(function (csFont) {
+              var sanitized = CiteWord.sanitize(engine.cite(items));
+              var pkg = AshaarTabStop.wrapOoxml(CiteWord.buildCitationParagraphOoxml(sanitized, { csFont: csFont }));
+              var oRange = noteRange.insertOoxml(pkg, Word.InsertLocation.replace);
+              var occ = oRange.insertContentControl();
+              occ.tag = citeTag;
+              occ.title = "Ashaar Citation";
+              return ctx.sync();
+            });
+          }
           // insertHtml(replace) returns the range of the newly inserted content —
           // use it (not the pre-insert note range) so alignment hits real paragraphs.
-          range = note.body.getRange().insertHtml(noteHtml, Word.InsertLocation.replace);
+          range = noteRange.insertHtml(noteHtml, Word.InsertLocation.replace);
         } else {
           range = sel.insertHtml(html, Word.InsertLocation.replace);
           fellBack = true;
@@ -337,16 +369,25 @@
         return;
       }
       Word.run(function (ctx) {
-        var range = ctx.document.getSelection().insertHtml(bibHtml, Word.InsertLocation.after);
+        var selRange = ctx.document.getSelection().getRange();
+        if (rtl) {
+          // Arabic bibliography: OOXML runs (doc CS font, non-italic Arabic
+          // titles) instead of insertHtml — same rationale as the note branch.
+          return readDocCsFont(ctx, selRange).then(function (csFont) {
+            var sanitized = CiteWord.sanitize(engine.bibliography());
+            var pkg = AshaarTabStop.wrapOoxml(CiteWord.buildCitationParagraphOoxml(sanitized, { csFont: csFont }));
+            var oRange = selRange.insertOoxml(pkg, Word.InsertLocation.after);
+            var occ = oRange.insertContentControl();
+            occ.tag = bibTag;
+            occ.title = "Ashaar Bibliography";
+            return ctx.sync();
+          });
+        }
+        var range = selRange.insertHtml(bibHtml, Word.InsertLocation.after);
         var cc = range.insertContentControl();
         cc.tag = bibTag;
         cc.title = "Ashaar Bibliography";
-        var paras = range.paragraphs;
-        paras.load("items");
-        return ctx.sync().then(function () {
-          if (rtl) { rightAlignParas(paras); }
-          return ctx.sync();
-        });
+        return ctx.sync();
       }).then(function () {
         setStatus("Inserted bibliography.");
       }).catch(function (e) {
