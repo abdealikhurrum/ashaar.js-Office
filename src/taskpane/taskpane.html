@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260716-styles-color-pickers";
+      window.ASHAAR_ASSET_VERSION = "20260716-convert-tab";
     </script>
     <script>
       (function (v) {
@@ -37,6 +37,7 @@
         <button id="mode-convert" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="convert-mode-panel">Ashaar.js Convert</button>
         <button id="mode-booklet" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="booklet-mode-panel">Booklet</button>
         <button id="mode-styles" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="styles-mode-panel">Styles</button>
+        <button id="mode-convert-text" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="convert-text-mode-panel">Convert</button>
       </div>
 
       <section id="settings-panel" class="controls settings-panel" aria-label="Settings">
@@ -517,6 +518,40 @@
         </div>
       </section>
 
+      <section id="convert-text-mode-panel" class="mode-panel" role="tabpanel" aria-labelledby="mode-convert-text" hidden>
+        <div class="section-title">
+          <h2>Convert</h2>
+          <p>Convert legacy LD “double-press” text (old AL-KANZ-era fonts) to and from modern encoding. Runs a find-replace pass over the document or the current selection; run formatting is preserved.</p>
+        </div>
+
+        <p id="conv-status" class="adopt-hint" aria-live="polite"></p>
+
+        <section class="conv-actions">
+          <button id="conv-to-modern" type="button">⟵ To Modern</button>
+          <button id="conv-to-legacy" type="button">To Legacy ⟶</button>
+        </section>
+
+        <fieldset class="conv-scope">
+          <legend>Scope</legend>
+          <label><input type="radio" name="conv-scope" value="document" checked> Whole document</label>
+          <label><input type="radio" name="conv-scope" value="selection"> Current selection</label>
+        </fieldset>
+
+        <section class="sp-profile-row">
+          <label for="conv-preset">Preset</label>
+          <select id="conv-preset"></select>
+          <button id="conv-preset-saveas" type="button" class="button--secondary">Save current as preset&hellip;</button>
+        </section>
+        <div id="conv-saveas-row" class="sp-profile-row" hidden>
+          <label for="conv-saveas-name">Name</label>
+          <input id="conv-saveas-name" type="text" class="template-name-input" placeholder="New preset name">
+          <button id="conv-saveas-ok" type="button">Save</button>
+          <button id="conv-saveas-cancel" type="button" class="button--secondary">Cancel</button>
+        </div>
+
+        <div id="conv-checklist" aria-label="Conversions to run"></div>
+      </section>
+
       <section id="justify-actions" class="actions" aria-label="Justification actions">
         <button id="reset-justification" type="button" class="button--secondary">Reset (clear kashida &amp; spaces)</button>
         <button id="show-cell-map" type="button" class="button--secondary">Show cell structure</button>
@@ -561,6 +596,8 @@
           "./word-styles.js",
           "./ashaar-normal-carrier.js",
           "./styles-pane.js",
+          "./word-conversion.js",
+          "./conversion-pane.js",
           "./taskpane.js"
         ];
         // Parser-inserted, non-async document.write preserves load+exec order —
