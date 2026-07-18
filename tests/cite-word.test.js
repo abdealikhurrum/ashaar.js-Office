@@ -184,3 +184,27 @@ console.log("citationItemsFromTag test passed");
 
   console.log("cite-word SP-4 section tests passed");
 })();
+
+// --- content-aware Arabic font: hasArabic + LTR-paragraph OOXML (SP-3 fix) ---
+(function () {
+  // hasArabic
+  assert.strictEqual(CiteWord.hasArabic("Hello, world"), false, "latin => false");
+  assert.strictEqual(CiteWord.hasArabic("al-Qāḍī al-Nuʿmān"), false, "romanized latin+diacritics => false");
+  assert.strictEqual(CiteWord.hasArabic("دعائم الإسلام"), true, "arabic => true");
+  assert.strictEqual(CiteWord.hasArabic("Nuʿmān, <i>دعائم</i>, 1951"), true, "mixed => true");
+  assert.strictEqual(CiteWord.hasArabic(""), false, "empty => false");
+
+  // default paragraph = RTL (bidi + right), Arabic run gets cs font
+  var rtlP = CiteWord.buildCitationParagraphOoxml("دعائم", { csFont: "Amiri" });
+  assert.ok(rtlP.indexOf("<w:bidi/>") !== -1, "default paragraph is bidi/RTL");
+  assert.ok(rtlP.indexOf('w:jc w:val="right"') !== -1, "default paragraph right-aligned");
+  assert.ok(rtlP.indexOf('w:cs="Amiri"') !== -1, "default: cs font on arabic run");
+
+  // ltr paragraph: no bidi/right, but Arabic run STILL carries cs font + rtl
+  var ltrP = CiteWord.buildCitationParagraphOoxml("Nuʿmān دعائم 1951", { csFont: "Amiri", ltr: true });
+  assert.ok(ltrP.indexOf("<w:bidi/>") === -1, "ltr paragraph omits bidi");
+  assert.ok(ltrP.indexOf('w:jc w:val="right"') === -1, "ltr paragraph omits right align");
+  assert.ok(ltrP.indexOf('w:cs="Amiri"') !== -1, "ltr: cs font still set on arabic run (the fix)");
+  assert.ok(ltrP.indexOf("<w:rtl/>") !== -1, "ltr: arabic run still marked rtl for shaping");
+  console.log("cite-word Arabic-font (hasArabic + ltr paragraph) tests passed");
+})();

@@ -228,8 +228,23 @@
     return out.join("");
   }
 
+  // True when the text carries any Arabic-script character. Used to decide
+  // whether output needs the OOXML path (the only one that can set the Word
+  // complex-script font, w:cs) — independent of the CSL *locale*, since Arabic
+  // content also appears under an en-US locale (the Original/Both variant, or a
+  // plain Arabic title). HTML tags contain no Arabic letters, so a raw scan is fine.
+  function hasArabic(text) { return RTL_CHAR.test(String(text || "")); }
+
+  // Wrap rendered citation/bibliography HTML in an OOXML paragraph.
+  // Default (opts.ltr falsy): a bidi, right-justified paragraph — for the ar
+  // locale. opts.ltr === true: a normal left-to-right paragraph (no <w:bidi/>,
+  // no forced right align) for an en-US locale that nonetheless contains Arabic
+  // runs — those runs still carry <w:rtl/> + w:cs (set per-run in emitRun) so the
+  // Arabic shapes correctly and renders in the complex-script font instead of
+  // falling back to Times New Roman.
   function buildCitationParagraphOoxml(html, opts) {
-    return '<w:p><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr>' + htmlToOoxmlRuns(html, opts) + "</w:p>";
+    var pPr = (opts && opts.ltr) ? "" : '<w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr>';
+    return "<w:p>" + pPr + htmlToOoxmlRuns(html, opts) + "</w:p>";
   }
 
   function htmlEsc(s) {
@@ -261,6 +276,7 @@
     parseCitationTag: parseCitationTag,
     buildBibliographyTag: buildBibliographyTag,
     citationItemsFromTag: citationItemsFromTag,
+    hasArabic: hasArabic,
     htmlToOoxmlRuns: htmlToOoxmlRuns,
     buildCitationParagraphOoxml: buildCitationParagraphOoxml,
     buildSectionedBibliographyHtml: buildSectionedBibliographyHtml,
