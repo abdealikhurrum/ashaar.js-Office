@@ -725,6 +725,66 @@
     });
   }
 
+  // Show only the field rows whose data-types include the selected type.
+  function syncManualFields() {
+    var type = (byId("cite-manual-type") || {}).value || "book";
+    var form = byId("cite-manual-form");
+    if (!form) { return; }
+    var rows = form.querySelectorAll(".field[data-types]");
+    for (var i = 0; i < rows.length; i++) {
+      var types = (rows[i].getAttribute("data-types") || "").split(/\s+/);
+      rows[i].hidden = types.indexOf(type) === -1;
+    }
+  }
+
+  function toggleManualForm(show) {
+    var form = byId("cite-manual-form");
+    if (!form) { return; }
+    form.hidden = (show === undefined) ? !form.hidden : !show;
+    if (!form.hidden) { syncManualFields(); }
+  }
+
+  // Generate a stable id that doesn't collide with existing items.
+  function nextManualId() {
+    var n = 1;
+    while (cache.items && Object.prototype.hasOwnProperty.call(cache.items, "manual-" + n)) { n++; }
+    return "manual-" + n;
+  }
+
+  function mval(id) { var el = byId(id); return el ? el.value : ""; }
+
+  function addManualItem() {
+    if (typeof CiteManual === "undefined") { return; }
+    var title = mval("cite-manual-title").trim();
+    if (!title) { setStatus("Enter a title for the manual citation.", true); return; }
+    if (!cache.items) { cache.items = {}; }
+    var id = nextManualId();
+    var item = CiteManual.buildManualItem({
+      id: id, type: mval("cite-manual-type"),
+      title: title, authors: mval("cite-manual-authors"), editors: mval("cite-manual-editors"),
+      year: mval("cite-manual-year"), publisher: mval("cite-manual-publisher"),
+      place: mval("cite-manual-place"), containerTitle: mval("cite-manual-container"),
+      volume: mval("cite-manual-volume"), issue: mval("cite-manual-issue"),
+      pages: mval("cite-manual-pages"), url: mval("cite-manual-url"),
+      accessed: mval("cite-manual-accessed")
+    });
+    var previouslySelected = selectedIds();
+    cache.items[id] = item;
+    persistRefs();
+    itemsPopulated = false;
+    populateItems(true);
+    previouslySelected.concat([id]).forEach(function (sid) {
+      var cb = byId("cite-item-" + sid);
+      if (cb) { cb.checked = true; }
+    });
+    // Clear the form inputs for the next entry, then hide it.
+    var ids = ["title", "authors", "editors", "year", "publisher", "place", "container",
+      "volume", "issue", "pages", "url", "accessed"];
+    ids.forEach(function (k) { var el = byId("cite-manual-" + k); if (el) { el.value = ""; } });
+    toggleManualForm(false);
+    return renderPreview().then(function () { setStatus("Added manual citation."); });
+  }
+
   function bind() {
     if (bound) { return; }
     var styleSel = byId("cite-style");
@@ -743,6 +803,14 @@
     if (refreshBtn) { refreshBtn.addEventListener("click", refreshCitations); }
     var addZoteroBtn = byId("cite-add-zotero");
     if (addZoteroBtn) { addZoteroBtn.addEventListener("click", addFromZotero); }
+    var manualToggle = byId("cite-manual-toggle");
+    if (manualToggle) { manualToggle.addEventListener("click", function () { toggleManualForm(); }); }
+    var manualType = byId("cite-manual-type");
+    if (manualType) { manualType.addEventListener("change", syncManualFields); }
+    var manualAdd = byId("cite-manual-add");
+    if (manualAdd) { manualAdd.addEventListener("click", addManualItem); }
+    var manualCancel = byId("cite-manual-cancel");
+    if (manualCancel) { manualCancel.addEventListener("click", function () { toggleManualForm(false); }); }
 
     renderPreview().then(pingZotero);
   }
