@@ -130,10 +130,10 @@
     return CiteZotero.fetchTags(Object.keys(cache.items)).catch(function () { return {}; });
   }
 
-  // Turn a section plan into insertion-ready body (HTML for LTR, OOXML for RTL).
-  // Each section is rendered by a fresh engine over ONLY that section's items.
-  function renderBibliographyBody(styleFile, lang, sections, csFont) {
-    var rendered = (sections || []).map(function (s) {
+  // Render a section plan to [{heading, html}] — one fresh engine per section
+  // over ONLY that section's items. Pure of Word; no font decision yet.
+  function renderSections(styleFile, lang, sections) {
+    return (sections || []).map(function (s) {
       var subset = {};
       (s.citekeys || []).forEach(function (k) {
         if (cache.items && Object.prototype.hasOwnProperty.call(cache.items, k)) { subset[k] = cache.items[k]; }
@@ -141,10 +141,28 @@
       var engine = buildEngine(styleFile, lang, subset);
       return { heading: s.heading, html: engine.bibliography() };
     });
-    if (isRtlLang(lang)) {
-      return { rtl: true, ooxml: AshaarTabStop.wrapOoxml(CiteWord.buildSectionedBibliographyOoxml(rendered, { csFont: csFont })) };
+  }
+
+  // OOXML is required whenever the paragraph is RTL (ar locale) OR the rendered
+  // content contains Arabic — because only the OOXML path can set the Word
+  // complex-script font. Under en-US, an Arabic title (Original/Both variant, or
+  // an Arabic-titled source) would otherwise fall back to Times New Roman.
+  function bibNeedsOoxml(rendered, lang) {
+    if (isRtlLang(lang)) { return true; }
+    return (rendered || []).some(function (s) {
+      return CiteWord.hasArabic(s.html) || CiteWord.hasArabic(s.heading || "");
+    });
+  }
+
+  // Serialize rendered sections for insertion. OOXML when needed (paragraph
+  // direction ltr under en-US, rtl under ar); plain HTML for pure-Latin en-US.
+  function serializeBibliographyBody(rendered, lang, csFont) {
+    var rtl = isRtlLang(lang);
+    if (bibNeedsOoxml(rendered, lang)) {
+      return { useOoxml: true, ooxml: AshaarTabStop.wrapOoxml(
+        CiteWord.buildSectionedBibliographyOoxml(rendered, { csFont: csFont, ltr: !rtl })) };
     }
-    return { rtl: false, html: CiteWord.buildSectionedBibliographyHtml(rendered) };
+    return { useOoxml: false, html: CiteWord.buildSectionedBibliographyHtml(rendered) };
   }
 
   function populateItems(skipSeed) {
@@ -337,16 +355,20 @@
   // single-CC path — unchanged behavior).
   function renderCitationInto(ctx, range, items, styleFile, lang, csFont) {
     var engine = buildEngine(styleFile, lang);
-    if (isRtlLang(lang)) {
+    var raw = CiteWord.sanitize(engine.cite(items));
+    var rtl = isRtlLang(lang);
+    // OOXML whenever the paragraph is RTL OR the content has Arabic (only OOXML
+    // can set the complex-script font); en-US Arabic ⇒ LTR paragraph, Arabic
+    // runs still carry w:cs so they don't drop to Times New Roman.
+    if (rtl || CiteWord.hasArabic(raw)) {
       var csFontPromise = csFont ? Promise.resolve(csFont) : readDocCsFont(ctx, range);
       return csFontPromise.then(function (resolvedCsFont) {
         var pkg = AshaarTabStop.wrapOoxml(
-          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.cite(items)), { csFont: resolvedCsFont }));
+          CiteWord.buildCitationParagraphOoxml(raw, { csFont: resolvedCsFont, ltr: !rtl }));
         return range.insertOoxml(pkg, Word.InsertLocation.replace);
       });
     }
-    var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.cite(items)));
-    return Promise.resolve(range.insertHtml(html, Word.InsertLocation.replace));
+    return Promise.resolve(range.insertHtml(CiteWord.wrapRtlRuns(raw), Word.InsertLocation.replace));
   }
 
   // Same render strategy as renderCitationInto, but for the whole-library
@@ -356,14 +378,15 @@
   // renderCitationInto's comment.
   function renderBibliographyInto(ctx, range, styleFile, lang, csFont, sections) {
     var secs = sections || [{ key: null, heading: null, citekeys: cache.items ? Object.keys(cache.items) : [] }];
-    if (isRtlLang(lang)) {
+    var rendered = renderSections(styleFile, lang, secs);
+    if (bibNeedsOoxml(rendered, lang)) {
       var csFontPromise = csFont ? Promise.resolve(csFont) : readDocCsFont(ctx, range);
       return csFontPromise.then(function (resolvedCsFont) {
-        var body = renderBibliographyBody(styleFile, lang, secs, resolvedCsFont);
+        var body = serializeBibliographyBody(rendered, lang, resolvedCsFont);
         return range.insertOoxml(body.ooxml, Word.InsertLocation.replace);
       });
     }
-    var body = renderBibliographyBody(styleFile, lang, secs);
+    var body = serializeBibliographyBody(rendered, lang);
     return Promise.resolve(range.insertHtml(body.html, Word.InsertLocation.replace));
   }
 
@@ -444,7 +467,6 @@
   function insertBibliography() {
     var styleFile = currentStyleFile();
     var lang = currentLang();
-    var rtl = isRtlLang(lang);
     ensureAssets(styleFile).then(function () {
       return fetchTagsIfSectioned(styleFile).then(function (tagsByCitekey) {
         var allKeys = cache.items ? Object.keys(cache.items) : [];
@@ -455,24 +477,23 @@
           setStatus("Word isn't available — this is preview-only in a browser.", true);
           return;
         }
+        var rendered = renderSections(styleFile, lang, sections);
+        var needOoxml = bibNeedsOoxml(rendered, lang);
         return Word.run(function (ctx) {
           var selRange = ctx.document.getSelection().getRange();
-          if (rtl) {
-            return readDocCsFont(ctx, selRange).then(function (csFont) {
-              var body = renderBibliographyBody(styleFile, lang, sections, csFont);
-              var oRange = selRange.insertOoxml(body.ooxml, Word.InsertLocation.after);
-              var occ = oRange.insertContentControl();
-              occ.tag = bibTag;
-              occ.title = "Ashaar Bibliography";
-              return ctx.sync();
-            });
-          }
-          var body = renderBibliographyBody(styleFile, lang, sections);
-          var range = selRange.insertHtml(body.html, Word.InsertLocation.after);
-          var cc = range.insertContentControl();
-          cc.tag = bibTag;
-          cc.title = "Ashaar Bibliography";
-          return ctx.sync();
+          // Read the complex-script font whenever OOXML is used (ar locale, or
+          // en-US with Arabic content) so Arabic titles don't fall back to TNR.
+          var csFontPromise = needOoxml ? readDocCsFont(ctx, selRange) : Promise.resolve(undefined);
+          return csFontPromise.then(function (csFont) {
+            var body = serializeBibliographyBody(rendered, lang, csFont);
+            var range = body.useOoxml
+              ? selRange.insertOoxml(body.ooxml, Word.InsertLocation.after)
+              : selRange.insertHtml(body.html, Word.InsertLocation.after);
+            var cc = range.insertContentControl();
+            cc.tag = bibTag;
+            cc.title = "Ashaar Bibliography";
+            return ctx.sync();
+          });
         }).then(function () {
           setStatus("Inserted bibliography.");
         }).catch(function (e) {
@@ -558,11 +579,11 @@
             // Normal style / doc-body bidi font), not per-citation — read it
             // ONCE here instead of once per CC (readDocCsFont issues its own
             // ctx.sync(), so per-CC reads would mean one extra sync per Arabic
-            // CC). Only needed at all for rtl locales.
-            var rtl = isRtlLang(lang);
-            var csFontPromise = rtl
-              ? readDocCsFont(ctx, ctx.document.body.getRange())
-              : Promise.resolve(undefined);
+            // CC). Read it regardless of locale: an en-US refresh can still hit
+            // Arabic content (Original/Both variant, or an Arabic title), which
+            // renderCitationInto/renderBibliographyInto render via OOXML and need
+            // the cs font for — else Arabic drops to Times New Roman.
+            var csFontPromise = readDocCsFont(ctx, ctx.document.body.getRange());
 
             return csFontPromise.then(function (csFont) {
               var ops = [];
