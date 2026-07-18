@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260718-cite-manual";
+      window.ASHAAR_ASSET_VERSION = "20260718-cite-import";
     </script>
     <script>
       (function (v) {
@@ -673,6 +673,29 @@
           </section>
         </section>
 
+        <section class="actions single-action" aria-label="Import references">
+          <button id="cite-import-toggle" type="button" class="button--secondary">Import…</button>
+        </section>
+
+        <section id="cite-import-panel" class="cite-manual-form" aria-label="Import references" hidden>
+          <div id="cite-dropzone" class="cite-dropzone">
+            Drag items from Zotero, or drop a <strong>Better CSL JSON</strong> export here.
+          </div>
+          <div class="field">
+            <label for="cite-import-file">…or choose an export file</label>
+            <input id="cite-import-file" type="file" accept=".json,application/json" />
+          </div>
+          <div class="field">
+            <label for="cite-import-paste">…or paste CSL JSON</label>
+            <textarea id="cite-import-paste" rows="4"></textarea>
+          </div>
+          <p class="adopt-hint">Tip: in Zotero, set <em>Settings → Export → Quick Copy → Item Format</em> to “Better CSL JSON” to drag items straight in. BibTeX/RIS coming soon.</p>
+          <section class="actions two-col">
+            <button id="cite-import-add" type="button">Import</button>
+            <button id="cite-import-cancel" type="button" class="button--secondary">Cancel</button>
+          </section>
+        </section>
+
         <section class="actions two-col" aria-label="Citation actions">
           <button id="cite-insert" type="button">Insert citation</button>
           <button id="cite-insert-bib" type="button" class="button--secondary">Insert bibliography</button>
@@ -742,6 +765,7 @@
           "./cite-word.js",
           "./cite-classify.js",
           "./cite-manual.js",
+          "./cite-import.js",
           "./cite-zotero.js",
           "./cite-store.js",
           "./cite-pane.js",

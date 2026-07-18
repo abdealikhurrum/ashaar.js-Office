@@ -785,6 +785,79 @@
     return renderPreview().then(function () { setStatus("Added manual citation."); });
   }
 
+  // Shared: merge an {id:item} map into the reference set, persist, re-render the
+  // list, and re-check previously-selected + newly-added items. Returns added ids.
+  // Used by the import paths (live "Add from Zotero" keeps its own inline copy).
+  function addItemsToList(map) {
+    if (!cache.items) { cache.items = {}; }
+    var previouslySelected = selectedIds();
+    var enriched = enrich(map); // bake cne-* variants into the multi model
+    var addedIds = Object.keys(enriched);
+    addedIds.forEach(function (id) { cache.items[id] = enriched[id]; });
+    persistRefs();
+    itemsPopulated = false;
+    populateItems(true);
+    previouslySelected.concat(addedIds).forEach(function (id) {
+      var cb = byId("cite-item-" + id);
+      if (cb) { cb.checked = true; }
+    });
+    return addedIds;
+  }
+
+  function toggleImportPanel(show) {
+    var p = byId("cite-import-panel");
+    if (!p) { return; }
+    p.hidden = (show === undefined) ? !p.hidden : !show;
+  }
+
+  // Parse imported text (CSL JSON in the MVP; BibTeX/RIS report "coming soon"),
+  // add the items, and refresh. filename hints the format for file drops.
+  function handleImportText(text, filename) {
+    if (typeof CiteImport === "undefined") { return; }
+    if (!String(text || "").trim()) { setStatus("Nothing to import.", true); return; }
+    var items;
+    try {
+      items = CiteImport.parseImport(text, CiteImport.sniffFormat(text, filename));
+    } catch (e) {
+      setStatus("Import failed: " + (e && e.message ? e.message : String(e)), true);
+      return;
+    }
+    if (!items.length) { setStatus("No references found to import.", true); return; }
+    var map = {};
+    items.forEach(function (it) { map[it.id] = it; });
+    var added = addItemsToList(map);
+    var paste = byId("cite-import-paste"); if (paste) { paste.value = ""; }
+    var file = byId("cite-import-file"); if (file) { file.value = ""; }
+    toggleImportPanel(false);
+    return renderPreview().then(function () {
+      setStatus("Imported " + added.length + " reference(s).");
+    });
+  }
+
+  // Read each dropped/chosen file as text and import it (one import per file).
+  function readImportFiles(files) {
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) { return; }
+    list.forEach(function (f) {
+      var reader = new FileReader();
+      reader.onload = function () { handleImportText(String(reader.result || ""), f.name); };
+      reader.onerror = function () { setStatus("Couldn't read " + f.name + ".", true); };
+      reader.readAsText(f);
+    });
+  }
+
+  function onImportDrop(e) {
+    e.preventDefault();
+    var dz = byId("cite-dropzone");
+    if (dz) { dz.classList.remove("is-drag"); }
+    var dt = e.dataTransfer;
+    if (!dt) { return; }
+    if (dt.files && dt.files.length) { readImportFiles(dt.files); return; }
+    var text = dt.getData("text/plain") || dt.getData("text") || "";
+    if (text) { handleImportText(text, ""); }
+    else { setStatus("Nothing importable in that drop — try a .json export or paste CSL JSON.", true); }
+  }
+
   function bind() {
     if (bound) { return; }
     var styleSel = byId("cite-style");
@@ -811,6 +884,20 @@
     if (manualAdd) { manualAdd.addEventListener("click", addManualItem); }
     var manualCancel = byId("cite-manual-cancel");
     if (manualCancel) { manualCancel.addEventListener("click", function () { toggleManualForm(false); }); }
+    var importToggle = byId("cite-import-toggle");
+    if (importToggle) { importToggle.addEventListener("click", function () { toggleImportPanel(); }); }
+    var importAdd = byId("cite-import-add");
+    if (importAdd) { importAdd.addEventListener("click", function () { var p = byId("cite-import-paste"); handleImportText(p ? p.value : "", ""); }); }
+    var importCancel = byId("cite-import-cancel");
+    if (importCancel) { importCancel.addEventListener("click", function () { toggleImportPanel(false); }); }
+    var importFile = byId("cite-import-file");
+    if (importFile) { importFile.addEventListener("change", function () { readImportFiles(importFile.files); }); }
+    var dz = byId("cite-dropzone");
+    if (dz) {
+      dz.addEventListener("dragover", function (e) { e.preventDefault(); dz.classList.add("is-drag"); });
+      dz.addEventListener("dragleave", function () { dz.classList.remove("is-drag"); });
+      dz.addEventListener("drop", onImportDrop);
+    }
 
     renderPreview().then(pingZotero);
   }
