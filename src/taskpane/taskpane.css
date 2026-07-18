@@ -836,6 +836,18 @@ input[type="range"][disabled] { opacity: 0.45; }
   text-align: center;
   color: var(--muted);
   font-size: 13px;
+  cursor: pointer;
+}
+.cite-dropzone:hover,
+.cite-dropzone:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.cite-dropzone-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.85;
 }
 .cite-dropzone.is-drag {
   border-color: var(--accent);
