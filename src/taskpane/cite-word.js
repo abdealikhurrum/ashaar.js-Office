@@ -232,6 +232,26 @@
     return '<w:p><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr>' + htmlToOoxmlRuns(html, opts) + "</w:p>";
   }
 
+  function htmlEsc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function buildSectionedBibliographyHtml(sections) {
+    return (sections || []).map(function (s) {
+      var body = wrapRtlRuns(sanitize(s.html));
+      return s.heading ? ("<p><b>" + htmlEsc(s.heading) + "</b></p>" + body) : body;
+    }).join("");
+  }
+
+  function buildSectionedBibliographyOoxml(sections, opts) {
+    return (sections || []).map(function (s) {
+      var body = buildCitationParagraphOoxml(sanitize(s.html), opts);
+      if (!s.heading) { return body; }
+      var head = buildCitationParagraphOoxml("<b>" + s.heading + "</b>", opts);
+      return head + body;
+    }).join("");
+  }
+
   return {
     sanitize: sanitize,
     wrapRtlRuns: wrapRtlRuns,
@@ -242,6 +262,8 @@
     buildBibliographyTag: buildBibliographyTag,
     citationItemsFromTag: citationItemsFromTag,
     htmlToOoxmlRuns: htmlToOoxmlRuns,
-    buildCitationParagraphOoxml: buildCitationParagraphOoxml
+    buildCitationParagraphOoxml: buildCitationParagraphOoxml,
+    buildSectionedBibliographyHtml: buildSectionedBibliographyHtml,
+    buildSectionedBibliographyOoxml: buildSectionedBibliographyOoxml
   };
 }));

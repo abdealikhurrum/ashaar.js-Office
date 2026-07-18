@@ -149,3 +149,38 @@ assert.deepStrictEqual(CiteWord.citationItemsFromTag({ keys: [] }), []);
 assert.deepStrictEqual(CiteWord.citationItemsFromTag({}), [], "missing keys → []");
 assert.deepStrictEqual(CiteWord.citationItemsFromTag(null), [], "null → []");
 console.log("citationItemsFromTag test passed");
+
+// --- SP-4: sectioned bibliography assemblers ---
+(function () {
+  // Single heading-null section == today's flat output (HTML)
+  var flatHtml = CiteWord.buildSectionedBibliographyHtml([{ heading: null, html: "<div>Entry one.</div>" }]);
+  assert.strictEqual(flatHtml, CiteWord.wrapRtlRuns(CiteWord.sanitize("<div>Entry one.</div>")));
+
+  // Multi-section HTML: each heading becomes <p><b>…</b></p> then its body
+  var secHtml = CiteWord.buildSectionedBibliographyHtml([
+    { heading: "Primary Sources — Fatemi", html: "<div>A.</div>" },
+    { heading: "Secondary Sources — Other", html: "<div>B.</div>" }
+  ]);
+  assert.ok(secHtml.indexOf("<p><b>Primary Sources — Fatemi</b></p>") !== -1);
+  assert.ok(secHtml.indexOf("<p><b>Secondary Sources — Other</b></p>") !== -1);
+  assert.ok(secHtml.indexOf("Primary Sources") < secHtml.indexOf("Secondary Sources")); // order
+
+  // heading HTML-escaping (defensive)
+  var escd = CiteWord.buildSectionedBibliographyHtml([{ heading: "A & <B>", html: "<div>x</div>" }]);
+  assert.ok(escd.indexOf("A &amp; &lt;B&gt;") !== -1);
+
+  // Single heading-null section == today's flat output (OOXML)
+  var flatOoxml = CiteWord.buildSectionedBibliographyOoxml([{ heading: null, html: "<div>Entry.</div>" }], { csFont: "Scheherazade" });
+  assert.strictEqual(flatOoxml, CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize("<div>Entry.</div>"), { csFont: "Scheherazade" }));
+
+  // Multi-section OOXML: heading para (bold) precedes each body para
+  var secOoxml = CiteWord.buildSectionedBibliographyOoxml([
+    { heading: "المصادر الأساسية — الفاطمية", html: "<div>A.</div>" },
+    { heading: "المصادر الثانوية — أخرى", html: "<div>B.</div>" }
+  ], { csFont: "Scheherazade" });
+  assert.ok(secOoxml.indexOf("<w:b/>") !== -1);               // heading is bold
+  assert.ok(secOoxml.indexOf("المصادر الأساسية") !== -1);
+  assert.ok(secOoxml.indexOf("المصادر الأساسية") < secOoxml.indexOf("المصادر الثانوية")); // order
+
+  console.log("cite-word SP-4 section tests passed");
+})();
