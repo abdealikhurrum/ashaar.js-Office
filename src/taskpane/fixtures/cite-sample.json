@@ -1,0 +1,24 @@
+{
+  "en-book": {
+    "id": "en-book", "type": "book",
+    "title": "The Fatimid Empire",
+    "author": [{ "family": "Daftary", "given": "Farhad" }],
+    "issued": { "date-parts": [[2018]] },
+    "publisher": "Edinburgh University Press", "publisher-place": "Edinburgh"
+  },
+  "en-article": {
+    "id": "en-article", "type": "article-journal",
+    "title": "Isma'ili History and Doctrine",
+    "author": [{ "family": "Halm", "given": "Heinz" }],
+    "container-title": "Journal of Islamic Studies",
+    "volume": "12", "issue": "2", "page": "145-170",
+    "issued": { "date-parts": [[2001]] }
+  },
+  "ar-book": {
+    "id": "ar-book", "type": "book",
+    "title": "دعائم الإسلام",
+    "author": [{ "family": "القاضي النعمان" }],
+    "issued": { "date-parts": [[1951]] },
+    "publisher": "دار المعارف", "publisher-place": "القاهرة"
+  }
+}

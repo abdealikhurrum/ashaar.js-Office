@@ -1,0 +1,186 @@
+"use strict";
+const assert = require("assert");
+const CiteWord = require("../src/taskpane/cite-word");
+
+// sanitize: keep italics, drop class/style attrs, unwrap unknown tags
+const dirty = '<div class="csl-entry"><span style="font-variant:small-caps">Daftary</span>, <i>The Fatimid Empire</i><a href="x">link</a></div>';
+const clean = CiteWord.sanitize(dirty);
+assert.ok(!/class=/.test(clean) && !/style=/.test(clean), "attributes stripped");
+assert.ok(!/<div/.test(clean) && !/<a /.test(clean), "unknown tags unwrapped");
+assert.match(clean, /<i>The Fatimid Empire<\/i>/, "italics preserved");
+assert.match(clean, /Daftary/, "text preserved");
+
+// note payload: RTL direction
+const note = CiteWord.buildNotePayload({ html: dirty, rtl: true });
+assert.strictEqual(note.direction, "Rtl");
+assert.ok(!/style=/.test(note.html), "note html is sanitized");
+
+// bibliography payload: html/direction only (tag is vestigial — removed; insertBibliography
+// gets its content-control tag from buildBibliographyTag instead)
+const bib = CiteWord.buildBibliographyPayload({ html: "<div>x</div>", rtl: false });
+assert.strictEqual(bib.direction, "Ltr");
+assert.deepStrictEqual(Object.keys(bib).sort(), ["direction", "html"], "bibliography payload has only html/direction");
+
+// --- hardened tags (SP-A) ---
+const tag = CiteWord.buildCitationTag({
+  style: "chicago-notes-bibliography",
+  locale: "ar",
+  items: [{ id: "Key:With:Colons", locator: "42", label: "page" }, { id: "Second" }]
+});
+assert.ok(tag.indexOf("AshaarCite:") === 0, "citation tag is namespaced");
+const parsed = CiteWord.parseCitationTag(tag);
+assert.strictEqual(parsed.style, "chicago-notes-bibliography");
+assert.strictEqual(parsed.locale, "ar");
+assert.strictEqual(parsed.keys.length, 2);
+assert.strictEqual(parsed.keys[0].id, "Key:With:Colons", "colons in id survive (no delimiter collision)");
+assert.strictEqual(parsed.keys[0].locator, "42");
+assert.strictEqual(parsed.keys[0].label, "page");
+assert.strictEqual(parsed.keys[1].id, "Second");
+// non-ASCII (Arabic) values survive the base64 round-trip
+const arTag = CiteWord.buildCitationTag({ style: "s", locale: "ar", items: [{ id: "كتاب", locator: "٤٢", label: "page" }] });
+assert.strictEqual(CiteWord.parseCitationTag(arTag).keys[0].id, "كتاب");
+assert.strictEqual(CiteWord.parseCitationTag(arTag).keys[0].locator, "٤٢");
+// non-Ashaar / corrupt tags → null
+assert.strictEqual(CiteWord.parseCitationTag("AshaarBibliography"), null);
+assert.strictEqual(CiteWord.parseCitationTag("AshaarCite:@@@not-base64@@@"), null);
+assert.strictEqual(CiteWord.parseCitationTag(""), null);
+// bibliography tag round-trips {style, locale}
+const bibTag = CiteWord.buildBibliographyTag({ style: "apa", locale: "en-US" });
+assert.ok(bibTag.indexOf("AshaarBib:") === 0);
+console.log("hardened tags test passed");
+
+// --- SP-3: tag v2 variant field ---
+const v2 = CiteWord.buildCitationTag({ style: "s", locale: "en-US", variant: "translit", items: [{ id: "a" }] });
+const pv2 = CiteWord.parseCitationTag(v2);
+assert.strictEqual(pv2.v, 2, "new tags are v2");
+assert.strictEqual(pv2.variant, "translit", "variant round-trips");
+
+// default when omitted
+const vDef = CiteWord.parseCitationTag(CiteWord.buildCitationTag({ style: "s", locale: "en-US", items: [{ id: "a" }] }));
+assert.strictEqual(vDef.variant, "orig", "omitted variant defaults to orig");
+
+// v1 back-compat: hand-build a v1 payload (no variant) and confirm it reads as orig
+const b64v1 = Buffer.from(JSON.stringify({ v: 1, style: "s", locale: "en-US", keys: [{ id: "a", locator: null, label: null }] })).toString("base64");
+const v1parsed = CiteWord.parseCitationTag("AshaarCite:" + b64v1);
+assert.strictEqual(v1parsed.variant, "orig", "v1 tag migrates to orig");
+assert.strictEqual(v1parsed.keys[0].id, "a", "v1 keys still parse");
+
+// bibliography tag carries variant too
+const bibTagV = CiteWord.buildBibliographyTag({ style: "s", locale: "ar", variant: "both" });
+assert.strictEqual(bibTagV.indexOf("AshaarBib:"), 0, "bib tag prefix");
+console.log("cite-word tag v2 test passed");
+// --- bidi run wrapping: give Word directional guidance for neutral punctuation ---
+// citeproc emits plain mixed-direction text with no dir info; in an LTR paragraph
+// Word's bidi algorithm mis-places the neutral (),.-, around Arabic runs. wrapRtlRuns
+// wraps each maximal Arabic run in <span dir="rtl"> so the punctuation resolves RTL.
+
+// Pure English: untouched (no Arabic present at all)
+const enOnly = 'Farhad Daftary, <i>The Fatimid Empire</i> (Edinburgh University Press, 2018).';
+assert.strictEqual(CiteWord.wrapRtlRuns(enOnly), enOnly, "pure-LTR citation is unchanged");
+
+// Pure Arabic citation: whole thing wrapped once; <i> preserved inside; no interior span
+const arOnly = 'القاضي النعمان, <i>دعائم الإسلام</i> (دار المعارف, 1951).';
+const arWrapped = CiteWord.wrapRtlRuns(arOnly);
+assert.strictEqual(arWrapped.indexOf('<span dir="rtl">'), 0, "arabic citation opens with an rtl span");
+assert.ok(/<\/span>$/.test(arWrapped), "arabic citation closes the rtl span at the end");
+assert.strictEqual((arWrapped.match(/<span dir="rtl">/g) || []).length, 1, "exactly one rtl span");
+assert.ok(arWrapped.indexOf('<i>دعائم الإسلام</i>') !== -1, "italic tags preserved inside the span");
+
+// Mixed cluster (English + Arabic in one note): English prefix stays OUTSIDE the span,
+// the Arabic clause (incl its parens/comma/1951/period) is wrapped.
+const mixed = 'Farhad Daftary, <i>The Fatimid Empire</i> (Edinburgh University Press, 2018); القاضي النعمان, <i>دعائم الإسلام</i> (دار المعارف, 1951).';
+const mixedWrapped = CiteWord.wrapRtlRuns(mixed);
+const spanIdx = mixedWrapped.indexOf('<span dir="rtl">');
+assert.ok(spanIdx > 0, "mixed: rtl span starts after the english prefix");
+assert.ok(mixedWrapped.slice(0, spanIdx).indexOf('2018)') !== -1, "english '2018)' stays before/outside the span");
+assert.strictEqual(mixedWrapped.slice(0, spanIdx).indexOf('القاضي'), -1, "no arabic before the span");
+assert.strictEqual((mixedWrapped.match(/<span dir="rtl">/g) || []).length, 1, "mixed: exactly one rtl span");
+assert.ok(/<span dir="rtl">[\s\S]*1951[\s\S]*<\/span>/.test(mixedWrapped), "arabic clause incl 1951 is inside the span");
+
+// Arabic-punctuation localization: ASCII comma/semicolon INSIDE an Arabic run become
+// their Arabic forms (،/؛); Latin runs keep ASCII punctuation.
+assert.ok(arWrapped.indexOf("،") !== -1, "arabic run uses the Arabic comma ،");
+assert.strictEqual(arWrapped.indexOf(","), -1, "no ASCII comma remains in a pure-Arabic citation");
+// Mixed: the English 'Daftary,' keeps its ASCII comma; the Arabic clause uses ،
+assert.ok(mixedWrapped.slice(0, spanIdx).indexOf("Daftary,") !== -1, "english ASCII comma preserved outside the span");
+assert.ok(mixedWrapped.slice(spanIdx).indexOf("،") !== -1, "arabic comma used inside the span");
+// Pure English is still untouched (no Arabic run to localize)
+assert.strictEqual(CiteWord.wrapRtlRuns(enOnly).indexOf("،"), -1, "pure-LTR citation gains no Arabic punctuation");
+
+// buildNotePayload / buildBibliographyPayload apply the wrap after sanitize
+const notePayload = CiteWord.buildNotePayload({ html: arOnly, rtl: true });
+assert.ok(notePayload.html.indexOf('<span dir="rtl">') !== -1, "note payload html is bidi-wrapped");
+console.log("cite-word test passed");
+
+// --- htmlToOoxmlRuns (Arabic OOXML) ---
+var AR = "كتاب"; // كتاب
+var runs = CiteWord.htmlToOoxmlRuns("<i>" + AR + "</i>", { csFont: "Amiri" });
+assert.ok(runs.indexOf("<w:rtl/>") !== -1, "Arabic run is rtl");
+assert.ok(runs.indexOf('<w:rFonts w:cs="Amiri"/>') !== -1, "Arabic run uses the cs font");
+assert.ok(runs.indexOf("<w:i/>") === -1, "italic is SUPPRESSED on the Arabic run (the squares fix)");
+// Latin italic keeps <w:i/>, no rtl/cs
+var lat = CiteWord.htmlToOoxmlRuns("<i>Daftary</i>", { csFont: "Amiri" });
+assert.ok(lat.indexOf("<w:i/>") !== -1 && lat.indexOf("<w:rtl/>") === -1 && lat.indexOf("w:cs") === -1,
+  "Latin italic run keeps <w:i/> and is not rtl/cs");
+// mixed → distinct runs (both an rtl run and a latin run present)
+var mixedOoxml = CiteWord.htmlToOoxmlRuns(AR + " Daftary", { csFont: "Amiri" });
+assert.ok(mixedOoxml.indexOf("<w:rtl/>") !== -1 && /<w:r>(?!.*<w:rtl\/>).*Daftary/.test(mixedOoxml.replace(/\n/g,"")),
+  "mixed content yields both an rtl run and a non-rtl Latin run");
+// xml-escape
+assert.ok(CiteWord.htmlToOoxmlRuns("A &amp; B", {}).indexOf("A &amp; B") !== -1, "ampersand stays escaped");
+assert.ok(CiteWord.htmlToOoxmlRuns("a < b", {}).indexOf("&lt;") !== -1, "raw < is escaped");
+// superscript
+assert.ok(CiteWord.htmlToOoxmlRuns("<sup>1</sup>", {}).indexOf('<w:vertAlign w:val="superscript"/>') !== -1);
+// paragraph wrapper
+var para = CiteWord.buildCitationParagraphOoxml(AR, { csFont: "Amiri" });
+assert.ok(para.indexOf("<w:p><w:pPr><w:bidi/><w:jc w:val=\"right\"/></w:pPr>") === 0, "RTL paragraph wrapper");
+assert.ok(para.lastIndexOf("</w:p>") === para.length - "</w:p>".length, "paragraph closed");
+console.log("htmlToOoxmlRuns test passed");
+
+// --- citationItemsFromTag (SP-C) ---
+var parsedForItems = CiteWord.parseCitationTag(CiteWord.buildCitationTag({
+  style: "s", locale: "ar",
+  items: [{ id: "A", locator: "42", label: "page" }, { id: "B" }]
+}));
+assert.deepStrictEqual(CiteWord.citationItemsFromTag(parsedForItems),
+  [{ id: "A", locator: "42", label: "page" }, { id: "B" }],
+  "maps tag keys to cite items, dropping null locator/label");
+assert.deepStrictEqual(CiteWord.citationItemsFromTag({ keys: [] }), []);
+assert.deepStrictEqual(CiteWord.citationItemsFromTag({}), [], "missing keys → []");
+assert.deepStrictEqual(CiteWord.citationItemsFromTag(null), [], "null → []");
+console.log("citationItemsFromTag test passed");
+
+// --- SP-4: sectioned bibliography assemblers ---
+(function () {
+  // Single heading-null section == today's flat output (HTML)
+  var flatHtml = CiteWord.buildSectionedBibliographyHtml([{ heading: null, html: "<div>Entry one.</div>" }]);
+  assert.strictEqual(flatHtml, CiteWord.wrapRtlRuns(CiteWord.sanitize("<div>Entry one.</div>")));
+
+  // Multi-section HTML: each heading becomes <p><b>…</b></p> then its body
+  var secHtml = CiteWord.buildSectionedBibliographyHtml([
+    { heading: "Primary Sources — Fatemi", html: "<div>A.</div>" },
+    { heading: "Secondary Sources — Other", html: "<div>B.</div>" }
+  ]);
+  assert.ok(secHtml.indexOf("<p><b>Primary Sources — Fatemi</b></p>") !== -1);
+  assert.ok(secHtml.indexOf("<p><b>Secondary Sources — Other</b></p>") !== -1);
+  assert.ok(secHtml.indexOf("Primary Sources") < secHtml.indexOf("Secondary Sources")); // order
+
+  // heading HTML-escaping (defensive)
+  var escd = CiteWord.buildSectionedBibliographyHtml([{ heading: "A & <B>", html: "<div>x</div>" }]);
+  assert.ok(escd.indexOf("A &amp; &lt;B&gt;") !== -1);
+
+  // Single heading-null section == today's flat output (OOXML)
+  var flatOoxml = CiteWord.buildSectionedBibliographyOoxml([{ heading: null, html: "<div>Entry.</div>" }], { csFont: "Scheherazade" });
+  assert.strictEqual(flatOoxml, CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize("<div>Entry.</div>"), { csFont: "Scheherazade" }));
+
+  // Multi-section OOXML: heading para (bold) precedes each body para
+  var secOoxml = CiteWord.buildSectionedBibliographyOoxml([
+    { heading: "المصادر الأساسية — الفاطمية", html: "<div>A.</div>" },
+    { heading: "المصادر الثانوية — أخرى", html: "<div>B.</div>" }
+  ], { csFont: "Scheherazade" });
+  assert.ok(secOoxml.indexOf("<w:b/>") !== -1);               // heading is bold
+  assert.ok(secOoxml.indexOf("المصادر الأساسية") !== -1);
+  assert.ok(secOoxml.indexOf("المصادر الأساسية") < secOoxml.indexOf("المصادر الثانوية")); // order
+
+  console.log("cite-word SP-4 section tests passed");
+})();

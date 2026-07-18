@@ -4,3 +4,12 @@
 [submodule "vendor/font-fatemi"]
 	path = vendor/font-fatemi
 	url = https://github.com/abdealikhurrum/font-fatemi.git
+[submodule "vendor/citeproc-js"]
+	path = vendor/citeproc-js
+	url = https://github.com/Juris-M/citeproc-js.git
+[submodule "vendor/csl-locales"]
+	path = vendor/csl-locales
+	url = https://github.com/citation-style-language/locales.git
+[submodule "vendor/csl-styles"]
+	path = vendor/csl-styles
+	url = https://github.com/citation-style-language/styles.git

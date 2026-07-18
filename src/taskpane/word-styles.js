@@ -1,0 +1,141 @@
+/**
+ * AshaarStyles — style-group data model for the prose Styles tab (headings,
+ * emphasis, block quotes, Quran quotes) and RTL document setup. Pure (no
+ * Office.js/DOM); the Word.run() orchestration lives in styles-pane.js.
+ *
+ * See docs/superpowers/specs/2026-07-16-ashaar-styles-design.md.
+ */
+(function (root, factory) {
+  if (typeof module !== "undefined" && module.exports) module.exports = factory();
+  else root.AshaarStyles = factory();
+}(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  // Order matters: "quote" must be created/configured before "quranQuote",
+  // since Ashaar Quran Quote is basedOn Ashaar Quote (not a Word built-in).
+  var ROLES = ["heading1", "heading2", "heading3", "emphasis", "quote", "quranQuote"];
+
+  // The RTL body style (created/enriched by RTL setup). Ashaar Quote is basedOn
+  // this so quotes inherit the body font/size/RTL by default; not one of ROLES
+  // (it has no per-group recipe — its font/size come from the RTL setup fields).
+  var NORMAL_STYLE_NAME = "Ashaar Normal";
+
+  var STYLE_NAME = {
+    heading1: "Ashaar Heading 1",
+    heading2: "Ashaar Heading 2",
+    heading3: "Ashaar Heading 3",
+    emphasis: "Ashaar Emphasis",
+    quote: "Ashaar Quote",
+    quranQuote: "Ashaar Quran Quote"
+  };
+
+  var BASE_STYLE = {
+    heading1: "Heading 1",
+    heading2: "Heading 2",
+    heading3: "Heading 3",
+    emphasis: "Emphasis",
+    quote: NORMAL_STYLE_NAME,   // quotes follow the Ashaar Normal body style by default
+    quranQuote: "Ashaar Quote"
+  };
+
+  var STYLE_TYPE = {
+    heading1: "Paragraph",
+    heading2: "Paragraph",
+    heading3: "Paragraph",
+    emphasis: "Character",
+    quote: "Paragraph",
+    quranQuote: "Paragraph"
+  };
+
+  function isObj(v) { return v && typeof v === "object" && !Array.isArray(v); }
+
+  // The authoritative default group recipe. Headings are bold+centered
+  // (fixed, not user-exposed); font/size are the adjustable style-level
+  // fields. indentPt/lineHeightPt double as both the style-level default AND
+  // the seed for a per-instance override (applied as direct formatting on
+  // top of the named style).
+  function defaultGroup(name) {
+    return {
+      name: typeof name === "string" ? name : "",
+      heading1: { font: "Kanz Al Marjaan", sizePt: 18 },
+      heading2: { font: "Kanz Al Marjaan", sizePt: 16 },
+      heading3: { font: "Kanz Al Marjaan", sizePt: 14 },
+      emphasis: { color: "#FF0000", bumpPt: 3 },
+      quote: { borderColor: "#000000", borderWidth: "Pt050", indentPt: 0 },
+      quranQuote: { font: "Amiri Quran", lineHeightPt: null } // null = Word auto
+    };
+  }
+
+  // Shallow-merge `partial` onto `base` one level deep, per role. Returns a
+  // new object; never mutates `base` or `partial`.
+  function mergeGroup(base, partial) {
+    var out = {};
+    var b = base || {};
+    var p = partial || {};
+    out.name = ("name" in p) ? p.name : b.name;
+    ROLES.forEach(function (role) {
+      var br = isObj(b[role]) ? b[role] : {};
+      var pr = isObj(p[role]) ? p[role] : {};
+      var merged = {};
+      Object.keys(br).forEach(function (k) { merged[k] = br[k]; });
+      Object.keys(pr).forEach(function (k) { merged[k] = pr[k]; });
+      out[role] = merged;
+    });
+    return out;
+  }
+
+  // Fill any missing roles/fields of `g` from the defaults (deep, via mergeGroup).
+  function normalizeGroup(g) {
+    return mergeGroup(defaultGroup((g && g.name) || ""), g || {});
+  }
+
+  var BUILTIN_GROUPS = {
+    General: defaultGroup("General"),
+    Petition: mergeGroup(defaultGroup("Petition"), {
+      heading1: { sizePt: 16 }, heading2: { sizePt: 14 }, heading3: { sizePt: 12 },
+      quote: { indentPt: 18 }
+    }),
+    Maqala: mergeGroup(defaultGroup("Maqala"), {
+      heading1: { sizePt: 16 }, heading2: { sizePt: 14 }, heading3: { sizePt: 12 }
+    }),
+    Waaz: mergeGroup(defaultGroup("Waaz"), {
+      heading1: { font: "Fatemi Maqala", sizePt: 20 }, heading2: { font: "Fatemi Maqala", sizePt: 17 }
+    })
+  };
+
+  // Emphasis has no style-level absolute size — only a bump amount. The
+  // resulting absolute size is computed live from whatever the selection's
+  // own base size already is (see §2 of the design spec).
+  function computeEmphasisSize(baseSizePt, bumpPt) {
+    var base = (typeof baseSizePt === "number" && baseSizePt > 0) ? baseSizePt : 12;
+    var bump = (typeof bumpPt === "number") ? bumpPt : 0;
+    return base + bump;
+  }
+
+  function clampIndentPt(pt) {
+    var n = (typeof pt === "number" && !isNaN(pt)) ? pt : 0;
+    return Math.max(0, Math.min(200, n));
+  }
+
+  // null means "Word auto" and must pass through unclamped.
+  function clampLineHeightPt(pt) {
+    if (pt == null) return null;
+    var n = (typeof pt === "number" && !isNaN(pt)) ? pt : 0;
+    return Math.max(6, Math.min(200, n));
+  }
+
+  return {
+    ROLES: ROLES,
+    NORMAL_STYLE_NAME: NORMAL_STYLE_NAME,
+    STYLE_NAME: STYLE_NAME,
+    BASE_STYLE: BASE_STYLE,
+    STYLE_TYPE: STYLE_TYPE,
+    defaultGroup: defaultGroup,
+    mergeGroup: mergeGroup,
+    normalizeGroup: normalizeGroup,
+    BUILTIN_GROUPS: BUILTIN_GROUPS,
+    computeEmphasisSize: computeEmphasisSize,
+    clampIndentPt: clampIndentPt,
+    clampLineHeightPt: clampLineHeightPt
+  };
+}));

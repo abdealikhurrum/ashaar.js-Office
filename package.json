@@ -7,6 +7,8 @@
     "start": "office-addin-debugging start manifest.xml desktop --app word --dev-server \"npm run dev-server\" --dev-server-port 3000 --document test-documents/marsiya-test.docx",
     "make-test-doc": "node scripts/make-test-doc.mjs",
     "make-adopt-doc": "node scripts/make-adopt-test-doc.mjs",
+    "make-styles-doc": "node scripts/make-styles-test-doc.mjs",
+    "make-normal-carrier": "node scripts/make-ashaar-normal-carrier.mjs",
     "make-user-guide": "python3 scripts/make-user-guide-docx.py",
     "make-kashida-test": "python3 scripts/make-kashida-word-test.py",
     "stop": "office-addin-debugging stop manifest.xml desktop",
@@ -16,12 +18,18 @@
     "serve": "node server.mjs",
     "sync:ashaar": "node scripts/sync-ashaar-vendor.mjs",
     "update:ashaar": "node scripts/update-ashaar-vendor.mjs",
+    "sync:citeproc": "node scripts/sync-citeproc-vendor.mjs",
+    "update:citeproc": "node scripts/update-citeproc-vendor.mjs",
+    "migrate:cne": "node scripts/migrate-mlzsync-to-cne.mjs",
     "certs": "office-addin-dev-certs install --days 365",
     "certs:verify": "office-addin-dev-certs verify",
-    "test": "node tests/word-html.test.js && node tests/word-tabstop.test.js && node tests/poetry-corpus.test.js && node tests/table-adopt.test.js && node tests/separators.test.js && node tests/layout-grid.test.js && node tests/profiles.test.js && node tests/profiles-resolve.test.js && node tests/font-store.test.js && node tests/ashaar-justify-runs.test.js && node tests/ashaar-misra-runs.test.js && node tests/fonts.test.js && node tests/kashida-fontswap.test.js && node tests/kashida-residual.test.js && node tests/natural-width-matrix.test.js && node tests/bandh-cell-map.test.js && node tests/cell-overrides.test.js && node tests/settings-panel.test.js && node tests/tune-cache.test.js && node tests/metrics.test.js && node tests/vendor-version.test.js && node tests/impose-core.test.js && node tests/impose-pdf.test.js"
+    "test": "node tests/word-html.test.js && node tests/word-tabstop.test.js && node tests/poetry-corpus.test.js && node tests/table-adopt.test.js && node tests/separators.test.js && node tests/layout-grid.test.js && node tests/profiles.test.js && node tests/profiles-resolve.test.js && node tests/font-store.test.js && node tests/ashaar-justify-runs.test.js && node tests/ashaar-misra-runs.test.js && node tests/fonts.test.js && node tests/kashida-fontswap.test.js && node tests/kashida-residual.test.js && node tests/natural-width-matrix.test.js && node tests/bandh-cell-map.test.js && node tests/cell-overrides.test.js && node tests/settings-panel.test.js && node tests/tune-cache.test.js && node tests/metrics.test.js && node tests/vendor-version.test.js && node tests/impose-core.test.js && node tests/impose-pdf.test.js && node tests/word-styles.test.js && node tests/word-conversion.test.js && node tests/citeproc-vendor.test.js && node tests/cite-engine.test.js && node tests/cite-word.test.js && node tests/cite-variants.test.js && node tests/server-proxy.test.js && node tests/cite-zotero.test.js && node tests/cite-store.test.js && node tests/cite-classify.test.js"
   },
   "dependencies": {
     "office-addin-debugging": "^6.1.1",
     "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "adm-zip": "^0.5.18"
   }
 }

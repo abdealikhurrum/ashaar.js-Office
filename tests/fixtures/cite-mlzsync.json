@@ -1,0 +1,13 @@
+{
+  "mlz-1": {
+    "id": "mlz-1",
+    "type": "book",
+    "citation-key": "mlz-1",
+    "language": "ar",
+    "note": "mlzsync1:0215{\"type\":\"book\",\"multifields\":{\"main\":{},\"_keys\":{\"title\":{\"en\":\"‫Uyun al-Akhbar Vol. 4‬\"}}},\"multicreators\":{\"0\":{\"_key\":{\"en\":{\"lastName\":\"al-Dai al-Ajal Syedna Idris Imaduddin RA\",\"firstName\":\"\"}},\"fieldMode\":1}}}",
+    "title": "‫عيون الأخبار ج/4‬",
+    "author": [
+      { "literal": "الداعي الأجل سيدنا إدريس عماد الدينؓ" }
+    ]
+  }
+}

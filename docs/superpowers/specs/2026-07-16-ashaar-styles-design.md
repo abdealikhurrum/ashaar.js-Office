@@ -86,3 +86,54 @@ Fields needed for this action: Latin font choice, Normal complex-script font cho
 4. Instance-level overrides (Quote width, Quran Quote line height) are direct formatting layered on top of the named style, distinct from style-level fields that affect every use. Emphasis has no instance-level override — its point-bump amount is style-level, and only the resulting absolute size varies per instance (computed from each selection's own base size).
 5. RTL document setup is a **separate, group-independent action** covering Normal style bidi/fonts and section-level layout (which also fixes footnote RTL numbering); the heading complex-script-font checklist item is satisfied by the Heading roles themselves, not a separate step.
 6. Annotations, text-conversion/find-replace, and keyboard shortcuts are explicitly deferred to their own specs/fast-follows.
+
+## Post-implementation notes (2026-07-16, from live Word verification)
+
+Manual testing in desktop Word drove several changes to the design above. These
+notes are the accurate record; where they differ from the sections above, these win.
+
+1. **Arabic sizing uses the complex-script metrics.** Arabic-script text renders
+   at the complex-script font/size (`nameBidirectional`/`sizeBidirectional`, i.e.
+   OOXML `w:cs`/`w:szCs`), not the Latin `size`. Every place that sets a font or
+   size sets BOTH — headings, the RTL body style, footnotes, and the Emphasis
+   size bump (which initially set only the Latin size, so the bump was invisible
+   on Arabic).
+2. **Inherited italic is cancelled on Emphasis, Quote, and Quran Quote.** Word's
+   built-in "Emphasis" and "Quote" styles are italic, and Office.js materializes
+   a base style's italic into each derived style at creation. Italic doesn't
+   render in Arabic-script fonts, so `configureRoleStyle` explicitly sets
+   `italic`/`italicBidirectional = false` on all three.
+3. **Emphasis apply is two-sync.** Applying the character style and writing the
+   size in one `context.sync()` reset the run size; the style is applied and
+   committed first, then size is written as direct formatting.
+4. **"Ashaar Normal" is a real body style** created by RTL setup (not a mutation
+   of the built-in Normal, per decision #1). **Ashaar Quote is now `basedOn`
+   "Ashaar Normal"** (not built-in "Quote") so quotes follow the body
+   font/size/RTL by default; Quran Quote inherits it transitively. ensureAshaarStyles
+   ensures a minimal Ashaar Normal exists before the quote roles.
+5. **Paragraph reading-order (bidi) is not settable via the object model** — only
+   `alignment`. Two mitigations: RTL setup right-aligns body/footnote styles; and
+   a **bidi-carrying "Ashaar Normal" (plus RTL Footnote Text/Reference) is merged
+   in via `insertFileFromBase64({importStyles:true})`** from a generated carrier
+   .docx (`scripts/make-ashaar-normal-carrier.mjs` → `src/taskpane/ashaar-normal-carrier.js`),
+   giving true RTL reading order where the API can't. Best-effort with a
+   right-align-only fallback when WordApi 1.5 is unavailable.
+6. **The footnote separator line cannot be set by the add-in** — it's a special
+   footnote in `footnotes.xml`, not a style, so `importStyles` can't reach it.
+   Right-aligned in the test-doc generator and left as a Word Draft-view /
+   template step for real documents.
+7. **Footnote text is 10pt** (capped at the body size).
+8. **Real installed font-family names**: heading default is **"Kanz Al Marjaan"**,
+   Waaz uses **"Fatemi Maqala"** (the earlier placeholder "Marjaan"/"Fatemi"
+   didn't resolve).
+9. **UI**: RTL setup is the first, always-open section in the Styles panel and all
+   sections are expanded; the poetry-only chrome (settings panel, justify actions,
+   Fonts strip) is hidden in Styles and Booklet modes; the two color fields use
+   native color pickers.
+
+**Verified working in Word by the user:** heading levels + fonts, emphasis
+(red + size bump), Quote/Quran Quote (borders, no italic, inherit body),
+insertFileFromBase64 style import for Ashaar Normal, RTL footnote text/reference,
+footnote size, and the mode-based UI hiding. Still template-only: the footnote
+separator line (and, longer-term, the Word-Online `.dotx` template reusing the
+same bidi `styles.xml`).

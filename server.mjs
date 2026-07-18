@@ -1,7 +1,9 @@
 import { createServer } from "node:https";
+import { request as httpRequest } from "node:http";
 import { readFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { extname, join, normalize } from "node:path";
+import zoteroProxy from "./zotero-proxy.js";
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 3000);
@@ -23,10 +25,55 @@ function filePathFor(url) {
   return filePath.startsWith(root) ? filePath : join(root, "src/taskpane/taskpane.html");
 }
 
+// Reverse-proxies /zotero/* to the local Zotero Better BibTeX HTTP server so the
+// (HTTPS-served) pane can reach it same-origin without a mixed-content error.
+// CAYW long-polls until the user finishes/cancels the picker, so no timeout is set.
+function proxyToZotero(req, res, target, search) {
+  const upstreamUrl = zoteroProxy.ZOTERO_BASE + target + (search || "");
+  const headers = {};
+  if (req.headers["content-type"]) headers["content-type"] = req.headers["content-type"];
+  // Zotero's connector rejects chunked/length-less POSTs ("Content-length not
+  // provided"); forward the incoming Content-Length since we pipe the body verbatim.
+  if (req.headers["content-length"]) headers["content-length"] = req.headers["content-length"];
+  const upstreamReq = httpRequest(upstreamUrl, { method: req.method, headers, timeout: 0 }, (upstreamRes) => {
+    res.writeHead(upstreamRes.statusCode || 502, {
+      "Content-Type": upstreamRes.headers["content-type"] || "application/octet-stream"
+    });
+    upstreamRes.on("error", () => {
+      if (!res.writableEnded) res.destroy();
+    });
+    upstreamRes.pipe(res);
+  });
+  upstreamReq.on("error", (err) => {
+    if (res.headersSent || res.writableEnded || !res.writable) {
+      res.end();
+      return;
+    }
+    res.writeHead(502, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "zotero-unreachable", detail: err.message }));
+  });
+  // If the client (pane) disconnects before the upstream response completes —
+  // e.g. the user cancels a CAYW pick or navigates away mid long-poll — abort
+  // the upstream request so Zotero releases its integration transaction instead
+  // of leaving it open ("transaction is already in progress" on the next pick).
+  res.on("close", () => {
+    if (!res.writableEnded) upstreamReq.destroy();
+  });
+  req.on("error", () => upstreamReq.destroy());
+  req.pipe(upstreamReq);
+}
+
 const server = createServer({
   cert: await readFile(join(root, "localhost.pem")),
   key: await readFile(join(root, "localhost-key.pem"))
 }, async (req, res) => {
+  const requestUrl = new URL(req.url || "/", `https://localhost:${port}`);
+  const target = zoteroProxy.zoteroProxyTarget(requestUrl.pathname);
+  if (target !== null) {
+    proxyToZotero(req, res, target, requestUrl.search);
+    return;
+  }
+
   const filePath = filePathFor(req.url || "/");
   const stream = createReadStream(filePath);
   stream.on("open", () => {

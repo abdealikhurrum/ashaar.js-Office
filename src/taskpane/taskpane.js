@@ -6,9 +6,21 @@
   var modeTable = document.getElementById("mode-table");
   var modeConvert = document.getElementById("mode-convert");
   var modeBooklet = document.getElementById("mode-booklet");
+  var modeStyles = document.getElementById("mode-styles");
+  var modeConvertText = document.getElementById("mode-convert-text");
+  var modeCite = document.getElementById("mode-cite");
   var tablePanel = document.getElementById("table-mode-panel");
   var convertPanel = document.getElementById("convert-mode-panel");
   var bookletPanel = document.getElementById("booklet-mode-panel");
+  var stylesPanel = document.getElementById("styles-mode-panel");
+  var convertTextPanel = document.getElementById("convert-text-mode-panel");
+  var citePanel = document.getElementById("cite-mode-panel");
+  // Poetry-only chrome: the formatting settings panel + kashida/cell actions.
+  // Shown only in the Table Input / Conversion modes; Styles and Booklet don't
+  // use poetry formatting.
+  var settingsPanel = document.getElementById("settings-panel");
+  var justifyActions = document.getElementById("justify-actions");
+  var fontsStrip = document.getElementById("fonts-strip");
   var bandhCount = document.getElementById("bandh-count");
   var misraCount = document.getElementById("misra-count");
   var layoutPreset = document.getElementById("layout-preset");
@@ -310,21 +322,44 @@
     var isTable = mode === "table";
     var isConvert = mode === "convert";
     var isBooklet = mode === "booklet";
+    var isStyles = mode === "styles";
+    var isConvertText = mode === "convertText";
+    var isCite = mode === "cite";
     modeTable.classList.toggle("is-active", isTable);
     modeConvert.classList.toggle("is-active", isConvert);
     modeBooklet.classList.toggle("is-active", isBooklet);
+    modeStyles.classList.toggle("is-active", isStyles);
+    if (modeConvertText) modeConvertText.classList.toggle("is-active", isConvertText);
+    if (modeCite) modeCite.classList.toggle("is-active", isCite);
     modeTable.setAttribute("aria-selected", String(isTable));
     modeConvert.setAttribute("aria-selected", String(isConvert));
     modeBooklet.setAttribute("aria-selected", String(isBooklet));
+    modeStyles.setAttribute("aria-selected", String(isStyles));
+    if (modeConvertText) modeConvertText.setAttribute("aria-selected", String(isConvertText));
+    if (modeCite) modeCite.setAttribute("aria-selected", String(isCite));
     tablePanel.classList.toggle("is-active", isTable);
     convertPanel.classList.toggle("is-active", isConvert);
     bookletPanel.classList.toggle("is-active", isBooklet);
+    stylesPanel.classList.toggle("is-active", isStyles);
+    if (convertTextPanel) convertTextPanel.classList.toggle("is-active", isConvertText);
+    if (citePanel) citePanel.classList.toggle("is-active", isCite);
     tablePanel.hidden = !isTable;
     convertPanel.hidden = !isConvert;
     bookletPanel.hidden = !isBooklet;
+    stylesPanel.hidden = !isStyles;
+    if (convertTextPanel) convertTextPanel.hidden = !isConvertText;
+    if (citePanel) citePanel.hidden = !isCite;
+    // Poetry formatting chrome belongs only to Table Input / Conversion.
+    var poetryMode = isTable || isConvert;
+    if (settingsPanel) settingsPanel.hidden = !poetryMode;
+    if (justifyActions) justifyActions.hidden = !poetryMode;
+    if (fontsStrip) fontsStrip.hidden = !poetryMode;
     setMessage(isTable ? "Table input mode: draw a blank grid, then type in Word."
       : isConvert ? "Ashaar.js conversion mode: paste source text, then insert a converted table."
-      : "Booklet mode: impose the open document into a print-ready booklet.");
+      : isBooklet ? "Booklet mode: impose the open document into a print-ready booklet."
+      : isConvertText ? "Convert mode: legacy double-press ⇄ modern text find-replace over the document or selection."
+      : isCite ? "Cite mode: pick items, style, and locale, then insert a footnote/endnote/inline citation or a bibliography."
+      : "Styles mode: apply named heading/quote/emphasis styles, grouped by document use case.");
   }
 
   function renderPreview() {
@@ -4915,6 +4950,24 @@
     modeBooklet.addEventListener("click", function () {
       setMode("booklet");
       if (window.BookletPane) window.BookletPane.onShow();
+    });
+    modeStyles.addEventListener("click", function () {
+      setMode("styles");
+      if (typeof AshaarStylesPane !== "undefined" && AshaarStylesPane.onTabShown) {
+        AshaarStylesPane.onTabShown();
+      }
+    });
+    if (modeConvertText) modeConvertText.addEventListener("click", function () {
+      setMode("convertText");
+      if (window.ConversionPane && window.ConversionPane.onTabShown) {
+        window.ConversionPane.onTabShown();
+      }
+    });
+    if (modeCite) modeCite.addEventListener("click", function () {
+      setMode("cite");
+      if (window.CitePane && window.CitePane.onTabShown) {
+        window.CitePane.onTabShown();
+      }
     });
     document.getElementById("insert-structure").addEventListener("click", insertStructure);
     document.getElementById("insert-poem").addEventListener("click", function () { insertPoem(false); });
