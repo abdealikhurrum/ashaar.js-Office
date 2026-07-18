@@ -813,3 +813,17 @@ input[type="range"][disabled] { opacity: 0.45; }
 .cite-preview .cite-preview-block:last-child { margin-bottom: 0; }
 .cite-preview .cite-preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.6; margin-bottom: 4px; }
 .cite-preview[dir="rtl"] .cite-preview-body { text-align: right; }
+
+/* ── Manual citation entry form ─────────────────────────────────────────── */
+.cite-manual-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+/* The explicit display above overrides the UA [hidden] rule, so hide the form
+   (and its per-type field rows) explicitly — same pattern as .controls[hidden]. */
+.cite-manual-form[hidden] { display: none !important; }
+.cite-manual-form .field[hidden] { display: none; }

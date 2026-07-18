@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260718-cite-csfont";
+      window.ASHAAR_ASSET_VERSION = "20260718-cite-manual";
     </script>
     <script>
       (function (v) {
@@ -605,6 +605,74 @@
           <button id="cite-add-zotero" type="button" class="button--secondary">Add from Zotero</button>
         </section>
 
+        <section class="actions single-action" aria-label="Manual entry">
+          <button id="cite-manual-toggle" type="button" class="button--secondary">Add manually</button>
+        </section>
+
+        <section id="cite-manual-form" class="cite-manual-form" aria-label="Manual citation" hidden>
+          <div class="field">
+            <label for="cite-manual-type">Type</label>
+            <select id="cite-manual-type">
+              <option value="book" selected>Book</option>
+              <option value="chapter">Book chapter</option>
+              <option value="article">Journal article</option>
+              <option value="webpage">Webpage</option>
+            </select>
+          </div>
+          <div class="field" data-types="book chapter article webpage">
+            <label for="cite-manual-title">Title</label>
+            <input id="cite-manual-title" type="text" />
+          </div>
+          <div class="field" data-types="book chapter article webpage">
+            <label for="cite-manual-authors">Author(s) — one per line, “Family, Given”</label>
+            <textarea id="cite-manual-authors" rows="2"></textarea>
+          </div>
+          <div class="field" data-types="chapter article">
+            <label for="cite-manual-container">Container title (book / journal)</label>
+            <input id="cite-manual-container" type="text" />
+          </div>
+          <div class="field" data-types="chapter">
+            <label for="cite-manual-editors">Editor(s) — one per line, “Family, Given”</label>
+            <textarea id="cite-manual-editors" rows="2"></textarea>
+          </div>
+          <div class="field" data-types="book chapter article webpage">
+            <label for="cite-manual-year">Year</label>
+            <input id="cite-manual-year" type="text" inputmode="numeric" />
+          </div>
+          <div class="field" data-types="book chapter">
+            <label for="cite-manual-publisher">Publisher</label>
+            <input id="cite-manual-publisher" type="text" />
+          </div>
+          <div class="field" data-types="book chapter">
+            <label for="cite-manual-place">Place</label>
+            <input id="cite-manual-place" type="text" />
+          </div>
+          <div class="field" data-types="article">
+            <label for="cite-manual-volume">Volume</label>
+            <input id="cite-manual-volume" type="text" />
+          </div>
+          <div class="field" data-types="article">
+            <label for="cite-manual-issue">Issue</label>
+            <input id="cite-manual-issue" type="text" />
+          </div>
+          <div class="field" data-types="chapter article">
+            <label for="cite-manual-pages">Pages</label>
+            <input id="cite-manual-pages" type="text" />
+          </div>
+          <div class="field" data-types="webpage">
+            <label for="cite-manual-url">URL</label>
+            <input id="cite-manual-url" type="text" />
+          </div>
+          <div class="field" data-types="webpage">
+            <label for="cite-manual-accessed">Accessed (YYYY-MM-DD)</label>
+            <input id="cite-manual-accessed" type="text" />
+          </div>
+          <section class="actions two-col">
+            <button id="cite-manual-add" type="button">Add to list</button>
+            <button id="cite-manual-cancel" type="button" class="button--secondary">Cancel</button>
+          </section>
+        </section>
+
         <section class="actions two-col" aria-label="Citation actions">
           <button id="cite-insert" type="button">Insert citation</button>
           <button id="cite-insert-bib" type="button" class="button--secondary">Insert bibliography</button>
@@ -673,6 +741,7 @@
           "./cite-variants.js",
           "./cite-word.js",
           "./cite-classify.js",
+          "./cite-manual.js",
           "./cite-zotero.js",
           "./cite-store.js",
           "./cite-pane.js",
