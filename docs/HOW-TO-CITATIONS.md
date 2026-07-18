@@ -4,6 +4,41 @@ Insert CSL-formatted citations (footnote, endnote, or inline) and a bibliography
 from your Zotero library or the built-in sample. Full reference: [USER_GUIDE.md](USER_GUIDE.md).
 Everyday poetry workflow: [HOW-TO.md](HOW-TO.md). Deeper walkthroughs: [HOW-TO-WORKFLOWS.md](HOW-TO-WORKFLOWS.md).
 
+## Setup: Zotero, Better BibTeX & CNE
+
+**None of this is needed to try the Cite tab** — it ships with a built-in sample library, and you
+can now also **add citations manually** (the "Add manually" button) with no Zotero at all. You only
+need the tools below to cite from **your own** Zotero library.
+
+1. **Zotero** — the reference manager. Install it from [zotero.org/download](https://www.zotero.org/download/).
+   (The add-in is built and tested against **Zotero 9**.) Keep Zotero running while you cite.
+
+2. **Better BibTeX (BBT)** — required for "Add from Zotero." It gives each item a stable *citekey*
+   and provides the two things the add-in uses: the **CAYW** ("cite as you write") picker and the
+   **Better CSL JSON** export.
+   - Download the latest `.xpi` from the
+     [Better BibTeX releases](https://github.com/retorquere/zotero-better-bibtex/releases).
+   - In Zotero: **Tools → Plugins** (called *Add-ons* in older versions) → the gear ⚙ →
+     **Install Plugin From File…** → choose the `.xpi` → **restart Zotero**.
+   - Without BBT, the picker and export won't resolve and "Add from Zotero" will report Zotero as
+     unavailable.
+
+3. **CNE — Cite Non-English** *(optional; only for Arabic ↔ romanized variants)* — lets you author an
+   item's Arabic original plus its romanization/translation. CNE stores these as `cne-*` lines in the
+   item's **Extra** field, which the add-in reads to power the **Variant** dropdown (Original /
+   Romanized / Both).
+   - Download the `.xpi` from [cite-non-english](https://github.com/boan-anbo/cite-non-english/releases).
+   - Install it the same way (**Install Plugin From File…** → restart Zotero).
+   - Without CNE, an item renders in whatever single language its fields hold and the Variant dropdown
+     has nothing to switch to. *(Legacy items carrying Juris-M "mlzsync" data can be converted once via
+     `npm run migrate:cne`, which uses Zotero's local API — enable it under
+     **Settings → Advanced → "Allow other applications on this computer to communicate with Zotero."**)*
+
+**How the connection works:** the add-in reaches Zotero through a small local bridge on
+`localhost:23119` (Better BibTeX's JSON-RPC + CAYW) — everything stays on your machine. The live
+Zotero connection runs through the add-in's local server, so use the `npm start` / dev-server setup
+when citing from your library.
+
 ## 1. Open the Cite tab
 
 Open the task pane (**Home → Ashaar Poetry**) and switch to the **Cite** tab. You can try
