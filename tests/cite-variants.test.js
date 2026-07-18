@@ -125,12 +125,14 @@ assert.ok(lines.indexOf("cne-author-0-last-romanized: al-Dai al-Ajal Syedna Idri
 assert.deepStrictEqual(CV.mlzsyncToCneLines(pm, nativeCreators), lines, "stable output");
 
 // reverse direction: an English-primary item whose creator variant is tagged 'ar'
-// (Arabic script) must map to the -original slot, NOT -romanized.
+// (Arabic rendering of a Latin-primary work) maps to the -translated slot — NOT
+// -romanized (it isn't Latin) and NOT -original (the source is English).
 const enPrimary = CV.parseMlzsync(
   'mlzsync1:0170{"type":"book","multifields":{"main":{"title":"en"},"_keys":{}},"multicreators":{"0":{"_key":{"ar":{"lastName":"سمونس","firstName":"فريدريك"}},"fieldMode":""}}}'
 );
 const enLines = CV.mlzsyncToCneLines(enPrimary, [{ creatorType: "author" }]);
-assert.ok(enLines.indexOf("cne-author-0-last-original: سمونس") !== -1, "ar creator -> original slot");
-assert.ok(enLines.indexOf("cne-author-0-first-original: فريدريك") !== -1, "ar given -> original slot");
+assert.ok(enLines.indexOf("cne-author-0-last-translated: سمونس") !== -1, "ar creator -> translated slot");
+assert.ok(enLines.indexOf("cne-author-0-first-translated: فريدريك") !== -1, "ar given -> translated slot");
 assert.ok(enLines.join("\n").indexOf("romanized") === -1, "no romanized mislabel for ar variant");
+assert.ok(enLines.join("\n").indexOf("original") === -1, "no original mislabel for ar variant");
 console.log("cite-variants mlzsync test passed");

@@ -143,11 +143,13 @@
     return out;
   }
 
-  // Map an mlzsync language tag to a CNE variant slot by script/direction:
-  // Latin (en / *-Latn) = romanization -> romanized; Arabic (ar) = local script -> original.
+  // Map an mlzsync language tag to a CNE variant slot by direction:
+  //  - Latin (en / *-Latn) = the romanization of an Arabic-primary work -> romanized.
+  //  - Arabic (ar) = an Arabic rendering of a Latin-primary work (reverse direction);
+  //    it is not the "original" (the source is Latin), so it goes in the translated slot.
   function cneSlotForTag(tag) {
     if (/latn/i.test(tag)) { return "romanized"; }
-    if (/^ar\b/i.test(tag) || tag === "ar") { return "original"; }
+    if (/^ar\b/i.test(tag) || tag === "ar") { return "translated"; }
     return "romanized"; // en and other Latin tags
   }
 
