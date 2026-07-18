@@ -47,9 +47,20 @@ from your own references.
 
 ## 2. Add references
 
-- **From Zotero** — click **Add from Zotero**. Zotero's citation picker opens; choose one or
+- **From Zotero (live)** — click **Add from Zotero**. Zotero's citation picker opens; choose one or
   more items and confirm. They appear (checked) in the **Items** list and in the live preview.
-  Requires **Zotero 9** running with the **Better BibTeX** plugin installed.
+  Requires **Zotero 9** running with **Better BibTeX**, *and* the add-in's local server (the
+  `npm start` setup) — the live connection can't run from the hosted build alone.
+- **Import (no live connection needed)** — click **Import…** to add references anywhere, including
+  the hosted add-in:
+  - **Drag** items straight from Zotero onto the drop zone (set Zotero *Settings → Export → Quick
+    Copy → Item Format* to **Better CSL JSON** first).
+  - **Drop or choose** a **Better CSL JSON** file exported from Zotero (select items → right-click →
+    *Export Items…* → Better CSL JSON).
+  - **Paste** CSL JSON directly.
+  Imported items carry `cne-*` variants, so Arabic/romanized rendering still works. *(BibTeX/RIS
+  import is coming soon; export as Better CSL JSON for now.)*
+- **Manually** — click **Add manually** (no Zotero at all); see below.
 - **From the sample library** — the Items list is pre-populated so you can explore styles and
   output without Zotero.
 

@@ -827,3 +827,18 @@ input[type="range"][disabled] { opacity: 0.45; }
    (and its per-type field rows) explicitly — same pattern as .controls[hidden]. */
 .cite-manual-form[hidden] { display: none !important; }
 .cite-manual-form .field[hidden] { display: none; }
+
+/* ── Import references drop zone ─────────────────────────────────────────── */
+.cite-dropzone {
+  border: 2px dashed var(--line);
+  border-radius: 6px;
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.cite-dropzone.is-drag {
+  border-color: var(--accent);
+  background: rgba(31, 111, 104, 0.06);
+  color: var(--ink);
+}
