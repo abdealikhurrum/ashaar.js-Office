@@ -1,4 +1,4 @@
-# Unified settings panel — manual Word verification
+pac# Unified settings panel — manual Word verification
 
 Run with `npm start` against test-documents/marsiya-test.docx.
 
