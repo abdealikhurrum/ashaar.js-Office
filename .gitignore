@@ -28,3 +28,6 @@ assets/fonts/JameelKasheeda*
 
 # local browser-demo tooling artifacts
 .playwright-mcp/
+
+# migration scratch output (contains live library data — never commit)
+scratch/
