@@ -96,11 +96,17 @@ textarea {
   font: inherit;
 }
 
+html, body {
+  height: 100%;
+}
+
 .pane {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 100vh;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
 }
 
