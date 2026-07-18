@@ -11,8 +11,12 @@
   // harmless to call in prod too).
   var cache = {};
 
+  // In-memory citekey -> [tagStrings] cache (parallel to `cache`).
+  var tagCache = {};
+
   function clearCache() {
     cache = {};
+    tagCache = {};
   }
 
   // --- pure: request/response shaping (no I/O) ---
@@ -57,6 +61,42 @@
         }
       });
     }
+    return map;
+  }
+
+  function buildTagsRequest(citekeys) {
+    return {
+      jsonrpc: "2.0",
+      method: "item.export",
+      params: [citekeys, "BetterBibTeX JSON"],
+      id: 1
+    };
+  }
+
+  function normalizeTag(t) {
+    if (t && typeof t === "object") { return t.tag; }
+    return t;
+  }
+
+  function parseTagsResult(rpcResponse, citekeys) {
+    if (rpcResponse && rpcResponse.error) {
+      var err = rpcResponse.error;
+      var message = (err && err.message) ? err.message
+        : (typeof err === "string" ? err : JSON.stringify(err));
+      throw new Error(message);
+    }
+    var payload = JSON.parse(rpcResponse.result) || {};
+    var items = payload.items || [];
+    var map = {};
+    items.forEach(function (item) {
+      if (!item) { return; }
+      var key = item.citationKey || item.citekey || item.id;
+      if (key === undefined || key === null) { return; }
+      var tags = (item.tags || []).map(normalizeTag).filter(function (t) {
+        return typeof t === "string" && t.length > 0;
+      });
+      map[key] = tags;
+    });
     return map;
   }
 
@@ -171,6 +211,42 @@
     });
   }
 
+  function fetchTags(citekeys, fetchImpl) {
+    var f = fetchImpl || (typeof fetch !== "undefined" ? fetch : undefined);
+    var missing = (citekeys || []).filter(function (key) {
+      return !Object.prototype.hasOwnProperty.call(tagCache, key);
+    });
+    var fetchStep = missing.length === 0
+      ? Promise.resolve(null)
+      : Promise.resolve()
+        .then(function () {
+          return f("/zotero/json-rpc", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildTagsRequest(missing))
+          });
+        })
+        .then(function (res) {
+          if (!res.ok) { throw new Error("json-rpc HTTP " + res.status); }
+          return res.json();
+        })
+        .then(function (rpcResponse) {
+          var parsed = parseTagsResult(rpcResponse, missing);
+          // Cache every REQUESTED key so an item with no tags (absent from the
+          // export) is remembered as [] rather than re-fetched every time.
+          missing.forEach(function (key) {
+            tagCache[key] = Object.prototype.hasOwnProperty.call(parsed, key) ? parsed[key] : [];
+          });
+        });
+    return fetchStep.then(function () {
+      var result = {};
+      (citekeys || []).forEach(function (key) {
+        result[key] = Object.prototype.hasOwnProperty.call(tagCache, key) ? tagCache[key] : [];
+      });
+      return result;
+    });
+  }
+
   return {
     buildExportRequest: buildExportRequest,
     parseExportResult: parseExportResult,
@@ -178,6 +254,9 @@
     ping: ping,
     caywPick: caywPick,
     fetchCslJson: fetchCslJson,
+    buildTagsRequest: buildTagsRequest,
+    parseTagsResult: parseTagsResult,
+    fetchTags: fetchTags,
     clearCache: clearCache
   };
 }));

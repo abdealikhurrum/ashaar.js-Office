@@ -223,3 +223,69 @@ assert.ok(
   "module must have no DOM/Office.js usage"
 );
 console.log("no-:23119/no-DOM guard test passed");
+
+// --- buildTagsRequest: pure JSON-RPC payload builder (SP-4) ---
+assert.deepStrictEqual(
+  CiteZotero.buildTagsRequest(["k1", "k2"]),
+  { jsonrpc: "2.0", method: "item.export", params: [["k1", "k2"], "BetterBibTeX JSON"], id: 1 },
+  "buildTagsRequest matches the documented BBT export payload shape"
+);
+console.log("buildTagsRequest test passed");
+
+// --- parseTagsResult: object-shaped tags ({tag: "..."}) ---
+const tagsRpc = {
+  result: JSON.stringify({
+    items: [
+      { citationKey: "k1", tags: [{ tag: "corpus:fatemi" }, { tag: "class:secondary" }] },
+      { citationKey: "k2", tags: [] }
+    ]
+  })
+};
+const parsedTags = CiteZotero.parseTagsResult(tagsRpc, ["k1", "k2"]);
+assert.deepStrictEqual(parsedTags.k1, ["corpus:fatemi", "class:secondary"]);
+assert.deepStrictEqual(parsedTags.k2, []);
+console.log("parseTagsResult (object-shaped tags) test passed");
+
+// --- parseTagsResult: string-shaped tags + alternate "citekey" field ---
+const tagsRpc2 = {
+  result: JSON.stringify({
+    items: [{ citekey: "k3", tags: ["corpus:fatemi"] }]
+  })
+};
+assert.deepStrictEqual(CiteZotero.parseTagsResult(tagsRpc2, ["k3"]).k3, ["corpus:fatemi"]);
+console.log("parseTagsResult (string-shaped tags, citekey field) test passed");
+
+// --- parseTagsResult: error surfaces (same shape as parseExportResult) ---
+assert.throws(
+  () => CiteZotero.parseTagsResult({ error: { message: "boom" } }, ["k1"]),
+  /boom/,
+  "parseTagsResult throws with the RPC error message"
+);
+console.log("parseTagsResult (error) test passed");
+
+// --- fetchTags: same-origin RPC route, caches per citekey ---
+(async () => {
+  CiteZotero.clearCache();
+  let calls = 0;
+  const fakeFetch = async (url, init) => {
+    calls++;
+    assert.strictEqual(url, "/zotero/json-rpc", "fetchTags posts to the same-origin json-rpc route");
+    assert.strictEqual(init.method, "POST");
+    return {
+      ok: true,
+      json: async () => ({
+        result: JSON.stringify({
+          items: [{ citationKey: "k1", tags: [{ tag: "corpus:fatemi" }] }]
+        })
+      })
+    };
+  };
+
+  const map = await CiteZotero.fetchTags(["k1"], fakeFetch);
+  assert.deepStrictEqual(map.k1, ["corpus:fatemi"]);
+
+  // second call for the same key hits the cache (no extra fetch)
+  await CiteZotero.fetchTags(["k1"], fakeFetch);
+  assert.strictEqual(calls, 1, "cached key does not trigger a second network call");
+  console.log("fetchTags (cache) test passed");
+})();
