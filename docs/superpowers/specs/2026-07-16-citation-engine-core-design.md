@@ -32,6 +32,21 @@ with its own spec → plan → implementation cycle:
 - **SP-6** — Richer annotations: annotated bibliography, in-text source notes, PDF/reading
   annotation import.
 
+### Backlog / icebox (not scheduled)
+
+- **Native Word citation-manager interop (ad-hoc citations).** Optionally push a reference into
+  Word's *built-in* bibliography instead of the citeproc pipeline, for quick native citations a user
+  can manage with Word's own References UI. Feasible via `Word.Document.bibliography.sources.add(xml)`
+  + `Range.insertField(loc, Word.FieldType.citation, "CITATION <tag>")` (source list is
+  **WordApiDesktop 1.3 — desktop-only + currently preview**; `insertField` is WordApi 1.5). Shape:
+  an "Insert as native Word source" toggle on the manual-entry form, with a CSL-JSON → Word
+  bibliography-XML (`b:Source`) mapper. **Tradeoffs (why it's a separate track, not a replacement):**
+  desktop-only + preview (feature-detect `isSetSupported("WordApiDesktop","1.3")` and degrade);
+  Word's own data model (lossy vs CSL); rendering uses Word's built-in styles (APA/Chicago/MLA/…),
+  so NO Fatemi styles, nested sections, multilingual/romanized variants, or RTL/Arabic-font handling;
+  and it's a parallel, field-based citation store that doesn't share refresh with our
+  content-control-tagged citations. (Researched 2026-07-18, verified against MS Learn.)
+
 ### Decisions already fixed (apply across the program)
 
 - **Host / deliverable:** this Word add-in repo; citations are inserted into Word documents.
