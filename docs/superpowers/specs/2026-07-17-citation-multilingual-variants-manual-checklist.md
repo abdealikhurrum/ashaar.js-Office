@@ -4,19 +4,25 @@ Live checks that unit tests can't cover: the Zotero local-API migration and the 
 
 ## Component B — migration (live Zotero)
 
-- [ ] Zotero open; confirm the local API is exposed and returns item JSON with `data.extra`:
-      `curl "http://localhost:23119/api/users/0/items?limit=1&format=json"` → JSON array with `key`, `version`, `data.extra`.
-      (If this 404s or returns HTML, the local API / write path is unavailable — fall back to the
-      export/paste path noted in the design's Risks section.)
-- [ ] `npm run migrate:cne` (dry-run) prints per-item `+ cne-*` diffs and `N item(s) to convert`,
-      writing nothing. The `Uyun al-Akhbar` book shows:
-      `cne-title-romanized: Uyun al-Akhbar Vol. 4` and
-      `cne-author-0-last-romanized: al-Dai al-Ajal Syedna Idris Imaduddin RA`.
-- [ ] `npm run migrate:cne -- --write` applies. Confirm `scratch/mlzsync-backup.json` exists and the
-      Zotero item's Extra now shows the `cne-*` lines (the `mlzsync1:` block is still present).
-- [ ] Re-run `npm run migrate:cne -- --write` → reports items as already migrated (idempotent;
-      `converted=0`).
-- [ ] (Optional) `--strip-mlzsync` removes the legacy blob after you've verified the migration.
+**Enable the local API first:** Zotero → Settings → Advanced → "Allow other applications on this
+computer to communicate with Zotero", then restart Zotero.
+
+**Note:** the Zotero local API is currently **read-only** (PATCH returns `501 Not Implemented`), so
+`--write` does not work on current Zotero. Use the `--emit-snippet` path, which converts in Node
+(tested code) and applies via Zotero's own Run JavaScript (full write access).
+
+- [ ] Local API reachable: `curl "http://localhost:23119/api/users/0/items?limit=1&format=json"`
+      → JSON array with `key`, `version`, `data.extra` (not `403 "Local API is not enabled"`).
+- [ ] `npm run migrate:cne` (dry-run) prints per-item `+ cne-*` diffs and `N item(s) to convert`.
+      Direction check: Arabic-primary items emit `-romanized`; Latin-primary items whose variant is
+      Arabic script emit `-original` (e.g. `Eat Not this Flesh` → `cne-author-0-last-original: سمونس`).
+- [ ] `npm run migrate:cne -- --emit-snippet` writes `scratch/migrate-cne-snippet.js`.
+- [ ] In Zotero: Tools → Developer → Run JavaScript → paste the snippet → Run →
+      returns `cne-migrate: updated N, failed 0`.
+- [ ] Spot-check an item's Extra in Zotero: the `cne-*` lines are present and the `mlzsync1:` block
+      is still there (non-destructive).
+- [ ] (If a future Zotero adds local-API write support: `npm run migrate:cne -- --write` becomes the
+      one-command path, with `scratch/mlzsync-backup.json` written first.)
 
 ## Component A — feature (live Word)
 
