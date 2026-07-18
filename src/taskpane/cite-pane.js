@@ -105,16 +105,46 @@
 
   // Build a fresh engine for this style+locale+variant. Cheap enough per render,
   // and avoids citeproc citation-registry state leaking across selections.
-  function buildEngine(styleFile, lang) {
+  function buildEngine(styleFile, lang, itemsOverride) {
     return CiteEngine.build({
       styleXml: cache.styles[styleFile],
       locales: cache.locales,
-      items: cache.items,
+      items: itemsOverride || cache.items,
       lang: lang,
       langPrefs: (typeof CiteVariants !== "undefined")
         ? CiteVariants.variantToLangPrefs(currentVariant())
         : null
     });
+  }
+
+  function isFatemiStyle(styleFile) { return /-fatemi$/.test(styleFile || ""); }
+
+  // Fetch tags for the reference set only when the selected style opts in
+  // (a -fatemi style). Degrades to an empty tag map on any Zotero/BBT error —
+  // an empty map => every item in the default bucket => single bucket =>
+  // collapse rule => flat bibliography.
+  function fetchTagsIfSectioned(styleFile) {
+    if (!isFatemiStyle(styleFile) || !cache.items || typeof CiteZotero === "undefined" || !CiteZotero.fetchTags) {
+      return Promise.resolve({});
+    }
+    return CiteZotero.fetchTags(Object.keys(cache.items)).catch(function () { return {}; });
+  }
+
+  // Turn a section plan into insertion-ready body (HTML for LTR, OOXML for RTL).
+  // Each section is rendered by a fresh engine over ONLY that section's items.
+  function renderBibliographyBody(styleFile, lang, sections, csFont) {
+    var rendered = (sections || []).map(function (s) {
+      var subset = {};
+      (s.citekeys || []).forEach(function (k) {
+        if (cache.items && Object.prototype.hasOwnProperty.call(cache.items, k)) { subset[k] = cache.items[k]; }
+      });
+      var engine = buildEngine(styleFile, lang, subset);
+      return { heading: s.heading, html: engine.bibliography() };
+    });
+    if (isRtlLang(lang)) {
+      return { rtl: true, ooxml: AshaarTabStop.wrapOoxml(CiteWord.buildSectionedBibliographyOoxml(rendered, { csFont: csFont })) };
+    }
+    return { rtl: false, html: CiteWord.buildSectionedBibliographyHtml(rendered) };
   }
 
   function populateItems(skipSeed) {
@@ -324,18 +354,17 @@
   // refreshCitations() — insertBibliography() has its own payload/CC-title
   // handling that isn't otherwise shared. `csFont` is optional — see
   // renderCitationInto's comment.
-  function renderBibliographyInto(ctx, range, styleFile, lang, csFont) {
-    var engine = buildEngine(styleFile, lang);
+  function renderBibliographyInto(ctx, range, styleFile, lang, csFont, sections) {
+    var secs = sections || [{ key: null, heading: null, citekeys: cache.items ? Object.keys(cache.items) : [] }];
     if (isRtlLang(lang)) {
       var csFontPromise = csFont ? Promise.resolve(csFont) : readDocCsFont(ctx, range);
       return csFontPromise.then(function (resolvedCsFont) {
-        var pkg = AshaarTabStop.wrapOoxml(
-          CiteWord.buildCitationParagraphOoxml(CiteWord.sanitize(engine.bibliography()), { csFont: resolvedCsFont }));
-        return range.insertOoxml(pkg, Word.InsertLocation.replace);
+        var body = renderBibliographyBody(styleFile, lang, secs, resolvedCsFont);
+        return range.insertOoxml(body.ooxml, Word.InsertLocation.replace);
       });
     }
-    var html = CiteWord.wrapRtlRuns(CiteWord.sanitize(engine.bibliography()));
-    return Promise.resolve(range.insertHtml(html, Word.InsertLocation.replace));
+    var body = renderBibliographyBody(styleFile, lang, secs);
+    return Promise.resolve(range.insertHtml(body.html, Word.InsertLocation.replace));
   }
 
   function insertCitation() {
@@ -417,39 +446,38 @@
     var lang = currentLang();
     var rtl = isRtlLang(lang);
     ensureAssets(styleFile).then(function () {
-      var engine = buildEngine(styleFile, lang);
-      var payload = CiteWord.buildBibliographyPayload({ html: engine.bibliography(), rtl: rtl });
-      var bibTag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang, variant: currentVariant() });
-      // Arabic: wrap in a block <p dir="rtl"> for true RTL paragraph reading order.
-      var bibHtml = rtl ? '<p dir="rtl">' + payload.html + "</p>" : payload.html;
-      if (typeof Word === "undefined" || !Word.run) {
-        setStatus("Word isn't available — this is preview-only in a browser.", true);
-        return;
-      }
-      Word.run(function (ctx) {
-        var selRange = ctx.document.getSelection().getRange();
-        if (rtl) {
-          // Arabic bibliography: OOXML runs (doc CS font, non-italic Arabic
-          // titles) instead of insertHtml — same rationale as the note branch.
-          return readDocCsFont(ctx, selRange).then(function (csFont) {
-            var sanitized = CiteWord.sanitize(engine.bibliography());
-            var pkg = AshaarTabStop.wrapOoxml(CiteWord.buildCitationParagraphOoxml(sanitized, { csFont: csFont }));
-            var oRange = selRange.insertOoxml(pkg, Word.InsertLocation.after);
-            var occ = oRange.insertContentControl();
-            occ.tag = bibTag;
-            occ.title = "Ashaar Bibliography";
-            return ctx.sync();
-          });
+      return fetchTagsIfSectioned(styleFile).then(function (tagsByCitekey) {
+        var allKeys = cache.items ? Object.keys(cache.items) : [];
+        var sections = CiteClassify.planBibliographySections(allKeys, tagsByCitekey,
+          { sectioned: isFatemiStyle(styleFile), lang: lang });
+        var bibTag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang, variant: currentVariant() });
+        if (typeof Word === "undefined" || !Word.run) {
+          setStatus("Word isn't available — this is preview-only in a browser.", true);
+          return;
         }
-        var range = selRange.insertHtml(bibHtml, Word.InsertLocation.after);
-        var cc = range.insertContentControl();
-        cc.tag = bibTag;
-        cc.title = "Ashaar Bibliography";
-        return ctx.sync();
-      }).then(function () {
-        setStatus("Inserted bibliography.");
-      }).catch(function (e) {
-        setStatus("Insert failed: " + (e && e.message ? e.message : String(e)), true);
+        return Word.run(function (ctx) {
+          var selRange = ctx.document.getSelection().getRange();
+          if (rtl) {
+            return readDocCsFont(ctx, selRange).then(function (csFont) {
+              var body = renderBibliographyBody(styleFile, lang, sections, csFont);
+              var oRange = selRange.insertOoxml(body.ooxml, Word.InsertLocation.after);
+              var occ = oRange.insertContentControl();
+              occ.tag = bibTag;
+              occ.title = "Ashaar Bibliography";
+              return ctx.sync();
+            });
+          }
+          var body = renderBibliographyBody(styleFile, lang, sections);
+          var range = selRange.insertHtml(body.html, Word.InsertLocation.after);
+          var cc = range.insertContentControl();
+          cc.tag = bibTag;
+          cc.title = "Ashaar Bibliography";
+          return ctx.sync();
+        }).then(function () {
+          setStatus("Inserted bibliography.");
+        }).catch(function (e) {
+          setStatus("Insert failed: " + (e && e.message ? e.message : String(e)), true);
+        });
       });
     }).catch(function (e) {
       setStatus("Couldn't load citation assets: " + (e && e.message ? e.message : String(e)), true);
@@ -480,7 +508,11 @@
     var footnoteCcSeen = 0;
     setStatus("Refreshing citations…");
     ensureAssets(styleFile).then(function () {
-      return Word.run(function (ctx) {
+      return fetchTagsIfSectioned(styleFile).then(function (tagsByCitekey) {
+        var allKeys = cache.items ? Object.keys(cache.items) : [];
+        var bibSections = CiteClassify.planBibliographySections(allKeys, tagsByCitekey,
+          { sectioned: isFatemiStyle(styleFile), lang: lang });
+        return Word.run(function (ctx) {
         var main = ctx.document.contentControls;
         main.load("items/tag");
 
@@ -558,7 +590,7 @@
                   } else if (tagStr.indexOf("AshaarBib:") === 0) {
                     var bibRange = cc.getRange("Content");
                     cc.tag = CiteWord.buildBibliographyTag({ style: styleFile, locale: lang, variant: currentVariant() });
-                    ops.push(renderBibliographyInto(ctx, bibRange, styleFile, lang, csFont).then(function () {
+                    ops.push(renderBibliographyInto(ctx, bibRange, styleFile, lang, csFont, bibSections).then(function () {
                       counts.bibs++;
                     }).catch(function () { counts.failed++; }));
                   }
@@ -585,6 +617,7 @@
         if (counts.failed) { msg += " " + counts.failed + " failed."; }
         if (!notesReached || footnoteCcSeen === 0) { msg += " No footnote citations reached."; }
         setStatus(msg, !!(counts.unresolved || counts.failed));
+      });
       });
     }).catch(function (e) {
       setStatus("Refresh failed: " + (e && e.message ? e.message : String(e)), true);
