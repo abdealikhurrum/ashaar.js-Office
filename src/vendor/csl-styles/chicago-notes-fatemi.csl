@@ -5973,11 +5973,6 @@
     </sort>
     <layout suffix=".">
       <choose>
-        <if variable="genre" match="any">
-          <text variable="genre" prefix="[" suffix="] "/>
-        </if>
-      </choose>
-      <choose>
         <if type="classic">
           <choose>
             <if match="any" variable="archive editor translator publisher">

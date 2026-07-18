@@ -2259,11 +2259,6 @@
     </sort>
     <layout>
       <choose>
-        <if variable="genre" match="any">
-          <text variable="genre" prefix="[" suffix="] "/>
-        </if>
-      </choose>
-      <choose>
         <if match="any" variable="archive archive-place container-title DOI number publisher references URL">
           <text macro="bibliography"/>
         </if>
