@@ -19,6 +19,8 @@
     "title": "دعائم الإسلام",
     "author": [{ "family": "القاضي النعمان" }],
     "issued": { "date-parts": [[1951]] },
-    "publisher": "دار المعارف", "publisher-place": "القاهرة"
+    "publisher": "دار المعارف", "publisher-place": "القاهرة",
+    "language": "ar",
+    "note": "cne-title-romanized: Daʿāʾim al-Islām\ncne-author-0-last-romanized: al-Qāḍī al-Nuʿmān\ncne-publisher-romanized: Dār al-Maʿārif\ncne-publisher-place-romanized: al-Qāhira"
   }
 }

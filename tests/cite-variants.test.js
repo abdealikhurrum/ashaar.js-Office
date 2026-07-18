@@ -136,3 +136,18 @@ assert.ok(enLines.indexOf("cne-author-0-first-translated: فريدريك") !== -
 assert.ok(enLines.join("\n").indexOf("romanized") === -1, "no romanized mislabel for ar variant");
 assert.ok(enLines.join("\n").indexOf("original") === -1, "no original mislabel for ar variant");
 console.log("cite-variants mlzsync test passed");
+
+// --- sample fixture must be able to demo the Romanized variant (regression) ---
+// The Arabic sample item (ar-book, Daaim ul Islam) needs cne-* romanized data,
+// else selecting the Romanized/Both variant falls back to Arabic and the feature
+// looks broken in the built-in sample library.
+const sample = JSON.parse(fs.readFileSync(
+  path.join(__dirname, "../src/taskpane/fixtures/cite-sample.json"), "utf8"));
+const arBook = CV.applyVariantsToItem(sample["ar-book"]);
+assert.ok(arBook.multi && arBook.multi._keys && arBook.multi._keys.title &&
+  arBook.multi._keys.title["ar-Latn"],
+  "sample ar-book must carry a romanized (ar-Latn) title variant");
+assert.ok(Array.isArray(arBook.author) && arBook.author[0].multi &&
+  arBook.author[0].multi._key && arBook.author[0].multi._key["ar-Latn"],
+  "sample ar-book author must carry a romanized (ar-Latn) name variant");
+console.log("cite-variants sample-fixture variant test passed");
