@@ -143,17 +143,25 @@
     return out;
   }
 
+  // Map an mlzsync language tag to a CNE variant slot by script/direction:
+  // Latin (en / *-Latn) = romanization -> romanized; Arabic (ar) = local script -> original.
+  function cneSlotForTag(tag) {
+    if (/latn/i.test(tag)) { return "romanized"; }
+    if (/^ar\b/i.test(tag) || tag === "ar") { return "original"; }
+    return "romanized"; // en and other Latin tags
+  }
+
   function mlzsyncToCneLines(parsed, creators) {
     var lines = [];
     if (!parsed) { return lines; }
-    // fields: any source tag -> romanized (mlzsync 'en' holds transliteration)
-    var fnames = Object.keys(parsed.fields).sort();
-    fnames.forEach(function (f) {
+    // fields: emit one line per language tag, mapped to its CNE slot by script.
+    Object.keys(parsed.fields).sort().forEach(function (f) {
       var byTag = parsed.fields[f];
-      var tags = Object.keys(byTag).sort();
-      if (tags.length) { lines.push("cne-" + f + "-romanized: " + byTag[tags[0]]); }
+      Object.keys(byTag).sort().forEach(function (tag) {
+        lines.push("cne-" + f + "-" + cneSlotForTag(tag) + ": " + byTag[tag]);
+      });
     });
-    // creators: resolve flat index -> creatorType + within-type index
+    // creators: resolve flat index -> creatorType + within-type index; per tag.
     var typeCount = {};
     (creators || []).forEach(function (c, flat) {
       var type = (c && c.creatorType) || "author";
@@ -161,11 +169,12 @@
       typeCount[type] = within + 1;
       var byTag = parsed.creators[String(flat)];
       if (!byTag) { return; }
-      var tags = Object.keys(byTag).sort();
-      if (!tags.length) { return; }
-      var nm = byTag[tags[0]];
-      if (nm.family) { lines.push("cne-" + type + "-" + within + "-last-romanized: " + nm.family); }
-      if (nm.given) { lines.push("cne-" + type + "-" + within + "-first-romanized: " + nm.given); }
+      Object.keys(byTag).sort().forEach(function (tag) {
+        var slot = cneSlotForTag(tag);
+        var nm = byTag[tag];
+        if (nm.family) { lines.push("cne-" + type + "-" + within + "-last-" + slot + ": " + nm.family); }
+        if (nm.given) { lines.push("cne-" + type + "-" + within + "-first-" + slot + ": " + nm.given); }
+      });
     });
     return lines;
   }

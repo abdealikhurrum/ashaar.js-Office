@@ -118,8 +118,19 @@ assert.strictEqual(CV.parseMlzsync("mlzsync1:9999{bad json"), null, "malformed =
 // converter: needs native creators for type resolution
 const nativeCreators = [{ creatorType: "author", name: "…" }];
 const lines = CV.mlzsyncToCneLines(pm, nativeCreators);
-assert.ok(lines.indexOf("cne-title-romanized: Uyun al-Akhbar Vol. 4") !== -1, "emits title line");
-assert.ok(lines.indexOf("cne-author-0-last-romanized: al-Dai al-Ajal Syedna Idris Imaduddin RA") !== -1, "emits author line");
+// tag 'en' (romanization of an Arabic-primary item) -> romanized slot
+assert.ok(lines.indexOf("cne-title-romanized: Uyun al-Akhbar Vol. 4") !== -1, "en title -> romanized");
+assert.ok(lines.indexOf("cne-author-0-last-romanized: al-Dai al-Ajal Syedna Idris Imaduddin RA") !== -1, "en author -> romanized");
 // idempotent
 assert.deepStrictEqual(CV.mlzsyncToCneLines(pm, nativeCreators), lines, "stable output");
+
+// reverse direction: an English-primary item whose creator variant is tagged 'ar'
+// (Arabic script) must map to the -original slot, NOT -romanized.
+const enPrimary = CV.parseMlzsync(
+  'mlzsync1:0170{"type":"book","multifields":{"main":{"title":"en"},"_keys":{}},"multicreators":{"0":{"_key":{"ar":{"lastName":"سمونس","firstName":"فريدريك"}},"fieldMode":""}}}'
+);
+const enLines = CV.mlzsyncToCneLines(enPrimary, [{ creatorType: "author" }]);
+assert.ok(enLines.indexOf("cne-author-0-last-original: سمونس") !== -1, "ar creator -> original slot");
+assert.ok(enLines.indexOf("cne-author-0-first-original: فريدريك") !== -1, "ar given -> original slot");
+assert.ok(enLines.join("\n").indexOf("romanized") === -1, "no romanized mislabel for ar variant");
 console.log("cite-variants mlzsync test passed");
