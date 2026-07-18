@@ -894,6 +894,14 @@
     if (importFile) { importFile.addEventListener("change", function () { readImportFiles(importFile.files); }); }
     var dz = byId("cite-dropzone");
     if (dz) {
+      // Click / keyboard opens the native file picker — the reliable path in the
+      // Word task pane, whose WebView does NOT deliver external drag events.
+      var openPicker = function () { var fi = byId("cite-import-file"); if (fi) { fi.click(); } };
+      dz.addEventListener("click", openPicker);
+      dz.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " " || e.keyCode === 13 || e.keyCode === 32) { e.preventDefault(); openPicker(); }
+      });
+      // Drag-drop still works in a browser build; harmless (never fires) in Word.
       dz.addEventListener("dragover", function (e) { e.preventDefault(); dz.classList.add("is-drag"); });
       dz.addEventListener("dragleave", function () { dz.classList.remove("is-drag"); });
       dz.addEventListener("drop", onImportDrop);

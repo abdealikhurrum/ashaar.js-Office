@@ -53,11 +53,12 @@ from your own references.
   `npm start` setup) — the live connection can't run from the hosted build alone.
 - **Import (no live connection needed)** — click **Import…** to add references anywhere, including
   the hosted add-in:
-  - **Drag** items straight from Zotero onto the drop zone (set Zotero *Settings → Export → Quick
-    Copy → Item Format* to **Better CSL JSON** first).
-  - **Drop or choose** a **Better CSL JSON** file exported from Zotero (select items → right-click →
-    *Export Items…* → Better CSL JSON).
-  - **Paste** CSL JSON directly.
+  - **Choose a file** — click the drop area to pick a **Better CSL JSON** file exported from Zotero
+    (select items → right-click → *Export Items…* → Better CSL JSON). This is the reliable path in
+    the Word task pane.
+  - **Paste** CSL JSON directly into the box.
+  - **Drag** a file or a Zotero item onto the drop area — **works in a browser only**; the Word task
+    pane's WebView does not receive external drops, so use the file picker or paste there.
   Imported items carry `cne-*` variants, so Arabic/romanized rendering still works. *(BibTeX/RIS
   import is coming soon; export as Better CSL JSON for now.)*
 - **Manually** — click **Add manually** (no Zotero at all); see below.

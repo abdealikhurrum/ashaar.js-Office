@@ -12,7 +12,7 @@
       // webview and GitHub Pages' ~10-min cache fetch the new files instead of
       // serving stale copies. Office add-ins reload their web assets each time the
       // pane opens, but the webview caches JS aggressively — this defeats that.
-      window.ASHAAR_ASSET_VERSION = "20260718-cite-import";
+      window.ASHAAR_ASSET_VERSION = "20260718-cite-import2";
     </script>
     <script>
       (function (v) {
@@ -678,18 +678,16 @@
         </section>
 
         <section id="cite-import-panel" class="cite-manual-form" aria-label="Import references" hidden>
-          <div id="cite-dropzone" class="cite-dropzone">
-            Drag items from Zotero, or drop a <strong>Better CSL JSON</strong> export here.
+          <div id="cite-dropzone" class="cite-dropzone" role="button" tabindex="0">
+            <strong>Click to choose a Better CSL JSON file</strong>
+            <span class="cite-dropzone-sub">…or paste below. (You can also drag a file or Zotero item here in a browser — but the Word task pane can’t receive drops, so use the file picker or paste in Word.)</span>
           </div>
-          <div class="field">
-            <label for="cite-import-file">…or choose an export file</label>
-            <input id="cite-import-file" type="file" accept=".json,application/json" />
-          </div>
+          <input id="cite-import-file" type="file" accept=".json,application/json" hidden />
           <div class="field">
             <label for="cite-import-paste">…or paste CSL JSON</label>
             <textarea id="cite-import-paste" rows="4"></textarea>
           </div>
-          <p class="adopt-hint">Tip: in Zotero, set <em>Settings → Export → Quick Copy → Item Format</em> to “Better CSL JSON” to drag items straight in. BibTeX/RIS coming soon.</p>
+          <p class="adopt-hint">Tip: export selected items from Zotero via right-click → <em>Export Items…</em> → Better CSL JSON. BibTeX/RIS coming soon.</p>
           <section class="actions two-col">
             <button id="cite-import-add" type="button">Import</button>
             <button id="cite-import-cancel" type="button" class="button--secondary">Cancel</button>
